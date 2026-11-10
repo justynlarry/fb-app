@@ -31,3 +31,4 @@ cache/
 
 # --- Claude Code local settings (keep shared project settings) ---
 .claude/settings.local.json
+claude-resume.txt
