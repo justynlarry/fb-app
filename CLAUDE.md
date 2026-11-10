@@ -12,6 +12,9 @@ overrides it where they differ.
   - explains what the next file/function needs to do and why,
   - gives the code in chat in small, typeable chunks (one function or one table at a time),
   - reviews what the user typed (read the file, point out bugs, suggest fixes in chat),
+  - when the user asks Claude to "check and correct" a file, fixes the errors in place
+    (bugs, typos, indentation, style), without adding new features, and explains each fix
+    so the user learns from it,
   - runs it/tests it when asked and explains errors.
   The goal is that the user writes and understands the backend. Prefer clear, plain code
   over clever code in anything Claude suggests for the user to type.
