@@ -122,6 +122,12 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `0.0.0.0`. The IP should be reserved in the router's DHCP or set as a static address.
 - Display time zone: Mountain (`TZ=America/Denver`).
 
+- NFL may be added later. Design every table, query and page to be league-aware:
+  `league` column (`'cfb'`/`'nfl'`) on teams and games; our own identity `id` primary keys,
+  with source ids (`cfbd_id`, `espn_id`) as columns unique per league (ESPN reuses ids
+  across leagues). Likely NFL sources: ESPN (live), nflverse (stats/EPA). Don't hard-code
+  cfb-only assumptions (e.g. FBS/FCS logic) outside cfb-specific modules.
+
 ## Still open
 
 - Number of past seasons to backfill (ask at step 2, after checking `/info`).

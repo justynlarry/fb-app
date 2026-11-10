@@ -1,0 +1,60 @@
+name: cfb
+
+x-python: &python
+  build: .
+  image: cfb-python
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  volumes:
+    # Live-mount the code so your edits take effect without rebuilding the image
+    - ./cfb:/srv/cfb
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:17
+    env_file: .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # *.sql files here run once, only when the database volume is first created
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    # No "ports:" on purpose. Postgres is reachable only by the other containers.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    <<: *python
+    command: uvicorn cfb.web.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /srv/cfb
+    ports:
+      # Bound to the LAN IP only (Docker bypasses ufw, so never publish on 0.0.0.0)
+      - "${WEB_BIND}:${WEB_PORT}:8000"
+
+  worker:
+    <<: *python
+    command: python -m cfb.worker
+
+  backup:
+    image: postgres:17
+    env_file: .env
+    environment:
+      PGHOST: db
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    entrypoint: ["sh", "/backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
