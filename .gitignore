@@ -1,0 +1,33 @@
+# --- Secrets: never commit ---
+.env
+.env.*
+!.env.example
+
+# --- Database backups and local data (may contain your overrides/bet log) ---
+backups/
+*.dump
+*.sql.gz
+pgdata/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# --- Cached API responses / scratch output ---
+cache/
+*.log
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# --- Claude Code local settings (keep shared project settings) ---
+.claude/settings.local.json
