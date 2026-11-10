@@ -128,6 +128,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   across leagues). Likely NFL sources: ESPN (live), nflverse (stats/EPA). Don't hard-code
   cfb-only assumptions (e.g. FBS/FCS logic) outside cfb-specific modules.
 
-## Still open
-
-- Number of past seasons to backfill (ask at step 2, after checking `/info`).
+- Backfill: seasons 2016–2025 plus current 2026 (~14 calls/season, ~155 total). Flag 2020
+  (COVID) so the backtest can exclude it. Test each endpoint on one season first.
+- Every CFBD response is stored raw in `api_responses` before parsing; check it before any
+  call. `/info` itself costs a call.
+- Schema changes: new numbered files in `db/init/` (runs only on a fresh volume), applied by
+  hand to the live DB with `docker compose exec -T db psql -U fb-user -d football < file`.
+  Never suggest `down -v` once real data is loaded. DB user is `fb-user`, DB is `football`.
