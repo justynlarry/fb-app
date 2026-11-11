@@ -200,7 +200,8 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
 - Backfill: seasons 2016–2025 plus current 2026 (~14 calls/season, ~155 total). Flag 2020
   (COVID) so the backtest can exclude it. Test each endpoint on one season first.
 - Scheduling: the worker runs `daily_update()` at 5 AM Mountain (refresh current season's
-  `/games`, `/stats/game/advanced`, `/lines` = 3 calls, then `predict_upcoming`), skipped when no
+  `/games`, `/stats/game/advanced`, `/lines` = 3 calls, then the latest week's passing box scores
+  via `refresh_recent_qbs` = 1 call, then `predict_upcoming`; ~4 calls/day), skipped when no
   games are within 3 days back / 10 days ahead. **Each August, backfill the new season once by
   hand** (`python -m cfb.backfill <year>` then `python -m cfb.load <year>`, ~11 calls).
 - Every CFBD response is stored raw in `api_responses` before parsing; check it before any

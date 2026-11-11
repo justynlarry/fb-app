@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from cfb.db import connect
 from cfb.model import MODEL_VERSION
+from cfb.qbs import qb_out_suggestion
 
 WEB_DIR = Path(__file__).parent
 LOCAL_TZ = ZoneInfo(os.environ.get("TZ", "America/Denver"))
@@ -355,3 +356,19 @@ def remove_override(override_id: int):
     if removed == 0:
         raise HTTPException(status_code=404, detail="No active override with that id.")
     return {"removed": override_id}
+
+
+@app.get("/api/qb-suggestion")
+def qb_suggestion(game_id: int, team_id: int):
+    """Main QB for the team this season and a suggested adjustment if he's out."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT season FROM games WHERE id = %s AND %s IN (home_id, away_id)",
+            (game_id, team_id),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="That team isn't playing in that game.")
+    suggestion = qb_out_suggestion(team_id, row[0])
+    if suggestion is None:
+        raise HTTPException(status_code=404, detail="No passing data for that team this season yet.")
+    return suggestion

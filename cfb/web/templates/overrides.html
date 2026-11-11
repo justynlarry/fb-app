@@ -30,6 +30,10 @@
         <label><input type="radio" name="team_id" id="team-away" required> <span id="team-away-name"></span></label>
         <label><input type="radio" name="team_id" id="team-home"> <span id="team-home-name"></span></label>
       </div>
+      <div class="quick-actions">
+        <button type="button" class="toggle" id="qb-out" disabled>Starting QB out</button>
+        <span class="muted small" id="qb-hint">Pick a team first</span>
+      </div>
     </fieldset>
 
     <label class="field field-points">
@@ -41,6 +45,8 @@
       <span>Reason</span>
       <input type="text" name="reason" id="reason" maxlength="200" placeholder="QB Smith out (shoulder)" required>
     </label>
+
+    <div class="qb-explain" id="qb-explain" hidden></div>
 
     <div class="form-actions">
       <button type="submit" class="primary">Add adjustment</button>
@@ -92,7 +98,55 @@
       document.getElementById("team-away-name").textContent = opt.dataset.away + " (visitor)";
       document.getElementById("team-home-name").textContent = opt.dataset.home + " (home)";
       away.checked = false; home.checked = false;
+      qbButton.disabled = true;
+      qbHint.textContent = "Pick a team first";
+      explain.hidden = true;
     }
+
+    // "Starting QB out": ask the server for a data-based suggestion and fill in the form
+    var qbButton = document.getElementById("qb-out");
+    var qbHint = document.getElementById("qb-hint");
+    var explain = document.getElementById("qb-explain");
+    [away, home].forEach(function (radio) {
+      radio.addEventListener("change", function () {
+        qbButton.disabled = false;
+        qbHint.textContent = "";
+        explain.hidden = true;
+      });
+    });
+
+    function fmt(n) { return (n > 0 ? "+" : "") + n.toFixed(2); }
+    function esc(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+    qbButton.addEventListener("click", function () {
+      var team = form.querySelector('input[name="team_id"]:checked');
+      if (!team) return;
+      qbButton.disabled = true;
+      qbHint.textContent = "Looking up…";
+      fetch("/api/qb-suggestion?game_id=" + encodeURIComponent(game.value) + "&team_id=" + encodeURIComponent(team.value))
+        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+        .then(function (res) {
+          qbButton.disabled = false;
+          if (!res.ok) { qbHint.textContent = res.body.detail || "No QB data."; return; }
+          var s = res.body;
+          qbHint.textContent = "";
+          document.getElementById("points").value = s.suggested_points.toFixed(1);
+          document.getElementById("reason").value = "QB " + s.qb + " out";
+          var backup = s.backup
+            ? esc(s.backup) + ": " + s.backup_attempts + " att, " + s.backup_ypa + " yds/att"
+            : "no other passer has thrown this season";
+          explain.innerHTML =
+            "<strong>" + esc(s.qb) + "</strong>: " + s.qb_attempts + " attempts (" + Math.round(s.qb_share * 100) +
+            "% of the team's), " + s.qb_ypa + " yds/att. Backup " + backup + ".<br>" +
+            "Team passing rating " + fmt(s.team_pass_epa) + " EPA/play → suggested <strong>" +
+            s.suggested_points.toFixed(1) + "</strong>." +
+            "<div class='muted small'>Measured from 10 seasons of games started by a non-starter. " +
+            "That's a floor: a sudden injury to a star often matters more, so raise it if the situation calls for it.</div>";
+          explain.hidden = false;
+        })
+        .catch(function () { qbButton.disabled = false; qbHint.textContent = "Couldn't reach the server."; });
+    });
+
     game.addEventListener("change", syncTeams);
     syncTeams();
 

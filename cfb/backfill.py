@@ -10,6 +10,7 @@ import sys
 import httpx
 
 from cfb import cfbd
+from cfb.db import connect
 
 
 def season_calls(year):
@@ -76,6 +77,30 @@ def backfill_qbs(year):
     """Passing box scores for a whole season (about 11 API calls)."""
     print(f"=== QBs {year}")
     fetch_all(qb_calls(year))
+
+
+def refresh_recent_qbs(season):
+    """Re-download passing box scores for the latest week with finished games (1 API call)."""
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT week, season_type FROM games
+            WHERE league = 'cfb' AND season = %s AND completed
+            ORDER BY start_time DESC
+            LIMIT 1
+            """,
+            (season,),
+        ).fetchone()
+    if row is None:
+        return 0
+    week, season_type = row
+    body = cfbd.get(
+        "/games/players",
+        {"year": season, "week": week, "seasonType": season_type, "category": "passing"},
+        refresh=True,
+    )
+    print(f"QBs {season} week {week} ({season_type}): {len(body)} games")
+    return len(body)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 """Background worker.
 
 - Every 30 s (game time) or 10 min (otherwise): live scores from ESPN.
-- Every day at 5 AM: refresh this season from CFBD (3 calls) and re-predict upcoming games.
+- Every day at 5 AM: refresh this season from CFBD (games, stats, lines, latest week's QBs:
+  4 calls) and re-predict upcoming games.
 """
 
 import os
@@ -11,6 +12,7 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from cfb import espn
+from cfb.backfill import refresh_recent_qbs
 from cfb.db import connect
 from cfb.load import refresh_season
 from cfb.model import predict_upcoming
@@ -66,9 +68,10 @@ def daily_update():
     if not games_near(season):
         print(f"daily update: no {season} games this week or next, skipping")
         return
-    print(f"daily update: refreshing {season} (3 CFBD calls) and re-predicting")
+    print(f"daily update: refreshing {season} (4 CFBD calls) and re-predicting")
     try:
         refresh_season(season)
+        refresh_recent_qbs(season)
         predict_upcoming(season)
     except Exception as err:
         print(f"daily update FAILED: {err!r}")
