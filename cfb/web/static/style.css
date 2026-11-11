@@ -1,0 +1,162 @@
+/* ---------- Theme ---------- */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1a1d23;
+  --muted: #6b7280;
+  --border: #e3e6eb;
+  --accent: #b4231f;        /* live / brand red */
+  --accent-soft: #fbeaea;
+  --winner: #0f5132;
+  --pip-off: #d4d8de;
+  --pip-on: #1a1d23;
+  --header-bg: #1a1d23;
+  --header-text: #f6f7f9;
+  --day-bg: #eef0f3;
+  --rank-bg: #1a1d23;
+  --rank-text: #ffffff;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111317;
+    --surface: #1a1d23;
+    --text: #e7e9ee;
+    --muted: #9aa1ad;
+    --border: #2b3038;
+    --accent: #ff5a52;
+    --accent-soft: #2a1716;
+    --winner: #6fd3a0;
+    --pip-off: #3a404a;
+    --pip-on: #e7e9ee;
+    --header-bg: #0b0c0f;
+    --header-text: #e7e9ee;
+    --day-bg: #22262d;
+    --rank-bg: #e7e9ee;
+    --rank-text: #111317;
+    color-scheme: dark;
+  }
+}
+
+/* ---------- Base ---------- */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+a { color: inherit; }
+.muted { color: var(--muted); }
+.small { font-size: 0.8em; }
+
+/* ---------- Header ---------- */
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--header-bg);
+  color: var(--header-text);
+}
+.brand { font-weight: 700; text-decoration: none; letter-spacing: 0.02em; }
+.site-header nav { display: flex; gap: 1rem; }
+.site-header nav a { text-decoration: none; opacity: 0.7; padding-bottom: 2px; }
+.site-header nav a:hover { opacity: 1; }
+.site-header nav a.active { opacity: 1; border-bottom: 2px solid var(--accent); }
+
+main { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+.page-head h1 { margin: 0.25rem 0 0; font-size: 1.4rem; }
+.page-head p { margin: 0.1rem 0 1rem; font-size: 0.85rem; }
+
+/* ---------- Table ---------- */
+.table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+table { width: 100%; border-collapse: collapse; }
+th, td {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+tbody tr:last-child td { border-bottom: none; }
+.num { text-align: center; font-variant-numeric: tabular-nums; }
+
+/* ---------- Scores ---------- */
+.scores .team { font-weight: 500; }
+.team-cell { display: flex; align-items: center; gap: 0.55rem; }
+.logo { width: 24px; height: 24px; object-fit: contain; flex: none; }
+.rank {
+  display: inline-block;
+  min-width: 1.6em;
+  margin-right: 0.3em;
+  padding: 0 0.3em;
+  border-radius: 4px;
+  background: var(--rank-bg);
+  color: var(--rank-text);
+  font-size: 0.75em;
+  font-weight: 700;
+  text-align: center;
+  vertical-align: 0.1em;
+}
+.record { font-size: 0.78em; font-weight: 400; color: var(--muted); }
+.record span { opacity: 0.85; }
+.scores .line { font-variant-numeric: tabular-nums; }
+
+/* Day separators */
+.scores tr.day-break th {
+  padding: 0.5rem 0.75rem;
+  background: var(--day-bg);
+  color: var(--text);
+  font-size: 0.8rem;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-weight: 700;
+  border-top: 1px solid var(--border);
+}
+.scores tbody tr.day-break:first-child th { border-top: none; }
+.scores .winner { font-weight: 700; color: var(--winner); }
+.scores .score { font-weight: 700; font-size: 1.05em; }
+.scores .kickoff { color: var(--muted); }
+.scores .possession { white-space: normal; min-width: 8rem; }
+.scores .final { color: var(--muted); font-weight: 600; }
+.scores .empty { text-align: center; color: var(--muted); padding: 2rem; }
+.scores tr.state-in { background: var(--accent-soft); }
+.scores tr.state-in .clock { color: var(--accent); font-weight: 600; }
+.ball { font-size: 0.9em; }
+
+.live-dot {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 0.1em;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+
+/* Timeout pips: filled = timeout left */
+.pips { display: inline-flex; gap: 3px; vertical-align: middle; }
+.pips i {
+  display: block;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: var(--pip-off);
+}
+.pips i.on { background: var(--pip-on); }

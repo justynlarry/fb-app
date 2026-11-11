@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Scores{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>FBS Scores</h1>
+  <p class="muted">Updates every 30 seconds · times in Mountain</p>
+</div>
+
+<div class="table-wrap">
+  <table class="scores">
+    <thead>
+      <tr>
+        <th>Visitor</th>
+        <th>Home</th>
+        <th>Kickoff</th>
+        <th class="num">Score</th>
+        <th>Clock</th>
+        <th>Ball</th>
+        <th>Timeouts <span class="muted">(V / H)</span></th>
+        <th>Line</th>
+      </tr>
+    </thead>
+    <tbody hx-get="/scores/rows" hx-trigger="every 30s" hx-swap="innerHTML">
+      {% include "_score_rows.html" %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

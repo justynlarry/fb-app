@@ -30,12 +30,29 @@ def to_int(value):
         return None
 
 
+def team_rank(side):
+    """Poll ranking 1-25, or None.  ESPN uses 99 for unranked."""
+    rank = to_int(side.get("curatedRank", {}).get("current"))
+    if rank is None or rank > 25:
+        return None
+    return rank
+
+
+def team_record(side, record_type):
+    """Record summary like '7-2'.  record_type: 'total' (overall) or 'vsconf' (conference)."""
+    for record in side.get("records", []):
+        if record.get("type") == record_type:
+            return record.get("summary")
+    return None
+
+
 def parse_event(event):
     """Turn one ESPN event into a flat dict of the fields we store."""
     comp = event["competitions"][0]
     status = event.get("status", {})
     status_type = status.get("type", {})
     situation = comp.get("situation", {})       # Only present while a game is live
+    odds = (comp.get("odds") or [{}])[0]        # Only present before kickoff
 
     # Competitors is a list of two teams.  Index them by 'home' / 'away'
     sides = {c.get("homeAway"): c for c in comp.get("competitors", [])}
@@ -54,6 +71,15 @@ def parse_event(event):
         "home_timeouts": situation.get("homeTimeouts"),
         "away_timeouts": situation.get("awayTimeouts"),
         "down_distance": situation.get("downDistanceText"),
+        "spread": odds.get("spread"),
+        "over_under": odds.get("overUnder"),
+        "odds_details": odds.get("details"),
+        "away_rank": team_rank(away),
+        "home_rank": team_rank(home),
+        "away_record": team_record(away, "total"),
+        "home_record": team_record(home, "total"),
+        "away_conf_record": team_record(away, "vsconf"),
+        "home_conf_record": team_record(home, "vsconf"),
     }
 
 
@@ -94,8 +120,12 @@ def save_live_scores(games):
                 """
                 INSERT INTO live_scores (game_id, state, status_detail, period, clock,
                                          home_score, away_score, possession_team_id,
-                                         home_timeouts, away_timeouts, down_distance)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                         home_timeouts, away_timeouts, down_distance,
+                                         spread, over_under, odds_details,
+                                         away_rank, home_rank, away_record, home_record,
+                                         away_conf_record, home_conf_record)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (game_id) DO UPDATE SET
                     state              = EXCLUDED.state,
                     status_detail      = EXCLUDED.status_detail,
@@ -107,6 +137,16 @@ def save_live_scores(games):
                     home_timeouts      = EXCLUDED.home_timeouts,
                     away_timeouts      = EXCLUDED.away_timeouts,
                     down_distance      = EXCLUDED.down_distance,
+                    -- ESPN drops the odds at kickoff; COALESCE keeps the last line we saw.
+                    spread             = COALESCE(EXCLUDED.spread, live_scores.spread),
+                    over_under         = COALESCE(EXCLUDED.over_under, live_scores.over_under),
+                    odds_details       = COALESCE(EXCLUDED.odds_details, live_scores.odds_details),
+                    away_rank          = EXCLUDED.away_rank,
+                    home_rank          = EXCLUDED.home_rank,
+                    away_record        = COALESCE(EXCLUDED.away_record, live_scores.away_record),
+                    home_record        = COALESCE(EXCLUDED.home_record, live_scores.home_record),
+                    away_conf_record   = COALESCE(EXCLUDED.away_conf_record, live_scores.away_conf_record),
+                    home_conf_record   = COALESCE(EXCLUDED.home_conf_record, live_scores.home_conf_record),
                     updated_at         = now()
                 """,
                 (
@@ -121,6 +161,15 @@ def save_live_scores(games):
                     g["home_timeouts"],
                     g["away_timeouts"],
                     g["down_distance"],
+                    g["spread"],
+                    g["over_under"],
+                    g["odds_details"],
+                    g["away_rank"],
+                    g["home_rank"],
+                    g["away_record"],
+                    g["home_record"],
+                    g["away_conf_record"],
+                    g["home_conf_record"],
                 ),
             )
             saved += 1

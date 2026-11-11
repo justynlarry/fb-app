@@ -1,0 +1,88 @@
+{#- Table rows only. Returned by /scores/rows and swapped into the page by HTMX.
+    Fields that aren't in the data yet (e.g. before a query change) just don't show. -#}
+{%- set COLS = 8 -%}
+
+{%- macro timeouts(n) -%}
+  {%- if n is none -%}
+    <span class="muted">–</span>
+  {%- else -%}
+    <span class="pips" title="{{ n }} timeouts left">
+      {%- for i in range(3) -%}<i class="{{ 'on' if i < n }}"></i>{%- endfor -%}
+    </span>
+  {%- endif -%}
+{%- endmacro -%}
+
+{%- macro team_cell(name, espn_id, rank, record, conf_record, has_ball, won) -%}
+  <td class="team {{ 'winner' if won }}">
+    <div class="team-cell">
+      {%- if espn_id %}
+      <img class="logo" alt="" loading="lazy" width="24" height="24"
+           src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500/{{ espn_id }}.png&h=48&w=48"
+           onerror="this.style.visibility='hidden'">
+      {%- endif %}
+      <div>
+        <div class="team-name">
+          {%- if rank %}<span class="rank">{{ rank }}</span>{% endif -%}
+          {{ name }}
+          {%- if has_ball %} <span class="ball" title="Has the ball">🏈</span>{% endif -%}
+        </div>
+        {%- if record %}
+        <div class="record">{{ record }}{% if conf_record %} <span>({{ conf_record }} conf)</span>{% endif %}</div>
+        {%- endif %}
+      </div>
+    </div>
+  </td>
+{%- endmacro -%}
+
+{%- set ns = namespace(day=None) -%}
+{%- for g in games %}
+{%- set state = g.state or 'pre' %}
+{%- set final = state == 'post' %}
+{%- set away_won = final and g.away_score is not none and g.away_score > g.home_score %}
+{%- set home_won = final and g.home_score is not none and g.home_score > g.away_score %}
+{%- set day = g.local_start.strftime('%A, %B %-d') %}
+{%- if day != ns.day %}
+{%- set ns.day = day %}
+<tr class="day-break"><th colspan="{{ COLS }}" scope="colgroup">{{ day }}</th></tr>
+{%- endif %}
+<tr class="state-{{ state }}">
+  {{ team_cell(g.away, g.away_espn_id, g.away_rank, g.away_record, g.away_conf_record, g.away_has_ball, away_won) }}
+  {{ team_cell(g.home, g.home_espn_id, g.home_rank, g.home_record, g.home_conf_record, g.home_has_ball, home_won) }}
+  <td class="kickoff">
+    {%- if state == 'pre' -%}
+      {% if g.start_time_tbd %}TBD{% else %}{{ g.local_start.strftime('%-I:%M %p') }}{% endif %}
+    {%- endif -%}
+  </td>
+  <td class="num score">
+    {%- if state != 'pre' and g.away_score is not none -%}
+      {{ g.away_score }} – {{ g.home_score }}
+    {%- endif -%}
+  </td>
+  <td class="clock">
+    {%- if state == 'in' -%}
+      <span class="live-dot"></span>{{ g.status_detail }}
+    {%- elif final -%}
+      <span class="final">{{ g.status_detail or 'Final' }}</span>
+    {%- endif -%}
+  </td>
+  <td class="possession">
+    {%- if state == 'in' -%}
+      {%- if g.away_has_ball %}{{ g.away }}{% elif g.home_has_ball %}{{ g.home }}{% endif -%}
+      {%- if g.down_distance %}<div class="muted small">{{ g.down_distance }}</div>{% endif -%}
+    {%- endif -%}
+  </td>
+  <td class="timeouts">
+    {%- if state == 'in' -%}
+      {{ timeouts(g.away_timeouts) }} <span class="muted">/</span> {{ timeouts(g.home_timeouts) }}
+    {%- endif -%}
+  </td>
+  <td class="line">
+    {%- if state != 'in' and g.odds_details -%}
+      <div>{{ g.odds_details }}</div>
+      {%- if g.over_under is not none %}<div class="muted small">O/U {{ '%g'|format(g.over_under|float) }}</div>{% endif -%}
+    {%- endif -%}
+  </td>
+</tr>
+{%- else %}
+<tr><td colspan="{{ COLS }}" class="empty">No FBS games this week.</td></tr>
+{%- endfor %}

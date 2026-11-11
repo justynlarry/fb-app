@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CFB{% endblock %} · CFB Predictor</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">CFB Predictor</a>
+    <nav>
+      <a href="/scores" class="{{ 'active' if active == 'scores' }}">Scores</a>
+      <a href="/predictions" class="{{ 'active' if active == 'predictions' }}">Predictions</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
