@@ -1,0 +1,35 @@
+{#- Shared pieces used by more than one page. -#}
+
+{%- macro team_cell(name, espn_id, rank, record, conf_record, has_ball=false, won=false) -%}
+  <td class="team {{ 'winner' if won }}">
+    <div class="team-cell">
+      {%- if espn_id %}
+      <img class="logo" alt="" loading="lazy" width="24" height="24"
+           src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500/{{ espn_id }}.png&h=48&w=48"
+           onerror="this.style.visibility='hidden'">
+      {%- endif %}
+      <div>
+        <div class="team-name">
+          {%- if rank %}<span class="rank">{{ rank }}</span>{% endif -%}
+          {{ name }}
+          {%- if has_ball %} <span class="ball" title="Has the ball">🏈</span>{% endif -%}
+        </div>
+        {%- if record %}
+        <div class="record">{{ record }}{% if conf_record %} <span>({{ conf_record }} conf)</span>{% endif %}</div>
+        {%- endif %}
+      </div>
+    </div>
+  </td>
+{%- endmacro -%}
+
+{#- A home-side spread (-7 = home by 7) as text, e.g. "Alabama -7.0". -#}
+{%- macro line_text(spread, home, away) -%}
+  {%- if spread is none -%}–
+  {%- else -%}
+    {%- set s = spread|float -%}
+    {%- if s|abs < 0.05 -%}Pick'em
+    {%- elif s < 0 -%}{{ home }} {{ '%.1f'|format(s) }}
+    {%- else -%}{{ away }} {{ '%.1f'|format(-s) }}
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro -%}

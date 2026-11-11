@@ -15,6 +15,9 @@
   --day-bg: #eef0f3;
   --rank-bg: #1a1d23;
   --rank-text: #ffffff;
+  --edge3-bg: #fff6d6;
+  --edge5-bg: #ffe2b8;
+  --edge5-text: #9a4a00;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -34,6 +37,9 @@
     --day-bg: #22262d;
     --rank-bg: #e7e9ee;
     --rank-text: #111317;
+    --edge3-bg: #2c2814;
+    --edge5-bg: #3a2a12;
+    --edge5-text: #ffb366;
     color-scheme: dark;
   }
 }
@@ -149,6 +155,56 @@ tbody tr:last-child td { border-bottom: none; }
 }
 @keyframes pulse { 50% { opacity: 0.3; } }
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+
+/* ---------- Predictions ---------- */
+.page-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+.page-head-row p { margin-bottom: 0; }
+.toggle {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.toggle:hover { border-color: var(--muted); }
+.toggle[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+
+.predictions .our-line strong,
+.predictions .our-total strong { font-variant-numeric: tabular-nums; }
+.band { color: var(--muted); font-size: 0.8em; font-variant-numeric: tabular-nums; }
+.predictions .edge-pts { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Market columns stay hidden until "Show market" is pressed */
+.market { display: none; }
+.show-market .market { display: table-cell; }
+p.market.show-market { display: block; }
+
+/* Disagreement highlights only appear with the market shown */
+.show-market tr.edge-3 { background: var(--edge3-bg); }
+.show-market tr.edge-5 { background: var(--edge5-bg); }
+.show-market tr.edge-5 .edge-pts { color: var(--edge5-text); }
+.legend { margin-top: 0.75rem; line-height: 1.8; }
+.swatch {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin: 0 0.3em 0 0.6em;
+  border-radius: 3px;
+  vertical-align: -0.1em;
+  border: 1px solid var(--border);
+}
+.swatch.edge-3 { background: var(--edge3-bg); margin-left: 0; }
+.swatch.edge-5 { background: var(--edge5-bg); }
 
 /* Timeout pips: filled = timeout left */
 .pips { display: inline-flex; gap: 3px; vertical-align: middle; }

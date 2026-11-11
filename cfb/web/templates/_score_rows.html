@@ -12,27 +12,7 @@
   {%- endif -%}
 {%- endmacro -%}
 
-{%- macro team_cell(name, espn_id, rank, record, conf_record, has_ball, won) -%}
-  <td class="team {{ 'winner' if won }}">
-    <div class="team-cell">
-      {%- if espn_id %}
-      <img class="logo" alt="" loading="lazy" width="24" height="24"
-           src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500/{{ espn_id }}.png&h=48&w=48"
-           onerror="this.style.visibility='hidden'">
-      {%- endif %}
-      <div>
-        <div class="team-name">
-          {%- if rank %}<span class="rank">{{ rank }}</span>{% endif -%}
-          {{ name }}
-          {%- if has_ball %} <span class="ball" title="Has the ball">🏈</span>{% endif -%}
-        </div>
-        {%- if record %}
-        <div class="record">{{ record }}{% if conf_record %} <span>({{ conf_record }} conf)</span>{% endif %}</div>
-        {%- endif %}
-      </div>
-    </div>
-  </td>
-{%- endmacro -%}
+{%- from "_macros.html" import team_cell -%}
 
 {%- set ns = namespace(day=None) -%}
 {%- for g in games %}
