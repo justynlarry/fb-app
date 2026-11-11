@@ -10,14 +10,21 @@ from psycopg.rows import dict_row
 from sklearn.linear_model import LinearRegression
 
 from cfb.db import connect
+from cfb.priors import season_priors
 from cfb.ratings import METRICS, ratings_as_of
 
-MODEL_VERSION = "v1"
+MODEL_VERSION = "v2"
+
+# Preseason inputs (from cfb/priors.py), faded out over the regular season
+PRIOR_INPUTS = ["talent", "ret_ppa", "new_coach"]
+PRIOR_INPUT_WEEKS = 16
 
 FEATURES = (
     ["off_" + m for m in METRICS]
     + ["oppdef_" + m for m in METRICS]
     + ["home", "fcs_offense", "fcs_defense"]
+    + ["pr_" + p for p in PRIOR_INPUTS]
+    + ["oppr_" + p for p in PRIOR_INPUTS]
 )
 
 # Games we predict: any game with an FBS team (FCS opponents allowed)
@@ -48,6 +55,7 @@ def side_row(game, team, opponent, home, team_class, opp_class, points, ratings)
     row = {
         "game_id": game["game_id"],
         "team_id": team,
+        "opponent_id": opponent,
         "home": home,
         "fcs_offense": team_class == "fcs",
         "fcs_defense": opp_class == "fcs",
@@ -57,6 +65,23 @@ def side_row(game, team, opponent, home, team_class, opp_class, points, ratings)
         row["off_" + m] = ratings.at[team, "off_" + m]
         row["oppdef_" + m] = ratings.at[opponent, "def_" + m]
     return row
+
+
+def add_prior_inputs(df, season):
+    """Attach each team's and its opponent's preseason inputs, faded out over PRIOR_INPUT_WEEKS."""
+    if df.empty:
+        return df
+    priors = season_priors(season)
+    own = priors.rename(columns={p: "pr_" + p for p in PRIOR_INPUTS})
+    opp = priors.rename(columns={"team_id": "opponent_id", **{p: "oppr_" + p for p in PRIOR_INPUTS}})
+    df = df.merge(own, on="team_id", how="left").merge(opp, on="opponent_id", how="left")
+
+    # Full weight before week 1, fading to zero by the end of the regular season
+    fade = (1 - df["weeks_played"] / PRIOR_INPUT_WEEKS).clip(lower=0)
+    for p in PRIOR_INPUTS:
+        for col in ["pr_" + p, "oppr_" + p]:
+            df[col] = df[col].fillna(0.0) * fade
+    return df
 
 
 def season_rows(season):
@@ -85,7 +110,7 @@ def season_rows(season):
                 r["season"] = season
                 r["weeks_played"] = weeks_played
                 rows.append(r)
-    return pd.DataFrame(rows)
+    return add_prior_inputs(pd.DataFrame(rows), season)
 
 
 def train(rows):
