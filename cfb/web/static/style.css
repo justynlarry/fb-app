@@ -18,6 +18,7 @@
   --edge3-bg: #fff6d6;
   --edge5-bg: #ffe2b8;
   --edge5-text: #9a4a00;
+  --good: #137a3e;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -40,6 +41,7 @@
     --edge3-bg: #2c2814;
     --edge5-bg: #3a2a12;
     --edge5-text: #ffb366;
+    --good: #6fd3a0;
     color-scheme: dark;
   }
 }
@@ -207,6 +209,34 @@ p.market.show-market { display: block; }
 }
 .swatch.edge-3 { background: var(--edge3-bg); margin-left: 0; }
 .swatch.edge-5 { background: var(--edge5-bg); }
+
+/* ---------- Backtest ---------- */
+h2 { font-size: 1.05rem; margin: 1.75rem 0 0.5rem; }
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+}
+.card.highlight { border-color: var(--good); }
+.card-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
+.card-value { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: 0.15rem 0; }
+.card-sub { font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.good, .good-text { color: var(--good); font-weight: 700; }
+.stats td.label { font-weight: 600; }
+.stats td.rec { color: var(--muted); }
+.stats tr.group-head th { border-bottom: none; padding-bottom: 0; text-align: center; }
+.stats tr:not(.group-head) th:nth-child(2n+3),
+.stats td:nth-child(2n+3),
+.stats tr:not(.group-head) th:nth-child(12),
+.stats td:nth-child(12) { border-left: 1px solid var(--border); }
+.stats tr.group-head th:nth-child(n+3) { border-left: 1px solid var(--border); }
 
 /* Timeout pips: filled = timeout left */
 .pips { display: inline-flex; gap: 3px; vertical-align: middle; }

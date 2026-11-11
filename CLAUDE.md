@@ -114,6 +114,17 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     with `/ppa/players/season` and `/player/usage` to *suggest* override points when the user
     marks a player out; the user accepts or edits.
 
+- **Weather (to investigate, user request 2026-11-11):** weather affects games, especially
+  totals (wind, rain/snow, cold). CFBD's weather is paid, so instead:
+  - Forecast: ESPN scoreboard events include `weather` (temperature, conditionId) and
+    `venue.indoor` for every game, free, already fetched by the poller. No wind speed, though.
+  - History + wind: we already have every stadium's lat/long and `dome` flag in cached `/teams`
+    (`location`). A free service such as Open-Meteo (no key, not CFBD) can give hourly wind, precip
+    and temperature at kickoff for past games, so weather can be **backtested**. Neutral-site games
+    need venue locations (CFBD `/venues`, 1 call).
+  - Measure first whether weather beyond what the market prices in helps (mostly totals) before
+    adding it to the model.
+
 ## Backtest (how the model is judged)
 
 - Walk-forward only: a week-W prediction uses data from before week W plus priors. No lookahead.
@@ -154,6 +165,9 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `/games`, `/stats/game/advanced`, `/lines` = 3 calls, then `predict_upcoming`), skipped when no
   games are within 3 days back / 10 days ahead. **Each August, backfill the new season once by
   hand** (`python -m cfb.backfill <year>` then `python -m cfb.load <year>`, ~11 calls).
+- TODO (next real CFBD call made in a session): check the response headers for a remaining-calls
+  header (e.g. `X-CallLimit-Remaining`). If present, show the user a one-line change to print it in
+  `cfbd.get`, so `/info` (which costs a call) is rarely needed.
 - Every CFBD response is stored raw in `api_responses` before parsing; check it before any
   call. `/info` itself costs a call.
 - Schema changes: new numbered files in `db/init/` (runs only on a fresh volume), applied by

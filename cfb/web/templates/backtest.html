@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Backtest{% endblock %}
+
+{%- macro pct(w, l) -%}
+  {%- if (w + l) > 0 -%}{{ '%.1f'|format(100.0 * w / (w + l)) }}%{%- else -%}–{%- endif -%}
+{%- endmacro -%}
+
+{%- macro pct_class(w, l) -%}
+  {%- if (w + l) > 0 and (100.0 * w / (w + l)) >= 52.4 -%}good{%- endif -%}
+{%- endmacro -%}
+
+{%- macro miss(v) -%}{{ '%.2f'|format(v|float) if v is not none else '–' }}{%- endmacro -%}
+
+{%- macro stat_rows(rows, label_fn) -%}
+  {%- for r in rows %}
+  <tr>
+    <td class="label">{{ label_fn(r.label) }}</td>
+    <td class="num">{{ r.games }}</td>
+    <td class="num">{{ miss(r.model_spread_miss) }}</td>
+    <td class="num muted">{{ miss(r.market_spread_miss) }}</td>
+    <td class="num">{{ miss(r.model_total_miss) }}</td>
+    <td class="num muted">{{ miss(r.market_total_miss) }}</td>
+    <td class="num rec">{{ r.ats3_w }}–{{ r.ats3_l }}</td>
+    <td class="num {{ pct_class(r.ats3_w, r.ats3_l) }}">{{ pct(r.ats3_w, r.ats3_l) }}</td>
+    <td class="num rec">{{ r.ats5_w }}–{{ r.ats5_l }}</td>
+    <td class="num {{ pct_class(r.ats5_w, r.ats5_l) }}">{{ pct(r.ats5_w, r.ats5_l) }}</td>
+    <td class="num {{ pct_class(r.ou3_w, r.ou3_l) }}">{{ pct(r.ou3_w, r.ou3_l) }}</td>
+    <td class="num {{ pct_class(r.clv_w, r.clv_l) }}">{{ pct(r.clv_w, r.clv_l) }}</td>
+  </tr>
+  {%- endfor %}
+{%- endmacro -%}
+
+{%- macro season_label(v) -%}{{ v }}{% if v == 2020 %} <span class="muted small">COVID</span>{% endif %}{%- endmacro -%}
+{%- macro weeks_label(v) -%}{{ '6+' if v == 6 else v }}{%- endmacro -%}
+
+{%- macro table_head(first) -%}
+  <thead>
+    <tr class="group-head">
+      <th></th><th></th>
+      <th colspan="2">Spread miss</th>
+      <th colspan="2">Total miss</th>
+      <th colspan="2">ATS, we differ 3+</th>
+      <th colspan="2">ATS, we differ 5+</th>
+      <th>O/U 3+</th>
+      <th>Line moved to us</th>
+    </tr>
+    <tr>
+      <th>{{ first }}</th><th class="num">Games</th>
+      <th class="num">Model</th><th class="num">Market</th>
+      <th class="num">Model</th><th class="num">Market</th>
+      <th class="num">W–L</th><th class="num">%</th>
+      <th class="num">W–L</th><th class="num">%</th>
+      <th class="num">%</th>
+      <th class="num">%</th>
+    </tr>
+  </thead>
+{%- endmacro -%}
+
+{% block content %}
+<div class="page-head">
+  <h1>Backtest</h1>
+  <p class="muted">
+    Model {{ version }} · every game predicted walk-forward, using only data from before kickoff ·
+    lines are the average across sportsbooks · <span class="good-text">green</span> = at or above the
+    52.4% needed to break even at −110
+  </p>
+</div>
+
+{%- set o = overall[0] if overall else none %}
+{%- if o %}
+<section class="cards" aria-label="Summary, excluding 2020">
+  <div class="card">
+    <div class="card-label">Spread miss</div>
+    <div class="card-value">{{ miss(o.model_spread_miss) }}</div>
+    <div class="card-sub">market {{ miss(o.market_spread_miss) }} · gap {{ '%.2f'|format(o.model_spread_miss|float - o.market_spread_miss|float) }}</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Total miss</div>
+    <div class="card-value">{{ miss(o.model_total_miss) }}</div>
+    <div class="card-sub">market {{ miss(o.market_total_miss) }} · gap {{ '%.2f'|format(o.model_total_miss|float - o.market_total_miss|float) }}</div>
+  </div>
+  <div class="card">
+    <div class="card-label">ATS when we differ 3+</div>
+    <div class="card-value {{ pct_class(o.ats3_w, o.ats3_l) }}">{{ pct(o.ats3_w, o.ats3_l) }}</div>
+    <div class="card-sub">{{ o.ats3_w }}–{{ o.ats3_l }} vs closing line</div>
+  </div>
+  <div class="card">
+    <div class="card-label">ATS when we differ 5+</div>
+    <div class="card-value {{ pct_class(o.ats5_w, o.ats5_l) }}">{{ pct(o.ats5_w, o.ats5_l) }}</div>
+    <div class="card-sub">{{ o.ats5_w }}–{{ o.ats5_l }} vs closing line</div>
+  </div>
+  <div class="card">
+    <div class="card-label">O/U when we differ 3+</div>
+    <div class="card-value {{ pct_class(o.ou3_w, o.ou3_l) }}">{{ pct(o.ou3_w, o.ou3_l) }}</div>
+    <div class="card-sub">{{ o.ou3_w }}–{{ o.ou3_l }}</div>
+  </div>
+  <div class="card highlight">
+    <div class="card-label">Line moved toward us</div>
+    <div class="card-value {{ pct_class(o.clv_w, o.clv_l) }}">{{ pct(o.clv_w, o.clv_l) }}</div>
+    <div class="card-sub">{{ o.clv_w }}–{{ o.clv_l }} · we differed from the open by 3+</div>
+  </div>
+</section>
+<p class="muted small">Summary excludes 2020 (COVID season). "Line moved toward us" = closing line value:
+  when we disagreed with the <em>opening</em> line, how often the market moved our way by kickoff.
+  Opening lines are only available from 2021.</p>
+{%- endif %}
+
+<h2>By season</h2>
+<div class="table-wrap">
+  <table class="stats">
+    {{ table_head("Season") }}
+    <tbody>{{ stat_rows(seasons, season_label) }}</tbody>
+  </table>
+</div>
+
+<h2>By weeks of current-season data</h2>
+<p class="muted small">Week 0 = the model only knew last season. Excludes 2020.</p>
+<div class="table-wrap">
+  <table class="stats">
+    {{ table_head("Weeks") }}
+    <tbody>{{ stat_rows(weeks, weeks_label) }}</tbody>
+  </table>
+</div>
+{% endblock %}

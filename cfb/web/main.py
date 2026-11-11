@@ -126,6 +126,43 @@ ORDER BY g.start_time, a.school
 """
 
 
+# Backtest results, grouped by {group_by} (filled in from GROUPINGS below, never from user input)
+BACKTEST_SQL = """
+SELECT {group_by} AS label,
+       count(*) AS games,
+       avg(abs(result - model_spread))       AS model_spread_miss,
+       avg(abs(result - close_spread))       AS market_spread_miss,
+       avg(abs(actual_total - model_total))  AS model_total_miss,
+       avg(abs(actual_total - close_total))  AS market_total_miss,
+       count(*) FILTER (WHERE abs(spread_diff) >= 3 AND spread_win)     AS ats3_w,
+       count(*) FILTER (WHERE abs(spread_diff) >= 3 AND NOT spread_win) AS ats3_l,
+       count(*) FILTER (WHERE abs(spread_diff) >= 5 AND spread_win)     AS ats5_w,
+       count(*) FILTER (WHERE abs(spread_diff) >= 5 AND NOT spread_win) AS ats5_l,
+       count(*) FILTER (WHERE abs(total_diff) >= 3 AND total_win)       AS ou3_w,
+       count(*) FILTER (WHERE abs(total_diff) >= 3 AND NOT total_win)   AS ou3_l,
+       count(*) FILTER (WHERE abs(open_diff) >= 3 AND clv_win)          AS clv_w,
+       count(*) FILTER (WHERE abs(open_diff) >= 3 AND NOT clv_win)      AS clv_l
+FROM backtest_games
+WHERE model_version = %(version)s
+  AND is_backtest
+  AND (%(include_2020)s OR season <> 2020)
+GROUP BY 1
+ORDER BY 1
+"""
+
+GROUPINGS = {"all": "'all'", "season": "season", "weeks": "weeks_bucket"}
+
+
+def backtest_summary(group, include_2020):
+    """Backtest results for one grouping: 'all' (one row), 'season', or 'weeks'."""
+    sql = BACKTEST_SQL.format(group_by=GROUPINGS[group])
+    with connect() as conn:
+        conn.row_factory = dict_row
+        return conn.execute(
+            sql, {"version": MODEL_VERSION, "include_2020": include_2020}
+        ).fetchall()
+
+
 def current_week_games():
     """Run SCORES_SQL and add each game's kickoff in local time."""
     with connect() as conn:
@@ -169,4 +206,20 @@ def predictions_page(request: Request):
         request,
         "predictions.html",
         {"games": games, "version": MODEL_VERSION, "active": "predictions"},
+    )
+
+
+@app.get("/backtest")
+def backtest_page(request: Request):
+    """How the model would have done, walk-forward, vs. the market."""
+    return templates.TemplateResponse(
+        request,
+        "backtest.html",
+        {
+            "overall": backtest_summary("all", include_2020=False),
+            "seasons": backtest_summary("season", include_2020=True),
+            "weeks": backtest_summary("weeks", include_2020=False),
+            "version": MODEL_VERSION,
+            "active": "backtest",
+        },
     )
