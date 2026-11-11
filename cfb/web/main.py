@@ -124,7 +124,9 @@ SELECT g.id AS game_id,
        l.away_score, l.home_score,
        l.away_rank, l.home_rank,
        l.away_record, l.home_record,
-       l.away_conf_record, l.home_conf_record
+       l.away_conf_record, l.home_conf_record,
+       ven.dome,
+       wf.temperature_f, wf.wind_mph, wf.gust_mph, wf.precip_in
 FROM games g
 JOIN current_week w ON w.season = g.season
                    AND w.week = g.week
@@ -138,6 +140,14 @@ LEFT JOIN model_miss mm ON mm.bucket = LEAST(p.weeks_played, 6)
 LEFT JOIN market m ON m.game_id = g.id
 LEFT JOIN adjustments adj ON adj.game_id = g.id
 LEFT JOIN live_scores l ON l.game_id = g.id
+LEFT JOIN venues ven ON ven.id = g.venue_id
+LEFT JOIN LATERAL (
+    SELECT temperature_f, wind_mph, gust_mph, precip_in
+    FROM weather_forecasts f
+    WHERE f.game_id = g.id
+    ORDER BY f.forecast_date DESC
+    LIMIT 1
+) wf ON true
 WHERE g.league = 'cfb'
   AND 'fbs' IN (g.home_classification, g.away_classification)
 ORDER BY g.start_time, a.school

@@ -313,6 +313,11 @@ button.primary {
 .overrides .neg { color: var(--accent); font-weight: 700; }
 .overrides .pos { color: var(--good); font-weight: 700; }
 
+/* Weather column */
+.predictions td.weather { font-size: 0.85em; font-variant-numeric: tabular-nums; }
+.predictions td.weather.rough { color: var(--edge5-text); font-weight: 600; }
+.wx-flag { cursor: help; }
+
 /* Timeout pips: filled = timeout left */
 .pips { display: inline-flex; gap: 3px; vertical-align: middle; }
 .pips i {

@@ -2,7 +2,7 @@
 
 - Every 30 s (game time) or 10 min (otherwise): live scores from ESPN.
 - Every day at 5 AM: refresh this season from CFBD (games, stats, lines, latest week's QBs:
-  4 calls) and re-predict upcoming games.
+  4 calls), re-predict upcoming games, and save kickoff weather forecasts (Open-Meteo).
 """
 
 import os
@@ -16,6 +16,7 @@ from cfb.backfill import refresh_recent_qbs
 from cfb.db import connect
 from cfb.load import refresh_season
 from cfb.model import predict_upcoming
+from cfb.weather import update_forecasts
 
 FAST = 30           # seconds between polls while games are on
 SLOW = 600          # seconds between polls otherwise (10 minutes)
@@ -73,6 +74,7 @@ def daily_update():
         refresh_season(season)
         refresh_recent_qbs(season)
         predict_upcoming(season)
+        update_forecasts()
     except Exception as err:
         print(f"daily update FAILED: {err!r}")
 

@@ -39,6 +39,36 @@ def load_teams(year):
     print(f"teams {year}: {len(teams)} loaded")
 
 
+def load_venues():
+    """Insert or update every stadium from CFBD's venue list (saved response, no API call)."""
+    venues = cfbd.get("/venues", {})
+    with connect() as conn:
+        for v in venues:
+            conn.execute(
+                """
+                INSERT INTO venues (cfbd_id, name, city, state, latitude, longitude, dome)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (cfbd_id) DO UPDATE SET
+                    name      = EXCLUDED.name,
+                    city      = EXCLUDED.city,
+                    state     = EXCLUDED.state,
+                    latitude  = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude,
+                    dome      = EXCLUDED.dome
+                """,
+                (
+                    v["id"],
+                    v.get("name") or f"Venue {v['id']}",
+                    v.get("city"),
+                    v.get("state"),
+                    v.get("latitude"),
+                    v.get("longitude"),
+                    bool(v.get("dome")),
+                ),
+            )
+    print(f"venues: {len(venues)} loaded")
+
+
 def load_games(year):
     """Insert or update every game for one season (regular + postseason)."""
     games = cfbd.get("/games", {"year": year, "seasonType": "both"})
@@ -47,6 +77,8 @@ def load_games(year):
         team_ids = dict(
             conn.execute("SELECT cfbd_id, id FROM teams WHERE league = 'cfb'").fetchall()
         )
+        # Map CFBD venue id -> our venues.id
+        venue_ids = dict(conn.execute("SELECT cfbd_id, id FROM venues").fetchall())
 
         loaded = 0
         skipped = 0
@@ -62,8 +94,8 @@ def load_games(year):
                 INSERT INTO games (league, cfbd_id, espn_id, season, week, season_type,
                                    start_time, start_time_tbd, neutral_site,
                                    home_id, away_id, home_points, away_points, completed,
-                                   home_classification, away_classification)
-                VALUES ('cfb', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   home_classification, away_classification, venue_id)
+                VALUES ('cfb', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (league, cfbd_id) DO UPDATE SET
                     start_time          = EXCLUDED.start_time,
                     start_time_tbd      = EXCLUDED.start_time_tbd,
@@ -72,7 +104,8 @@ def load_games(year):
                     away_points         = EXCLUDED.away_points,
                     completed           = EXCLUDED.completed,
                     home_classification = EXCLUDED.home_classification,
-                    away_classification = EXCLUDED.away_classification
+                    away_classification = EXCLUDED.away_classification,
+                    venue_id            = EXCLUDED.venue_id
                 """,
                 (
                     g["id"],
@@ -90,6 +123,7 @@ def load_games(year):
                     g["completed"],
                     g.get("homeClassification"),
                     g.get("awayClassification"),
+                    venue_ids.get(g.get("venueId")),
                 ),
             )
             loaded += 1
@@ -231,6 +265,7 @@ def load_team_game_stats(year):
 
 def load_season(year):
     """Load one season: teams first, then games, then everything that points to games."""
+    load_venues()
     load_teams(year)
     load_games(year)
     load_lines(year)

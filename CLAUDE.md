@@ -143,6 +143,17 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     need venue locations (CFBD `/venues`, 1 call).
   - Measure first whether weather beyond what the market prices in helps (mostly totals) before
     adding it to the model.
+  - **Result (2026-11-11, research in scratch, not in the app):** Open-Meteo hourly archive per
+    open-air venue-season (1,295 requests, CFBD `/venues` for coordinates/dome), kickoff hour +3h,
+    5,843 games 2017–2025 excl. 2020. Market prices normal weather well (avg vs close ≈ +0.4, under
+    ≈50% for wind <10 mph). Possible edges only in extremes, small samples: gusts 30+ mph n=205,
+    −1.7 vs close, under 57.8%; rain 0.1–0.3 in n=183, under 55.5%; wind 20+ n=18. Our model
+    ignores weather and over-predicts totals in bad weather (−2.3 at 15–20 mph, −4.5 at 30+ gusts,
+    −3 in heavy rain) but walk-forward weather terms only moved model total miss 13.006 → 12.996.
+    Under-bets when weather said close was 1+ too high: 56.8% (n=155) — uses OBSERVED weather
+    (hindsight) and best of several cuts, so optimistic. Decision: don't add to the model; show a
+    forecast weather flag (gusts 25+ / rain) on the predictions page and log daily forecasts for a
+    future honest out-of-sample test.
 
 ## Parking lot (not started; pick up when the user asks)
 

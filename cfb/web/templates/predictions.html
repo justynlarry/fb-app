@@ -19,6 +19,7 @@
         <th>Kickoff</th>
         <th>Our line</th>
         <th>Our O/U</th>
+        <th>Weather</th>
         <th class="market">Market</th>
         <th class="market">Mkt O/U</th>
         <th class="market">Our edge</th>
@@ -29,7 +30,7 @@
       {%- for g in games %}
       {%- set day = g.local_start.strftime('%A, %B %-d') %}
       {%- if day != ns.day %}{% set ns.day = day %}
-      <tr class="day-break"><th colspan="8" scope="colgroup">{{ day }}</th></tr>
+      <tr class="day-break"><th colspan="9" scope="colgroup">{{ day }}</th></tr>
       {%- endif %}
       {%- set state = g.state or 'pre' %}
       {%- set has_market = g.market_spread is not none %}
@@ -60,6 +61,22 @@
           {%- if g.total_miss is not none %} <span class="band">±{{ '%.0f'|format(g.total_miss|float) }}</span>{% endif %}
           {%- if g.adjustment_notes %}<div class="muted small">model: {{ '%.1f'|format(g.model_total|float) }}</div>{% endif -%}
         </td>
+        {%- set has_wx = g.wind_mph is defined and g.wind_mph is not none %}
+        {%- set gust = g.gust_mph|float if (g.gust_mph is defined and g.gust_mph is not none) else 0 %}
+        {%- set rain = g.precip_in|float if (g.precip_in is defined and g.precip_in is not none) else 0 %}
+        {%- set rough = gust >= 25 or rain >= 0.1 %}
+        <td class="weather {{ 'rough' if rough }}">
+          {%- if g.dome -%}
+            <span class="muted">Dome</span>
+          {%- elif has_wx -%}
+            {%- if rough %}<span class="wx-flag" title="Strong gusts or rain: the model doesn't know about weather and tends to over-predict totals in games like this">⚠</span> {% endif -%}
+            {{ '%.0f'|format(g.temperature_f|float) }}°F · wind {{ '%.0f'|format(g.wind_mph|float) }}
+            {%- if g.gust_mph is not none %} <span class="muted">(gusts {{ '%.0f'|format(gust) }})</span>{% endif %}
+            {%- if rain >= 0.01 %}<div class="small">rain {{ '%.2f'|format(rain) }} in</div>{% endif -%}
+          {%- else -%}
+            <span class="muted">–</span>
+          {%- endif -%}
+        </td>
         <td class="market">{{ line_text(g.market_spread, g.home, g.away) if has_market else '–' }}</td>
         <td class="market num">{{ '%g'|format(g.market_total|float) if g.market_total is not none else '–' }}</td>
         <td class="market edge">
@@ -73,7 +90,7 @@
         </td>
       </tr>
       {%- else %}
-      <tr><td colspan="8" class="empty">No predictions for this week yet.</td></tr>
+      <tr><td colspan="9" class="empty">No predictions for this week yet.</td></tr>
       {%- endfor %}
     </tbody>
   </table>
@@ -84,6 +101,9 @@
   <span class="swatch edge-5"></span> 5+ points. "Our edge" names the team we rate higher than the market does.
   Large gaps are worth checking for injuries or news the model can't see.
 </p>
+<p class="muted small">Weather: forecast at kickoff (Open-Meteo, updated each morning). ⚠ = gusts 25+ mph or 0.1+ in.
+  of rain. Our model doesn't use weather and has tended to over-predict totals in games like these; the market
+  usually prices it in. Worth a look on the Overrides page.</p>
 
 <script>
   // Market columns are hidden by default so our own number is what you see first.
