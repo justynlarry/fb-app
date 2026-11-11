@@ -73,6 +73,7 @@ a { color: inherit; }
 .site-header nav a.active { opacity: 1; border-bottom: 2px solid var(--accent); }
 
 main { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+body.wide main { max-width: 1600px; }   /* predictions page with the market shown */
 .page-head h1 { margin: 0.25rem 0 0; font-size: 1.4rem; }
 .page-head p { margin: 0.1rem 0 1rem; font-size: 0.85rem; }
 
@@ -183,6 +184,7 @@ tbody tr:last-child td { border-bottom: none; }
 .predictions .our-total strong { font-variant-numeric: tabular-nums; }
 .band { color: var(--muted); font-size: 0.8em; font-variant-numeric: tabular-nums; }
 .predictions .edge-pts { font-weight: 700; font-variant-numeric: tabular-nums; }
+.predictions td.edge { white-space: normal; min-width: 9rem; }
 
 /* Market columns stay hidden until "Show market" is pressed */
 .market { display: none; }

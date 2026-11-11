@@ -89,6 +89,7 @@
     var button = document.getElementById("market-toggle");
     function set(show) {
       table.classList.toggle("show-market", show);
+      document.body.classList.toggle("wide", show);   // let the page use the extra width
       if (legend) legend.classList.toggle("show-market", show);
       button.setAttribute("aria-pressed", show ? "true" : "false");
       button.textContent = show ? "Hide market" : "Show market";
