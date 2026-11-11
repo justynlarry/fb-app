@@ -81,12 +81,19 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    Auto-refresh with HTMX polling (`hx-trigger="every 30s"`) of a fragment endpoint.
    Final games show "Final"; mark the team with the ball.
 2. **Predictions.** visiting team | home team | day, date, kickoff |
-   predicted line | predicted over/under. Also show the market spread/total and the
-   difference, highlighting disagreements of 3+ and 5+ points.
+   predicted line | predicted over/under, each with an uncertainty band from the backtest
+   (e.g. "−6.5 ±11"; wider early season / vs FCS). Market spread/total and the difference
+   are **hidden by default** (one-click reveal, to avoid anchoring); when shown, highlight
+   disagreements of 3+ and 5+ points.
 3. Later: team ratings page, backtest report, overrides entry.
 
 ## Model
 
+- **Goal: our own independent line, not a copy of the market.** Market lines (CFBD `lines`,
+  ESPN odds) are NEVER model inputs or features, and never blended into predictions. They are
+  used only to evaluate the model (backtest, CLV) and to display side by side. Confidence comes
+  from backtest evidence, especially ATS record when we disagree by 3+/5+ and closing line value.
+  Treat large disagreements as "investigate" flags (injuries, QB changes) handled via overrides.
 - Per-play efficiency only (EPA/play split pass/rush, success rate, explosiveness,
   points per opportunity), garbage time excluded.
 - Opponent adjustment by ridge regression on game-level data:
