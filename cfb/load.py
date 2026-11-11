@@ -5,6 +5,7 @@ Costs no API calls when the data is already saved.
 from datetime import datetime
 
 from cfb import cfbd
+from cfb.backfill import season_calls
 from cfb.db import connect
 
 
@@ -234,6 +235,18 @@ def load_season(year):
     load_games(year)
     load_lines(year)
     load_team_game_stats(year)
+
+
+# The data that changes during a season (scores, stats, betting lines)
+REFRESH_ENDPOINTS = {"/games", "/stats/game/advanced", "/lines"}
+
+
+def refresh_season(year):
+    """Re-download this season's games, stats and lines (3 API calls), then reload them."""
+    for endpoint, params in season_calls(year):
+        if endpoint in REFRESH_ENDPOINTS:
+            cfbd.get(endpoint, params, refresh=True)
+    load_season(year)
 
 
 if __name__ == "__main__":

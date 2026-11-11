@@ -152,3 +152,28 @@ def backtest(first_season=2018, last_season=2025):
         model = train(all_rows[all_rows["season"] < season])
         saved = save_predictions(model, all_rows[all_rows["season"] == season], is_backtest=True)
         print(f"  {season}: {saved} games predicted")
+
+
+def predict_upcoming(season, first_training_season=2017):
+    """Train on every finished game so far and save predictions for games that haven't kicked off.
+
+    Re-running updates those predictions with the latest data. Once a game kicks off it's
+    no longer 'upcoming', so its last pre-game prediction stays as the permanent record.
+    """
+    print("building walk-forward rows (a few minutes)...")
+    all_rows = pd.concat(
+        [season_rows(s) for s in range(first_training_season, season + 1)],
+        ignore_index=True,
+    )
+    model = train(all_rows)         # train() skips games without a final score
+
+    with connect() as conn:
+        not_started = {
+            row[0]
+            for row in conn.execute(
+                "SELECT id FROM games WHERE season = %s AND start_time > now()", (season,)
+            ).fetchall()
+        }
+    upcoming = all_rows[all_rows["game_id"].isin(not_started)]
+    saved = save_predictions(model, upcoming, is_backtest=False)
+    print(f"{saved} upcoming games predicted")

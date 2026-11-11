@@ -103,6 +103,16 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
 - Preseason priors (last season's ratings, returning production, talent, recruiting,
   coaching changes, portal), faded out by weeks 5–6.
 - Manual overrides table (e.g. "QB out, −N points, team X, game Y") applied before predictions.
+- **Coaching & injuries (planned, 2026-11-11):**
+  - Head coaches: automatic. `/coaches` (already cached) for season-to-season changes;
+    `/coaches/tenures` for interim/mid-season changes. Use as a model-v2 input.
+  - Coordinators: no source in CFBD or ESPN. User enters OC/DC in a manual table each
+    offseason (step 6).
+  - Injuries: no free feed (CFBD has none; ESPN college game summaries have none, checked).
+    Instead: detect QB changes automatically from `/passing/players/games?year=` (1 call/season,
+    who actually threw) — usable in the backtest to measure what a backup QB costs. Value players
+    with `/ppa/players/season` and `/player/usage` to *suggest* override points when the user
+    marks a player out; the user accepts or edits.
 
 ## Backtest (how the model is judged)
 
