@@ -60,15 +60,18 @@ def load_games(year):
                 """
                 INSERT INTO games (league, cfbd_id, espn_id, season, week, season_type,
                                    start_time, start_time_tbd, neutral_site,
-                                   home_id, away_id, home_points, away_points, completed)
-                VALUES ('cfb', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   home_id, away_id, home_points, away_points, completed,
+                                   home_classification, away_classification)
+                VALUES ('cfb', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (league, cfbd_id) DO UPDATE SET
                     start_time          = EXCLUDED.start_time,
                     start_time_tbd      = EXCLUDED.start_time_tbd,
                     neutral_site        = EXCLUDED.neutral_site,
                     home_points         = EXCLUDED.home_points,
                     away_points         = EXCLUDED.away_points,
-                    completed           = EXCLUDED.completed
+                    completed           = EXCLUDED.completed,
+                    home_classification = EXCLUDED.home_classification,
+                    away_classification = EXCLUDED.away_classification
                 """,
                 (
                     g["id"],
@@ -84,6 +87,8 @@ def load_games(year):
                     g.get("homePoints"),
                     g.get("awayPoints"),
                     g["completed"],
+                    g.get("homeClassification"),
+                    g.get("awayClassification"),
                 ),
             )
             loaded += 1
