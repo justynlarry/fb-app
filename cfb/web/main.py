@@ -159,7 +159,11 @@ SELECT {group_by} AS label,
        count(*) FILTER (WHERE abs(total_diff) >= 3 AND total_win)       AS ou3_w,
        count(*) FILTER (WHERE abs(total_diff) >= 3 AND NOT total_win)   AS ou3_l,
        count(*) FILTER (WHERE abs(open_diff) >= 3 AND clv_win)          AS clv_w,
-       count(*) FILTER (WHERE abs(open_diff) >= 3 AND NOT clv_win)      AS clv_l
+       count(*) FILTER (WHERE abs(open_diff) >= 3 AND NOT clv_win)      AS clv_l,
+       count(*) FILTER (WHERE abs(open_diff) >= 3 AND open_win)         AS open3_w,
+       count(*) FILTER (WHERE abs(open_diff) >= 3 AND NOT open_win)     AS open3_l,
+       count(*) FILTER (WHERE abs(open_diff) >= 3 AND best_open_win)    AS best3_w,
+       count(*) FILTER (WHERE abs(open_diff) >= 3 AND NOT best_open_win) AS best3_l
 FROM backtest_games
 WHERE model_version = %(version)s
   AND is_backtest

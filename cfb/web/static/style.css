@@ -237,6 +237,7 @@ h2 { font-size: 1.05rem; margin: 1.75rem 0 0.5rem; }
 .stats tr:not(.group-head) th:nth-child(12),
 .stats td:nth-child(12) { border-left: 1px solid var(--border); }
 .stats tr.group-head th:nth-child(n+3) { border-left: 1px solid var(--border); }
+.stats td:nth-child(13), .stats th.open-group { border-left: 2px solid var(--good); }
 
 /* ---------- Overrides ---------- */
 .adjust-link { font-size: 0.78em; color: var(--muted); }
