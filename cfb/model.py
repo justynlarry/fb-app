@@ -13,7 +13,7 @@ from cfb.db import connect
 from cfb.priors import season_priors
 from cfb.ratings import METRICS, ratings_as_of
 
-MODEL_VERSION = "v2"
+MODEL_VERSION = "v3"
 
 # Preseason inputs (from cfb/priors.py), faded out over the regular season
 PRIOR_INPUTS = ["talent", "ret_ppa", "new_coach"]

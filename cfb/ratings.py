@@ -89,6 +89,27 @@ def fit_ratings(df, metric, alpha=ALPHA):
     return ratings, coefs["home"]
 
 
+# A regular-season week counts as played once its LAST game has kicked off
+WEEKS_PLAYED_SQL = """
+SELECT count(*)
+FROM (
+    SELECT week
+    FROM games
+    WHERE league = 'cfb'
+      AND season = %(season)s
+      AND season_type = 'regular'
+    GROUP BY week
+    HAVING max(start_time) < %(before)s
+) AS finished_weeks
+"""
+
+
+def count_weeks_played(season, before):
+    """How many regular-season weeks were completely finished before 'before'."""
+    with connect() as conn:
+        return conn.execute(WEEKS_PLAYED_SQL, {"season": season, "before": before}).fetchone()[0]
+
+
 def ratings_as_of(season, before):
     """Rate every team using only games that kicked off before 'before'.
 
@@ -97,10 +118,9 @@ def ratings_as_of(season, before):
     Returns (ratings, weeks_played). ratings has columns off_<metric>, def_<metric>.
     """
     parts = []
-    weeks_played = 0
+    weeks_played = count_weeks_played(season, before)
     current = load_game_stats(season, before)
     if len(current) > 0:
-        weeks_played = current.loc[current["season_type"] == "regular", "week"].nunique()
         current["weight"] = 1.0
         parts.append(current)
 
