@@ -109,8 +109,18 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   - Coordinators: no source in CFBD or ESPN. User enters OC/DC in a manual table each
     offseason (step 6).
   - Injuries: no free feed (CFBD has none; ESPN college game summaries have none, checked).
-    Instead: detect QB changes automatically from `/passing/players/games?year=` (1 call/season,
-    who actually threw) — usable in the backtest to measure what a backup QB costs. Value players
+    Instead: detect QB changes automatically from who actually threw passes each game — usable in
+    the backtest to measure what a backup QB costs. **Correction (2026-11-11):** `/passing/players/games`
+    is NOT one call per season; it requires `team`, `week` or `passerId` besides `year` (400 otherwise).
+    `/games/players` needs `week`, `team` or `conference`. Cheapest full-season pull is
+    `/games/players?year=&conference=&category=passing` (~11-12 calls/season). Always read the
+    parameter *descriptions* in the spec, not just the `required` flag.
+  - **`conference` must be the ABBREVIATION** (`B1G`, `B12`, `AAC`, `CUSA`, `MAC`, `MWC`, `PAC`,
+    `SBC`, `Ind`, `ACC`, `SEC`) from `/conferences` (cached). A full name like "Big Ten" returns an
+    empty list, not an error, and the empty result still costs a call and gets cached. Lesson
+    (2026-11-11, ~90 calls wasted): before any multi-call pull, test 1 call for a case that differs
+    from the one that worked (e.g. a conference whose name ≠ abbreviation), and stop on 0-row results.
+- **Rate limit:** every CFBD response carries `x-calllimit-remaining`; `cfbd.get` prints it. Value players
     with `/ppa/players/season` and `/player/usage` to *suggest* override points when the user
     marks a player out; the user accepts or edits.
 
@@ -184,9 +194,6 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `/games`, `/stats/game/advanced`, `/lines` = 3 calls, then `predict_upcoming`), skipped when no
   games are within 3 days back / 10 days ahead. **Each August, backfill the new season once by
   hand** (`python -m cfb.backfill <year>` then `python -m cfb.load <year>`, ~11 calls).
-- TODO (next real CFBD call made in a session): check the response headers for a remaining-calls
-  header (e.g. `X-CallLimit-Remaining`). If present, show the user a one-line change to print it in
-  `cfbd.get`, so `/info` (which costs a call) is rarely needed.
 - Every CFBD response is stored raw in `api_responses` before parsing; check it before any
   call. `/info` itself costs a call.
 - Schema changes: new numbered files in `db/init/` (runs only on a fresh volume), applied by

@@ -41,5 +41,5 @@ def get(endpoint, params, refresh=False):
             """,
             (endpoint, Jsonb(params), resp.status_code, Jsonb(body)),
         )
-        print(f"CFBD call used: {endpoint} {params}")
+        print(f"CFBD call used: {endpoint} {params} ({resp.headers.get('x-calllimit-remaining', '?')} left)")
         return body
