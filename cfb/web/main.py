@@ -3,11 +3,12 @@ import os
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from psycopg.rows import dict_row
+from pydantic import BaseModel, Field
 
 from cfb.db import connect
 from cfb.model import MODEL_VERSION
@@ -63,9 +64,8 @@ WHERE g.league = 'cfb'
 ORDER BY g.start_time, a.school
 """
 
-
 # Our predictions for this week's games, with the typical miss for that point in
-# the season (from the backtest) and the market line for comparison.
+# the season (from the backtest), any manual overrides, and the market line for comparison.
 PREDICTIONS_SQL = """
 WITH current_week AS (
     SELECT season, week, season_type
@@ -89,15 +89,31 @@ market AS (
     SELECT game_id, avg(spread) AS spread, avg(over_under) AS total
     FROM lines
     GROUP BY game_id
+),
+adjustments AS (
+    SELECT o.game_id,
+           sum(o.points) FILTER (WHERE o.team_id = g.home_id) AS home_adj,
+           sum(o.points) FILTER (WHERE o.team_id = g.away_id) AS away_adj,
+           string_agg(t.school || ' ' || o.points || ': ' || o.reason, '; ') AS notes
+    FROM overrides o
+    JOIN games g ON g.id = o.game_id
+    JOIN teams t ON t.id = o.team_id
+    WHERE o.active
+    GROUP BY o.game_id
 )
-SELECT a.school AS away,
+SELECT g.id AS game_id,
+       a.school AS away,
        h.school AS home,
        a.espn_id AS away_espn_id,
        h.espn_id AS home_espn_id,
        g.start_time,
        g.start_time_tbd,
-       p.spread,
-       p.total,
+       p.spread AS model_spread,
+       p.total AS model_total,
+       (p.away_points + COALESCE(adj.away_adj, 0))
+         - (p.home_points + COALESCE(adj.home_adj, 0)) AS spread,
+       p.total + COALESCE(adj.home_adj, 0) + COALESCE(adj.away_adj, 0) AS total,
+       adj.notes AS adjustment_notes,
        p.weeks_played,
        mm.spread_miss,
        mm.total_miss,
@@ -110,15 +126,16 @@ SELECT a.school AS away,
        l.away_conf_record, l.home_conf_record
 FROM games g
 JOIN current_week w ON w.season = g.season
-                    AND w.week = g.week
-                    AND w.season_type = g.season_type
+                   AND w.week = g.week
+                   AND w.season_type = g.season_type
 JOIN predictions p ON p.game_id = g.id
-                   AND p.model_version = %(version)s
-                   AND NOT p.is_backtest
+                  AND p.model_version = %(version)s
+                  AND NOT p.is_backtest
 JOIN teams h ON h.id = g.home_id
 JOIN teams a ON a.id = g.away_id
 LEFT JOIN model_miss mm ON mm.bucket = LEAST(p.weeks_played, 6)
 LEFT JOIN market m ON m.game_id = g.id
+LEFT JOIN adjustments adj ON adj.game_id = g.id
 LEFT JOIN live_scores l ON l.game_id = g.id
 WHERE g.league = 'cfb'
   AND 'fbs' IN (g.home_classification, g.away_classification)
@@ -151,6 +168,68 @@ ORDER BY 1
 """
 
 GROUPINGS = {"all": "'all'", "season": "season", "weeks": "weeks_bucket"}
+
+# "This week" (same rule as the scores page), shared by the overrides queries
+CURRENT_WEEK_CTE = """
+current_week AS (
+    SELECT season, week, season_type
+    FROM games
+    WHERE league = 'cfb'
+      AND 'fbs' IN (home_classification, away_classification)
+      AND start_time > now() - interval '24 hours'
+    ORDER BY start_time
+    LIMIT 1
+)
+"""
+
+# This week's games that haven't kicked off, for the overrides form
+OVERRIDE_GAMES_SQL = f"""
+WITH {CURRENT_WEEK_CTE}
+SELECT g.id AS game_id,
+       g.start_time,
+       g.away_id,
+       g.home_id,
+       a.school AS away,
+       h.school AS home
+FROM games g
+JOIN current_week w ON w.season = g.season
+                   AND w.week = g.week
+                   AND w.season_type = g.season_type
+JOIN teams h ON h.id = g.home_id
+JOIN teams a ON a.id = g.away_id
+WHERE g.league = 'cfb'
+  AND 'fbs' IN (g.home_classification, g.away_classification)
+  AND g.start_time > now()
+ORDER BY g.start_time, a.school
+"""
+
+# Active overrides for recent and upcoming games
+ACTIVE_OVERRIDES_SQL = """
+SELECT o.id,
+       o.points,
+       o.reason,
+       o.created_at,
+       t.school AS team,
+       a.school AS away,
+       h.school AS home,
+       g.start_time
+FROM overrides o
+JOIN games g ON g.id = o.game_id
+JOIN teams t ON t.id = o.team_id
+JOIN teams h ON h.id = g.home_id
+JOIN teams a ON a.id = g.away_id
+WHERE o.active
+  AND g.start_time > now() - interval '7 days'
+ORDER BY g.start_time, a.school
+"""
+
+
+class OverrideIn(BaseModel):
+    """What the overrides form sends."""
+    game_id: int
+    team_id: int
+    points: float = Field(ge=-30, le=30)
+    reason: str = Field(min_length=1, max_length=200)
 
 
 def backtest_summary(group, include_2020):
@@ -223,3 +302,56 @@ def backtest_page(request: Request):
             "active": "backtest",
         },
     )
+
+
+@app.get("/overrides")
+def overrides_page(request: Request, game_id: int | None = None):
+    """Add or remove manual adjustments for this week's games."""
+    with connect() as conn:
+        conn.row_factory = dict_row
+        games = conn.execute(OVERRIDE_GAMES_SQL).fetchall()
+        overrides = conn.execute(ACTIVE_OVERRIDES_SQL).fetchall()
+    for row in games + overrides:
+        row["local_start"] = row["start_time"].astimezone(LOCAL_TZ)
+    return templates.TemplateResponse(
+        request,
+        "overrides.html",
+        {"games": games, "overrides": overrides, "selected_game": game_id, "active": "overrides"},
+    )
+
+
+@app.post("/api/overrides")
+def add_override(override: OverrideIn):
+    """Save one adjustment. The team must be playing in that game."""
+    params = override.model_dump()
+    params["reason"] = params["reason"].strip()
+    if not params["reason"]:
+        raise HTTPException(status_code=400, detail="Please give a reason.")
+    with connect() as conn:
+        added = conn.execute(
+            """
+            INSERT INTO overrides (game_id, team_id, points, reason)
+            SELECT %(game_id)s, %(team_id)s, %(points)s, %(reason)s
+            WHERE EXISTS (
+                SELECT 1 FROM games
+                WHERE id = %(game_id)s AND %(team_id)s IN (home_id, away_id)
+            )
+            RETURNING id
+            """,
+            params,
+        ).fetchone()
+    if added is None:
+        raise HTTPException(status_code=400, detail="That team isn't playing in that game.")
+    return {"id": added[0]}
+
+
+@app.post("/api/overrides/{override_id}/remove")
+def remove_override(override_id: int):
+    """Switch an override off (kept in the table for history)."""
+    with connect() as conn:
+        removed = conn.execute(
+            "UPDATE overrides SET active = false WHERE id = %s AND active", (override_id,)
+        ).rowcount
+    if removed == 0:
+        raise HTTPException(status_code=404, detail="No active override with that id.")
+    return {"removed": override_id}

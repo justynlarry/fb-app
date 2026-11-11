@@ -120,6 +120,15 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     empty list, not an error, and the empty result still costs a call and gets cached. Lesson
     (2026-11-11, ~90 calls wasted): before any multi-call pull, test 1 call for a case that differs
     from the one that worked (e.g. a conference whose name ≠ abbreviation), and stop on 0-row results.
+  - **Result (2026-11-11): QB-change detection from past box scores does NOT improve the model.**
+    Tested two variants on v2 walk-forward rows 2018–2025 (excl. 2020): (a) "last starter ≠ season
+    QB1" + shrunk YPA gap; (b) "fresh change" (first start) × team pass EPA. Both left spread miss
+    at 12.87 overall and ~12.66–12.70 in the 1,481 QB-change games (market 12.23). Reasons: market
+    already knows last week's starter; ratings absorb a backup within one game; the flag is noisy
+    (13% of team-games, incl. permanent benchings). Don't retry without new information.
+    What it IS good for: **suggested override values** — a switch to a non-QB1 costs ~1 pt on
+    average, plus ~3.7 pts per +1.0 team pass EPA lost (elite passer ≈ 2–4 pts total). QB news
+    (starter out *this* week) belongs in the overrides page, not the model.
 - **Rate limit:** every CFBD response carries `x-calllimit-remaining`; `cfbd.get` prints it. Value players
     with `/ppa/players/season` and `/player/usage` to *suggest* override points when the user
     marks a player out; the user accepts or edits.
@@ -147,8 +156,8 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     wanted (e.g. personal bet log, per-user overrides): `users` table, argon2/bcrypt password
     hashes, secure session cookies, login page; never roll our own crypto.
   - Tunnel token goes in `.env` (never committed). Ask the user before creating anything on Cloudflare.
-- **Model v3:** QB-change detection (`/passing/players/games`), head-coach tenures for mid-season
-  changes, and fix `weeks_played`: it counts a week as played if any FBS/FCS game in it kicked off
+- **Model v3:** (QB-change detection tested and rejected, see above), head-coach tenures for
+  mid-season changes, and fix `weeks_played`: it counts a week as played if any FBS/FCS game in it kicked off
   before the cutoff (2026 week 1 starts at 1 because an FCS game kicked off first). Count weeks
   strictly before the current week instead, then re-run the backtest.
 - **Weather** (see Model section) and **overrides page** (step 6), coordinator table.

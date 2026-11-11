@@ -238,6 +238,68 @@ h2 { font-size: 1.05rem; margin: 1.75rem 0 0.5rem; }
 .stats td:nth-child(12) { border-left: 1px solid var(--border); }
 .stats tr.group-head th:nth-child(n+3) { border-left: 1px solid var(--border); }
 
+/* ---------- Overrides ---------- */
+.adjust-link { font-size: 0.78em; color: var(--muted); }
+.adjust-link:hover { color: var(--text); }
+.adj-badge {
+  display: inline-block;
+  padding: 0 0.35em;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.7em;
+  font-weight: 700;
+  text-transform: uppercase;
+  vertical-align: 0.15em;
+  cursor: help;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.25rem 1rem 1rem;
+  margin-bottom: 1.5rem;
+}
+.override-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.9rem 1.25rem;
+  align-items: end;
+}
+.field { display: flex; flex-direction: column; gap: 0.3rem; border: 0; padding: 0; margin: 0; min-width: 0; }
+.field > span, .field > legend { font-size: 0.8rem; font-weight: 600; padding: 0; }
+.field select, .field input[type="text"], .field input[type="number"] {
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+}
+.field-reason { grid-column: span 2; }
+@media (max-width: 640px) { .field-reason { grid-column: auto; } }
+.team-choice { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; padding-top: 0.35rem; }
+.team-choice label { display: flex; align-items: center; gap: 0.35rem; }
+.form-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+button.primary {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--surface);
+  font-weight: 600;
+  cursor: pointer;
+}
+.form-message { font-size: 0.85rem; color: var(--muted); }
+.form-message.error { color: var(--accent); font-weight: 600; }
+.link-button { font: inherit; font-size: 0.85rem; background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0; text-decoration: underline; }
+.link-button.danger { color: var(--accent); font-weight: 700; }
+.overrides td.reason { white-space: normal; }
+.overrides .neg { color: var(--accent); font-weight: 700; }
+.overrides .pos { color: var(--good); font-weight: 700; }
+
 /* Timeout pips: filled = timeout left */
 .pips { display: inline-flex; gap: 3px; vertical-align: middle; }
 .pips i {

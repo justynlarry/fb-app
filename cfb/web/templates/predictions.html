@@ -47,14 +47,18 @@
           {%- elif g.start_time_tbd -%}TBD
           {%- else -%}{{ g.local_start.strftime('%-I:%M %p') }}
           {%- endif -%}
+          {%- if g.game_id and state == 'pre' %}<div><a class="adjust-link" href="/overrides?game_id={{ g.game_id }}">Adjust</a></div>{% endif -%}
         </td>
         <td class="our-line">
           <strong>{{ line_text(g.spread, g.home, g.away) }}</strong>
+          {%- if g.adjustment_notes %} <span class="adj-badge" title="{{ g.adjustment_notes }}">adj</span>{% endif -%}
           {%- if g.spread_miss is not none %} <span class="band" title="Average miss of our backtest predictions made with {{ g.weeks_played if g.weeks_played < 6 else '6+' }} weeks of data">±{{ '%.0f'|format(g.spread_miss|float) }}</span>{% endif %}
+          {%- if g.adjustment_notes %}<div class="muted small">model: {{ line_text(g.model_spread, g.home, g.away) }}</div>{% endif -%}
         </td>
         <td class="num our-total">
           <strong>{{ '%.1f'|format(g.total|float) }}</strong>
           {%- if g.total_miss is not none %} <span class="band">±{{ '%.0f'|format(g.total_miss|float) }}</span>{% endif %}
+          {%- if g.adjustment_notes %}<div class="muted small">model: {{ '%.1f'|format(g.model_total|float) }}</div>{% endif -%}
         </td>
         <td class="market">{{ line_text(g.market_spread, g.home, g.away) if has_market else '–' }}</td>
         <td class="market num">{{ '%g'|format(g.market_total|float) if g.market_total is not none else '–' }}</td>

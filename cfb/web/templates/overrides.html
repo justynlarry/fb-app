@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Overrides{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Overrides</h1>
+  <p class="muted">Adjust a team's predicted points for news the model can't see: injuries, suspensions,
+    weather. The model's own numbers are never changed; the predictions page shows both.</p>
+</div>
+
+<section class="panel" aria-labelledby="add-title">
+  <h2 id="add-title">Add an adjustment</h2>
+  {%- if games %}
+  <form id="override-form" class="override-form" novalidate>
+    <label class="field">
+      <span>Game</span>
+      <select name="game_id" id="game" required>
+        {%- for g in games %}
+        <option value="{{ g.game_id }}" data-away="{{ g.away }}" data-away-id="{{ g.away_id }}"
+                data-home="{{ g.home }}" data-home-id="{{ g.home_id }}"
+                {{ 'selected' if selected_game == g.game_id }}>
+          {{ g.local_start.strftime('%a %-I:%M %p') }} · {{ g.away }} at {{ g.home }}
+        </option>
+        {%- endfor %}
+      </select>
+    </label>
+
+    <fieldset class="field">
+      <legend>Team whose points change</legend>
+      <div class="team-choice">
+        <label><input type="radio" name="team_id" id="team-away" required> <span id="team-away-name"></span></label>
+        <label><input type="radio" name="team_id" id="team-home"> <span id="team-home-name"></span></label>
+      </div>
+    </fieldset>
+
+    <label class="field field-points">
+      <span>Points <small class="muted">(− lowers that team's score)</small></span>
+      <input type="number" name="points" id="points" step="0.5" min="-30" max="30" placeholder="-3.5" required>
+    </label>
+
+    <label class="field field-reason">
+      <span>Reason</span>
+      <input type="text" name="reason" id="reason" maxlength="200" placeholder="QB Smith out (shoulder)" required>
+    </label>
+
+    <div class="form-actions">
+      <button type="submit" class="primary">Add adjustment</button>
+      <span id="form-message" class="form-message" role="status"></span>
+    </div>
+  </form>
+  {%- else %}
+  <p class="muted">No games this week.</p>
+  {%- endif %}
+</section>
+
+<h2>Active adjustments</h2>
+<div class="table-wrap">
+  <table class="stats overrides">
+    <thead>
+      <tr><th>Game</th><th>Team</th><th class="num">Points</th><th>Reason</th><th>Added</th><th></th></tr>
+    </thead>
+    <tbody>
+      {%- for o in overrides %}
+      <tr>
+        <td>{{ o.away }} at {{ o.home }} <div class="muted small">{{ o.local_start.strftime('%a %b %-d, %-I:%M %p') }}</div></td>
+        <td>{{ o.team }}</td>
+        <td class="num {{ 'neg' if o.points < 0 else 'pos' }}">{{ '%+.1f'|format(o.points|float) }}</td>
+        <td class="reason">{{ o.reason }}</td>
+        <td class="muted small">{{ o.created_at.astimezone(o.local_start.tzinfo).strftime('%b %-d, %-I:%M %p') }}</td>
+        <td><button type="button" class="link-button remove" data-id="{{ o.id }}">Remove</button></td>
+      </tr>
+      {%- else %}
+      <tr><td colspan="6" class="empty">No active adjustments.</td></tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById("override-form");
+  if (form) {
+    var game = document.getElementById("game");
+    var away = document.getElementById("team-away");
+    var home = document.getElementById("team-home");
+    var message = document.getElementById("form-message");
+
+    // Show the two teams of the selected game as the radio choices
+    function syncTeams() {
+      var opt = game.options[game.selectedIndex];
+      away.value = opt.dataset.awayId;
+      home.value = opt.dataset.homeId;
+      document.getElementById("team-away-name").textContent = opt.dataset.away + " (visitor)";
+      document.getElementById("team-home-name").textContent = opt.dataset.home + " (home)";
+      away.checked = false; home.checked = false;
+    }
+    game.addEventListener("change", syncTeams);
+    syncTeams();
+
+    function show(text, isError) {
+      message.textContent = text;
+      message.classList.toggle("error", !!isError);
+    }
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var team = form.querySelector('input[name="team_id"]:checked');
+      var points = parseFloat(document.getElementById("points").value);
+      var reason = document.getElementById("reason").value.trim();
+      if (!team) return show("Pick a team.", true);
+      if (isNaN(points) || points < -30 || points > 30) return show("Points must be between −30 and 30.", true);
+      if (!reason) return show("Please give a reason.", true);
+
+      show("Saving…");
+      fetch("/api/overrides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ game_id: parseInt(game.value, 10), team_id: parseInt(team.value, 10),
+                               points: points, reason: reason })
+      }).then(function (r) {
+        return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+      }).then(function (res) {
+        if (!res.ok) {
+          var detail = res.body && res.body.detail;
+          return show(typeof detail === "string" ? detail : "Couldn't save that adjustment.", true);
+        }
+        window.location.reload();
+      }).catch(function () { show("Couldn't reach the server.", true); });
+    });
+  }
+
+  // Remove: first click asks to confirm, second click removes
+  document.querySelectorAll("button.remove").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.dataset.confirm !== "1") {
+        btn.dataset.confirm = "1";
+        btn.textContent = "Confirm remove?";
+        btn.classList.add("danger");
+        setTimeout(function () {
+          btn.dataset.confirm = ""; btn.textContent = "Remove"; btn.classList.remove("danger");
+        }, 4000);
+        return;
+      }
+      btn.disabled = true;
+      fetch("/api/overrides/" + btn.dataset.id + "/remove", { method: "POST" })
+        .then(function (r) { if (r.ok) window.location.reload(); else btn.textContent = "Failed"; })
+        .catch(function () { btn.textContent = "Failed"; });
+    });
+  });
+})();
+</script>
+{% endblock %}
