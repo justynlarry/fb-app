@@ -125,6 +125,25 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   - Measure first whether weather beyond what the market prices in helps (mostly totals) before
     adding it to the model.
 
+## Parking lot (not started; pick up when the user asks)
+
+- **Remote access (user request 2026-11-11):** reach the app from anywhere, not just LAN/Tailscale.
+  - Domain on Cloudflare + **Cloudflare Tunnel**: a `cloudflared` container in compose connects
+    *outbound* to Cloudflare and forwards to `http://app:8000` on the Docker network. No inbound
+    ports opened on the router, the LAN-IP port binding can stay, Postgres stays unpublished.
+  - **Login / users:** recommended first layer is **Cloudflare Access** (Zero Trust, free tier,
+    email one-time code or Google login, allow-list of emails) in front of the whole site, so no
+    request reaches the app unauthenticated. Add app-level accounts only if per-user features are
+    wanted (e.g. personal bet log, per-user overrides): `users` table, argon2/bcrypt password
+    hashes, secure session cookies, login page; never roll our own crypto.
+  - Tunnel token goes in `.env` (never committed). Ask the user before creating anything on Cloudflare.
+- **Model v3:** QB-change detection (`/passing/players/games`), head-coach tenures for mid-season
+  changes, and fix `weeks_played`: it counts a week as played if any FBS/FCS game in it kicked off
+  before the cutoff (2026 week 1 starts at 1 because an FCS game kicked off first). Count weeks
+  strictly before the current week instead, then re-run the backtest.
+- **Weather** (see Model section) and **overrides page** (step 6), coordinator table.
+- **Backtest page:** version selector / side-by-side v1 vs v2.
+
 ## Backtest (how the model is judged)
 
 - Walk-forward only: a week-W prediction uses data from before week W plus priors. No lookahead.
