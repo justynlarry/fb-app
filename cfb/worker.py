@@ -17,6 +17,7 @@ from cfb.db import connect
 from cfb.load import refresh_season
 from cfb.model import predict_upcoming
 from cfb.odds import save_snapshot
+from cfb.picks import record_picks
 from cfb.weather import update_forecasts
 
 FAST = 30           # seconds between polls while games are on
@@ -81,13 +82,18 @@ def daily_update():
 
 
 def odds_snapshot():
-    """Save every book's current lines (2 Odds API credits). Skips in the off-season."""
+    """Save every book's current lines (2 Odds API credits), then our picks at those lines."""
     if not games_near(current_season()):
         return
     try:
         save_snapshot()
     except Exception as err:
         print(f"odds snapshot FAILED: {err!r}")
+        return
+    try:
+        record_picks()
+    except Exception as err:
+        print(f"recording picks FAILED: {err!r}")
 
 
 def main():

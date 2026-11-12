@@ -178,6 +178,14 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   zones, 2nd straight road game): short week ≈ −3.9 pts for that team, but ATS/CLV worse (priced in).
   None helped weeks 0–3. Lesson: information the market already uses (SP+, schedule) raises accuracy and
   lowers edge; our edge comes from the recency-weighted EPA ratings.
+- **Round 4 (2026-11-12), rejected: drive metrics.** `/drives?year=` is 1 call/season (all games, regular
+  season only by default; FBS-involved games only before 2022); cached for 2016–2026 (11 calls). Per team-game,
+  garbage time removed: points per scoring opportunity (drive ending at/inside the 40, TD=7 FG=3), opportunity
+  rate, average starting yards-to-goal; each opponent-adjusted like the other ratings. Best variant (+field
+  position): spread 12.860→12.847, weeks 0–3 13.12→13.10, CLV 61.3→61.8 (up in 5 of 6 seasons) but ATS 3+ at
+  open flat (51.9) and down in 4 of 6 seasons; finishing drives alone: open3 +0.3, total miss worse. All within
+  noise. EPA per play already contains field position and red-zone results. After 4 rounds, v4 is near what
+  this data can do; the next evidence is v4's real pre-game record.
 
 ## Parking lot (not started; pick up when the user asks)
 

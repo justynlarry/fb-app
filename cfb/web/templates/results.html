@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text %}
+{% block title %}Results{% endblock %}
+{% block body_class %}wide{% endblock %}
+
+{#- W-L-P, win % (pushes left out) and units for one summary row -#}
+{%- macro record(r) -%}
+  {%- if r and r.graded > 0 -%}
+    {%- set decided = r.wins + r.losses -%}
+    <td class="num">{{ r.wins }}–{{ r.losses }}{% if r.pushes %}–{{ r.pushes }}{% endif %}</td>
+    <td class="num {{ 'good-text' if decided and r.wins / decided >= 0.524 }}">{{ '%.1f'|format(100 * r.wins / decided) if decided else '–' }}{{ '%' if decided }}</td>
+    <td class="num units {{ 'pos' if r.units|float > 0 else ('neg' if r.units|float < 0) }}">{{ '%+.2f'|format(r.units|float) }}</td>
+    <td class="num">{{ '%+.1f'|format(100 * r.units|float / r.graded) }}%</td>
+  {%- else -%}
+    <td class="num muted">–</td><td class="num muted">–</td><td class="num muted">–</td><td class="num muted">–</td>
+  {%- endif -%}
+  <td class="num muted">{{ r.pending if r else 0 }}</td>
+{%- endmacro -%}
+
+{%- macro outcome_badge(outcome, units) -%}
+  {%- if outcome == 'win' -%}<span class="outcome win">W</span> <span class="units pos">{{ '%+.2f'|format(units|float) }}</span>
+  {%- elif outcome == 'loss' -%}<span class="outcome loss">L</span> <span class="units neg">−1.00</span>
+  {%- elif outcome == 'push' -%}<span class="outcome push">P</span> <span class="units">0.00</span>
+  {%- else -%}<span class="muted">pending</span>
+  {%- endif -%}
+{%- endmacro -%}
+
+{% block content %}
+{%- set by = {} %}
+{%- for r in summary %}{% set _ = by.update({(r.taken, r.tier): r}) %}{% endfor %}
+{%- set play = by.get(('last', 'play')) %}
+{%- set graded_any = summary | selectattr('graded') | list | length > 0 %}
+
+<div class="page-head">
+  <h1>Our Results</h1>
+  <p class="muted">Model {{ version }} · real picks, saved before kickoff and graded at the best number and price we
+    found across books · 1 unit risked per pick</p>
+</div>
+
+<section class="cards" aria-label="Summary">
+  {%- for tier, label in [('play', 'Play'), ('caution', 'Caution'), ('total', 'Totals (info)')] %}
+  {%- set r = by.get(('last', tier)) %}
+  <div class="card {{ 'highlight' if tier == 'play' and r and r.graded and r.units|float > 0 }}">
+    <div class="card-label">{{ label }} · last before kickoff</div>
+    {%- if r and r.graded > 0 %}
+      {%- set decided = r.wins + r.losses %}
+      <div class="card-value">{{ r.wins }}–{{ r.losses }}{% if r.pushes %}–{{ r.pushes }}{% endif %}</div>
+      <div class="card-sub">
+        {{ '%.1f'|format(100 * r.wins / decided) if decided else '–' }}% ·
+        <span class="units {{ 'pos' if r.units|float > 0 else ('neg' if r.units|float < 0) }}">{{ '%+.2f'|format(r.units|float) }} units</span>
+        {%- if r.pending %} · {{ r.pending }} pending{% endif %}
+      </div>
+    {%- else %}
+      <div class="card-value muted">–</div>
+      <div class="card-sub">{{ r.pending if r else 0 }} pending · no graded picks yet</div>
+    {%- endif %}
+  </div>
+  {%- endfor %}
+</section>
+
+{%- if not graded_any %}
+<p class="note">Picks are saved after every odds snapshot, starting November 12, 2026. The first games are graded
+  the morning after they're played (5 AM refresh). Until then, the tables below show what's pending.</p>
+{%- endif %}
+
+<h2 class="section-title">By tier</h2>
+<div class="table-wrap">
+  <table class="stats results-summary">
+    <thead>
+      <tr class="group-head">
+        <th></th>
+        <th colspan="5">First pick we saved</th>
+        <th colspan="5" class="open-group">Last pick before kickoff</th>
+      </tr>
+      <tr>
+        <th>Tier</th>
+        <th class="num">W–L–P</th><th class="num">Win %</th><th class="num">Units</th><th class="num">ROI</th><th class="num">Pending</th>
+        <th class="num open-group">W–L–P</th><th class="num">Win %</th><th class="num">Units</th><th class="num">ROI</th><th class="num">Pending</th>
+      </tr>
+    </thead>
+    <tbody>
+      {%- for tier, label in [('play', 'Play'), ('caution', 'Caution'), ('pass', 'Pass (lean side)'), ('total', 'Totals (info)')] %}
+      <tr>
+        <td class="label"><span class="tier tier-{{ 'info' if tier == 'total' else tier }}">{{ label }}</span></td>
+        {{ record(by.get(('first', tier))) }}
+        {{ record(by.get(('last', tier))) }}
+      </tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="muted small">Break-even at −110 is 52.4% (win % in green when above it). ROI = units won per unit risked.
+  Pass rows grade the side we leaned to, for comparison; they aren't bets. "First" is usually the line days before the
+  game; comparing it with "last" shows whether betting early pays.</p>
+
+<h2 class="section-title">Picks, last 3 weeks</h2>
+<div class="table-wrap">
+  <table class="scores results-picks">
+    <thead>
+      <tr>
+        <th>Kickoff</th>
+        <th>Visitor</th>
+        <th>Home</th>
+        <th>Pick (last before kickoff)</th>
+        <th>Our line</th>
+        <th>Final</th>
+        <th>Result</th>
+      </tr>
+    </thead>
+    <tbody>
+      {%- for p in recent %}
+      {%- set pick_home = p.side == 'home' %}
+      {%- set is_bet = p.tier in ('play', 'caution') %}
+      <tr class="{{ 'pick-play' if p.tier == 'play' }}">
+        <td class="kickoff">{{ p.local_start.strftime('%a %b %-d') }}<div class="muted small">{{ p.local_start.strftime('%-I:%M %p') }}</div></td>
+        {{ team_cell(p.away, p.away_espn_id, none, none, none) }}
+        {{ team_cell(p.home, p.home_espn_id, none, none, none) }}
+        <td class="pick">
+          {%- if is_bet and p.bet_spread is not none %}
+          <div class="pick-main">
+            <span class="tier tier-{{ p.tier }}">{{ p.tier|capitalize }}</span>
+            <strong>{{ p.home if pick_home else p.away }} {{ side_number(p.bet_spread, pick_home) }}</strong>
+            <span class="price">{{ price_text(p.bet_price) }}</span>
+            <span class="book">{{ book_name(p.bet_book) }}</span>
+          </div>
+          {%- endif %}
+          {%- if p.total_side %}
+          <div class="pick-total small">
+            <span class="tier tier-info">Info</span>
+            {{ p.total_side|capitalize }} {{ '%g'|format(p.bet_total|float) }} {{ price_text(p.total_price) }} {{ book_name(p.total_book) }}
+          </div>
+          {%- endif %}
+        </td>
+        <td>
+          {{ line_text(p.our_spread, p.home, p.away) }}
+          <div class="muted small">O/U {{ '%.1f'|format(p.our_total|float) }}</div>
+        </td>
+        <td class="num">
+          {%- if p.completed -%}{{ p.away_points }}–{{ p.home_points }}{%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+        <td class="result">
+          {%- if is_bet %}<div>{{ outcome_badge(p.spread_outcome, p.spread_units) }}</div>{% endif -%}
+          {%- if p.total_side %}<div class="small">{{ 'O/U ' }}{{ outcome_badge(p.total_outcome, p.total_units) }}</div>{% endif -%}
+        </td>
+      </tr>
+      {%- else %}
+      <tr><td colspan="7" class="empty">No picks saved yet.</td></tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -243,6 +243,55 @@ GROUP BY 1
 """
 
 
+RESULTS_SUMMARY_SQL = """
+SELECT taken,
+       tier,
+       count(*) FILTER (WHERE spread_outcome IS NOT NULL) AS graded,
+       count(*) FILTER (WHERE spread_outcome = 'win') AS wins,
+       count(*) FILTER (WHERE spread_outcome = 'loss') AS losses,
+       count(*) FILTER (WHERE spread_outcome = 'push') AS pushes,
+       COALESCE(sum(spread_units), 0) AS units,
+       count(*) FILTER (WHERE spread_outcome IS NULL AND side IS NOT NULL) AS pending
+FROM pick_results
+WHERE model_version = %(version)s
+GROUP BY taken, tier
+
+UNION ALL
+
+SELECT taken,
+       'total',
+       count(*) FILTER (WHERE total_outcome IS NOT NULL),
+       count(*) FILTER (WHERE total_outcome = 'win'),
+       count(*) FILTER (WHERE total_outcome = 'loss'),
+       count(*) FILTER (WHERE total_outcome = 'push'),
+       COALESCE(sum(total_units), 0),
+       count(*) FILTER (WHERE total_outcome IS NULL)
+FROM pick_results
+WHERE model_version = %(version)s
+  AND total_side IS NOT NULL
+GROUP BY taken
+"""
+
+# The last pick before kickoff for every Play, Caution or total from the last 3 weeks (graded or not)
+RECENT_PICKS_SQL = """
+SELECT r.game_id, r.start_time, r.tier, r.side, r.our_spread, r.our_total,
+       r.market_spread, r.bet_spread, r.bet_price, r.bet_book, r.spread_outcome, r.spread_units,
+       r.total_side, r.market_total, r.bet_total, r.total_price, r.total_book, r.total_outcome, r.total_units,
+       a.school AS away, h.school AS home,
+       a.espn_id AS away_espn_id, h.espn_id AS home_espn_id,
+       g.away_points, g.home_points, g.completed
+FROM pick_results r
+JOIN games g ON g.id = r.game_id
+JOIN teams a ON a.id = g.away_id
+JOIN teams h ON h.id = g.home_id
+WHERE r.model_version = %(version)s
+  AND r.taken = 'last'
+  AND (r.tier IN ('play', 'caution') OR r.total_side IS NOT NULL)
+  AND r.start_time > now() - interval '21 days'
+ORDER BY r.start_time DESC, a.school
+"""
+
+
 # Backtest results, grouped by {group_by} (filled in from GROUPINGS below, never from user input)
 BACKTEST_SQL = """
 SELECT {group_by} AS label,
@@ -407,6 +456,22 @@ def backtest_page(request: Request):
             "version": MODEL_VERSION,
             "active": "backtest",
         },
+    )
+
+
+@app.get("/results")
+def results_page(request: Request):
+    """Our real picks, saved before kickoff and graded at the best price we could get."""
+    with connect() as conn:
+        conn.row_factory = dict_row
+        summary = conn.execute(RESULTS_SUMMARY_SQL, {"version": MODEL_VERSION}).fetchall()
+        recent = conn.execute(RECENT_PICKS_SQL, {"version": MODEL_VERSION}).fetchall()
+    for r in recent:
+        r["local_start"] = r["start_time"].astimezone(LOCAL_TZ)
+    return templates.TemplateResponse(
+        request,
+        "results.html",
+        {"summary": summary, "recent": recent, "version": MODEL_VERSION, "active": "results"},
     )
 
 

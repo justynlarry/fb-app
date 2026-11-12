@@ -1,23 +1,7 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_cell, line_text %}
+{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text %}
 {% block title %}Predictions{% endblock %}
 {% block body_class %}full{% endblock %}
-
-{#- A team's own number at a home-side spread, e.g. side_number(-3.5, true) = "-3.5" for the home team -#}
-{%- macro side_number(spread, is_home) -%}
-  {%- set n = spread|float if is_home else -(spread|float) -%}
-  {%- if n|abs < 0.05 -%}PK{%- else -%}{{ '%+.1f'|format(n) }}{%- endif -%}
-{%- endmacro -%}
-
-{#- Sportsbook key from The Odds API -> name -#}
-{%- macro book_name(key) -%}
-  {{- {'draftkings': 'DraftKings', 'fanduel': 'FanDuel', 'betmgm': 'BetMGM', 'williamhill_us': 'Caesars',
-       'betrivers': 'BetRivers', 'fanatics': 'Fanatics', 'bovada': 'Bovada', 'betonlineag': 'BetOnline',
-       'betus': 'BetUS', 'lowvig': 'LowVig', 'mybookieag': 'MyBookie'}.get(key, key) -}}
-{%- endmacro -%}
-
-{#- American odds: -110, +105 -#}
-{%- macro price_text(p) -%}{%- if p is not none -%}{{ '%+d'|format(p|int) }}{%- endif -%}{%- endmacro -%}
 
 {%- macro rate_text(r) -%}
   {%- if r -%}<span class="rate" title="How this kind of pick did in our backtest (2021–25, graded at the closing line)">{{ '%.0f'|format(100 * r.win_rate|float) }}% <span class="muted">· {{ '{:,}'.format(r.games) }} games</span></span>{%- endif -%}
