@@ -49,26 +49,17 @@
       {%- set odiff = (g.spread|float - g.open_spread|float) if has_open else 0 %}
       {%- set move = (g.market_spread|float - g.open_spread|float) if (has_open and has_market) else 0 %}
       {%- set toward = (move < 0 and odiff < 0) or (move > 0 and odiff > 0) %}
-      {%- set against = has_open and has_market and move|abs >= 0.5 and not toward %}
       {%- set has_range = has_open and g.open_hi is defined and g.open_hi is not none and g.open_hi != g.open_lo %}
       {%- set best_open = (g.open_hi if odiff < 0 else g.open_lo) if has_range else none %}
 
-      {#- ---- Pick tier (same rule as PICK_RATES_SQL) ----
-           play:    we differ from the current line by 3+ and the market isn't moving against us
-           caution: we differ by 3+ but the market has moved the other way since the open
-           pass:    under 3 points (including "the market already moved to us") #}
-      {%- if not has_market %}{% set tier = none %}
-      {%- elif gap < 3 %}{% set tier = 'pass' %}
-      {%- elif against %}{% set tier = 'caution' %}
-      {%- else %}{% set tier = 'play' %}
-      {%- endif %}
-      {%- set pick_home = diff < 0 %}
+      {#- ---- Pick: tier, side and best number from cfb/picks.py make_pick(), the one place for the rule
+           (PICK_RATES_SQL repeats it for the backtest rates). The worker records the same pick. #}
+      {%- set tier = g.pick.tier %}
+      {%- set pick_home = g.pick.side == 'home' %}
+      {%- set best_spread = g.pick.bet_spread %}
+      {%- set best_price = g.pick.bet_price %}
+      {%- set best_book = g.pick.bet_book %}
       {%- set pick_team = g.home if pick_home else g.away %}
-      {#- Best number available right now for the side we like (The Odds API, latest snapshot) #}
-      {%- set has_best = g.best_home_spread is defined and g.best_home_spread is not none %}
-      {%- set best_spread = (g.best_home_spread if pick_home else g.best_away_spread) if has_best else none %}
-      {%- set best_price = (g.best_home_price if pick_home else g.best_away_price) if has_best else none %}
-      {%- set best_book = (g.best_home_book if pick_home else g.best_away_book) if has_best else none %}
       {%- set n_books = g.books_count if (g.books_count is defined and g.books_count) else none %}
 
       {#- ---- Total ---- #}

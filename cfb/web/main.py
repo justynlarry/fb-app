@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from cfb.db import connect
 from cfb.model import MODEL_VERSION
+from cfb.picks import make_pick
 from cfb.qbs import qb_out_suggestion
 
 WEB_DIR = Path(__file__).parent
@@ -107,44 +108,6 @@ adjustments AS (
     JOIN teams t ON t.id = o.team_id
     WHERE o.active
     GROUP BY o.game_id
-),
-latest_odds AS (    -- each book's most recent line for each game
-    SELECT DISTINCT ON (game_id, book)
-           game_id, book, spread, home_price, away_price, total, over_price, under_price
-    FROM odds_snapshots
-    ORDER BY game_id, book, fetched_at DESC
-),
-books_now AS (      -- the middle of all the books right now
-    SELECT game_id,
-           percentile_cont(0.5) WITHIN GROUP (ORDER BY spread) AS spread,
-           percentile_cont(0.5) WITHIN GROUP (ORDER BY total) AS total,
-           count(*) AS books
-    FROM latest_odds
-    GROUP BY game_id
-),
-best_home AS (      -- best for a home bettor: most points, then best price
-    SELECT DISTINCT ON (game_id) game_id, book, spread, home_price AS price
-    FROM latest_odds
-    WHERE spread IS NOT NULL
-    ORDER BY game_id, spread DESC, home_price DESC
-),
-best_away AS (      -- best for an away bettor: the lowest home number, then best price
-    SELECT DISTINCT ON (game_id) game_id, book, spread, away_price AS price
-    FROM latest_odds
-    WHERE spread IS NOT NULL
-    ORDER BY game_id, spread ASC, away_price DESC
-),
-best_over AS (      -- best over: the lowest total
-    SELECT DISTINCT ON (game_id) game_id, book, total, over_price AS price
-    FROM latest_odds
-    WHERE total IS NOT NULL
-    ORDER BY game_id, total ASC, over_price DESC
-),
-best_under AS (     -- best under: the highest total
-    SELECT DISTINCT ON (game_id) game_id, book, total, under_price AS price
-    FROM latest_odds
-    WHERE total IS NOT NULL
-    ORDER BY game_id, total DESC, under_price DESC
 )
 SELECT g.id AS game_id,
        a.school AS away,
@@ -162,17 +125,17 @@ SELECT g.id AS game_id,
        p.weeks_played,
        mm.spread_miss,
        mm.total_miss,
-       COALESCE(bn.spread, l.spread, m.spread) AS market_spread,
-       COALESCE(bn.total, l.over_under, m.total) AS market_total,
+       COALESCE(mn.spread, l.spread, m.spread) AS market_spread,
+       COALESCE(mn.total, l.over_under, m.total) AS market_total,
        m.open_spread,
        m.open_hi,
        m.open_lo,
        m.open_total,
-       bn.books AS books_count,
-       bh.book AS best_home_book, bh.spread AS best_home_spread, bh.price AS best_home_price,
-       ba.book AS best_away_book, ba.spread AS best_away_spread, ba.price AS best_away_price,
-       bo.book AS best_over_book, bo.total AS best_over_total, bo.price AS best_over_price,
-       bu.book AS best_under_book, bu.total AS best_under_total, bu.price AS best_under_price,
+       mn.books AS books_count,
+       mn.best_home_book, mn.best_home_spread, mn.best_home_price,
+       mn.best_away_book, mn.best_away_spread, mn.best_away_price,
+       mn.best_over_book, mn.best_over_total, mn.best_over_price,
+       mn.best_under_book, mn.best_under_total, mn.best_under_price,
        l.state,
        l.away_score, l.home_score,
        l.away_rank, l.home_rank,
@@ -194,11 +157,7 @@ LEFT JOIN market m ON m.game_id = g.id
 LEFT JOIN adjustments adj ON adj.game_id = g.id
 LEFT JOIN live_scores l ON l.game_id = g.id
 LEFT JOIN venues ven ON ven.id = g.venue_id
-LEFT JOIN books_now bn ON bn.game_id = g.id
-LEFT JOIN best_home bh ON bh.game_id = g.id
-LEFT JOIN best_away ba ON ba.game_id = g.id
-LEFT JOIN best_over bo ON bo.game_id = g.id
-LEFT JOIN best_under bu ON bu.game_id = g.id
+LEFT JOIN market_now mn ON mn.game_id = g.id
 LEFT JOIN LATERAL (
     SELECT temperature_f, wind_mph, gust_mph, precip_in
     FROM weather_forecasts f
@@ -436,6 +395,7 @@ def predictions_page(request: Request):
     pick_rates = {r["tier"]: r for r in rates}      # e.g. {"play": {...}, "pass": {...}}
     for g in games:
         g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
+        g["pick"] = make_pick(g)        # same rule the worker uses to record picks
     return templates.TemplateResponse(
         request,
         "predictions.html",

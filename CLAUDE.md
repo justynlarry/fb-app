@@ -85,7 +85,9 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    (e.g. "−6.5 ±11"; wider early season / vs FCS). Market spread/total and the difference
    were hidden by default to avoid anchoring; **since 2026-11-12 the user wants them shown by default**
    ("Hide market & picks" button, remembered per browser). Pick column: Play / Caution / Pass with backtest
-   win rate and game count (`PICK_RATES_SQL` and predictions.html share the tier rule).
+   win rate and game count. The live tier rule lives in `cfb/picks.py make_pick()` (used by the page AND the
+   worker's `record_picks`, so the pick shown is the pick recorded); `PICK_RATES_SQL` repeats it for the
+   backtest rates: change both together. Market "now" = median of The Odds API books (`market_now` view).
 3. Later: team ratings page, backtest report, overrides entry.
 
 ## Model
