@@ -19,10 +19,17 @@ MODEL_VERSION = "v4"
 PRIOR_INPUTS = ["talent", "ret_ppa", "new_coach"]
 PRIOR_INPUT_WEEKS = 16
 
+# Mid-season head-coach changes (cfb/coaches.py fills history; current season entered by hand)
+COACH_CHANGES_SQL = """
+SELECT team_id, changed_at
+FROM coach_changes
+WHERE season = %(season)s
+"""
+
 FEATURES = (
     ["off_" + m for m in METRICS]
     + ["oppdef_" + m for m in METRICS]
-    + ["home", "fcs_offense", "fcs_defense"]
+    + ["home", "fcs_offense", "fcs_defense", "coach_change", "opp_coach_change"]
     + ["pr_" + p for p in PRIOR_INPUTS]
     + ["oppr_" + p for p in PRIOR_INPUTS]
 )
@@ -84,6 +91,20 @@ def add_prior_inputs(df, season):
     return df
 
 
+def load_coach_changes(season):
+    """{team_id: changed_at} for teams that changed head coach mid-season."""
+    with connect() as conn:
+        return dict(conn.execute(COACH_CHANGES_SQL, {"season": season}).fetchall())
+
+
+def after_change(changes, team, game):
+    """1 if this team's head coach changed before this regular-season game, else 0."""
+    changed_at = changes.get(team)
+    if changed_at is None or game["season_type"] != "regular":
+        return 0
+    return 1 if game["start_time"] > changed_at else 0
+
+
 def season_rows(season):
     """Walk-forward feature rows for every game in a season.
 
@@ -91,6 +112,7 @@ def season_rows(season):
     kickoff, so no game ever 'sees' its own result.
     """
     games = load_season_games(season)
+    changes = load_coach_changes(season)
     rows = []
     for (season_type, week), week_games in games.groupby(["season_type", "week"]):
         cutoff = week_games["start_time"].min()
@@ -109,6 +131,8 @@ def season_rows(season):
             for r in (home, away):
                 r["season"] = season
                 r["weeks_played"] = weeks_played
+                r["coach_change"] = after_change(changes, r["team_id"], g)
+                r["opp_coach_change"] = after_change(changes, r["opponent_id"], g)
                 rows.append(r)
     return add_prior_inputs(pd.DataFrame(rows), season)
 
@@ -121,7 +145,7 @@ def train(rows):
     return model
 
 
-def save_predictions(model, rows, is_backtest):
+def save_predictions(model, rows, is_backtest, version=MODEL_VERSION):
     """Predict every row, pair each game's two sides, and save one row per game."""
     rows = rows.copy()
     rows["pred"] = model.predict(rows[FEATURES].astype(float))
@@ -154,7 +178,7 @@ def save_predictions(model, rows, is_backtest):
                 """,
                 (
                     int(game_id),
-                    MODEL_VERSION,
+                    version,
                     round(home_pts, 2),
                     round(away_pts, 2),
                     round(away_pts - home_pts, 2),      # home side: negative = home favored
@@ -166,7 +190,7 @@ def save_predictions(model, rows, is_backtest):
     return len(home)
 
 
-def backtest(first_season=2018, last_season=2025):
+def backtest(first_season=2018, last_season=2025, version=MODEL_VERSION):
     """Walk-forward backtest: each season is predicted by a model trained only on earlier seasons."""
     print("building walk-forward rows (a few minutes)...")
     all_rows = pd.concat(
@@ -175,7 +199,7 @@ def backtest(first_season=2018, last_season=2025):
     )
     for season in range(first_season, last_season + 1):
         model = train(all_rows[all_rows["season"] < season])
-        saved = save_predictions(model, all_rows[all_rows["season"] == season], is_backtest=True)
+        saved = save_predictions(model, all_rows[all_rows["season"] == season], is_backtest=True, version=version)
         print(f"  {season}: {saved} games predicted")
 
 

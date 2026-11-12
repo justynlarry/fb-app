@@ -188,6 +188,34 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   open flat (51.9) and down in 4 of 6 seasons; finishing drives alone: open3 +0.3, total miss worse. All within
   noise. EPA per play already contains field position and red-zone results. After 4 rounds, v4 is near what
   this data can do; the next evidence is v4's real pre-game record.
+- **Round 5 (2026-11-12), promising: mid-season head-coach changes.** From cached `/coaches` (0 calls): a team
+  with 2 coaches in a season = mid-season change; the outgoing coach is the one who also coached the year before,
+  and his game count says after which game it happened (110 usable changes 2016–25, 14 skipped). After a change,
+  teams did worse than v4's line by 3.6 pts/game (310 games; regular season −3.1, bowls −6.4, n=46) and worse
+  than the open by 1.7 (cover the open 44.3%); our ratings keep the old coach's form. Walk-forward correction
+  (x = mean miss in earlier seasons, shrunk with 100 games of prior, ≈ −2.4 to −2.6 pts, applied to the changed
+  team in games after the change), 2021–25: ATS 3+ at open 52.29 → 52.91%, spread miss 12.782 → 12.766, CLV
+  flat; **ATS up in all 5 seasons** (+0.2 to +0.9), miss better in 4 of 5. Affected games only: 3+ picks at open
+  51.5% → 60.6% (n=143). Regular season only: 52.61%; "3rd+ game after" only: 52.42% (weaker).
+  Live data problem: CFBD's 2026 `/coaches` (cached Nov 10) lists one coach per team with 0 games; it is filled in
+  after the season, so live changes must be entered by hand (team, date). `/coaches/tenures` needs `team` or
+  `coachId` (one call per team), so it isn't a cheap feed either. Research script: scratch `coach_change.py`.
+  **Decision (user, 2026-11-12): regular season only** (conference title games count as regular). Bowls are
+  excluded (opt-outs, coaches leaving for other jobs); playoffs too: a playoff team that loses its coach was
+  poached, not fired, and the only case (2025, 3 CFP games) beat our line by +26/+10/+1. Regular-only walk-forward:
+  52.29 → 52.61%, ATS up or flat in every season 2022–25 (+0.2, 0, +0.9, +0.5), miss better in 3 of 4.
+  **Correction (2026-11-12):** the research counted coaches listed with 0 games (left before the season) as
+  mid-season changes, flagging whole seasons (58 of 292 regular rows). Without them (as the loader does): regular
+  season −3.2 vs our line (n=207; 1st–2nd game after −1.2 and they cover the open 55%; 3rd+ game −4.6, cover 41%),
+  walk-forward 52.29 → 52.56%, by season +0.1/0/+0.6/+0.6, never worse. `/coaches` 2015 fetched (1 call) so
+  2016 changes can be found; the loader saves 69 changes 2016–25.
+- **Model v5 (in progress, 2026-11-12): mid-season coach change as a points-model feature.**
+  - `coach_changes` table (016): team, season, `changed_at` (games kicking off after it have the new coach),
+    outgoing/incoming, `source` ('cfbd' derived from cached `/coaches`, or 'manual' for the live season).
+  - Loader fills 2016–25 from cached `/coaches` (0 calls); 2026 firings are entered by hand.
+  - Feature in `side_row`: `coach_change` (this team) and `opp_coach_change`, 1 only in regular-season games after
+    the change. The regression learns the size walk-forward (no hand-picked constant, no lookahead) and moves
+    both spread and total. Judge it with the usual backtest; accept only if ATS at open/CLV hold up by season.
 
 ## Parking lot (not started; pick up when the user asks)
 
@@ -201,10 +229,9 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     wanted (e.g. personal bet log, per-user overrides): `users` table, argon2/bcrypt password
     hashes, secure session cookies, login page; never roll our own crypto.
   - Tunnel token goes in `.env` (never committed). Ask the user before creating anything on Cloudflare.
-- **Model v3:** (QB-change detection tested and rejected, see above), head-coach tenures for
-  mid-season changes, and fix `weeks_played`: it counts a week as played if any FBS/FCS game in it kicked off
-  before the cutoff (2026 week 1 starts at 1 because an FCS game kicked off first). Count weeks
-  strictly before the current week instead, then re-run the backtest.
+- **Coach-change adjustment:** being built as v5, see the Model section.
+  Needs a hand-entered `coach_changes` table for the live season, since CFBD fills in current-season coaches only
+  after the season. (`weeks_played` was fixed in v3, commit 70f6be1: a week counts once its last game kicks off.)
 - **Weather** (see Model section) and **overrides page** (step 6), coordinator table.
 - **Backtest page:** version selector / side-by-side v1 vs v2.
 
