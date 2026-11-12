@@ -318,6 +318,13 @@ button.primary {
 .predictions td.weather.rough { color: var(--edge5-text); font-weight: 600; }
 .wx-flag { cursor: help; }
 
+/* Opening line and movement since the open */
+.moved-toward { color: var(--good); font-weight: 600; }
+.moved-away { color: var(--edge5-text); font-weight: 600; }
+.predictions .at-open { color: var(--muted); }
+.predictions [title] { cursor: help; }
+.predictions a[title] { cursor: pointer; }
+
 /* Timeout pips: filled = timeout left */
 .pips { display: inline-flex; gap: 3px; vertical-align: middle; }
 .pips i {

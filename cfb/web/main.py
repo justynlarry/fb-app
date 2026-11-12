@@ -87,7 +87,13 @@ model_miss AS (
     GROUP BY 1
 ),
 market AS (
-    SELECT game_id, avg(spread) AS spread, avg(over_under) AS total
+    SELECT game_id,
+           avg(spread) AS spread,
+           avg(over_under) AS total,
+           avg(spread_open) AS open_spread,
+           max(spread_open) AS open_hi,
+           min(spread_open) AS open_lo,
+           avg(over_under_open) AS open_total
     FROM lines
     GROUP BY game_id
 ),
@@ -120,6 +126,10 @@ SELECT g.id AS game_id,
        mm.total_miss,
        COALESCE(l.spread, m.spread) AS market_spread,
        COALESCE(l.over_under, m.total) AS market_total,
+       m.open_spread,
+       m.open_hi,
+       m.open_lo,
+       m.open_total,
        l.state,
        l.away_score, l.home_score,
        l.away_rank, l.home_rank,
