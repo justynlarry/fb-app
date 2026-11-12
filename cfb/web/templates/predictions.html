@@ -1,17 +1,30 @@
 {% extends "base.html" %}
 {% from "_macros.html" import team_cell, line_text %}
 {% block title %}Predictions{% endblock %}
+{% block body_class %}full{% endblock %}
+
+{#- A team's own number at a home-side spread, e.g. side_number(-3.5, true) = "-3.5" for the home team -#}
+{%- macro side_number(spread, is_home) -%}
+  {%- set n = spread|float if is_home else -(spread|float) -%}
+  {%- if n|abs < 0.05 -%}PK{%- else -%}{{ '%+.1f'|format(n) }}{%- endif -%}
+{%- endmacro -%}
+
+{%- macro rate_text(r) -%}
+  {%- if r -%}<span class="rate" title="How this kind of pick did in our backtest (2021–25, graded at the closing line)">{{ '%.0f'|format(100 * r.win_rate|float) }}% <span class="muted">· {{ '{:,}'.format(r.games) }} games</span></span>{%- endif -%}
+{%- endmacro -%}
+
 {% block content %}
+{%- set rates = pick_rates if pick_rates is defined else {} %}
 <div class="page-head page-head-row">
   <div>
     <h1>Our Lines</h1>
     <p class="muted">Model {{ version }} · ± is our typical miss at this point in the season · times in Mountain</p>
   </div>
-  <button type="button" class="toggle" id="market-toggle" aria-pressed="false">Show market</button>
+  <button type="button" class="toggle" id="market-toggle" aria-pressed="true">Hide market &amp; picks</button>
 </div>
 
-<div class="table-wrap">
-  <table class="scores predictions" id="predictions">
+<div class="table-wrap sticky-wrap">
+  <table class="scores predictions show-market" id="predictions">
     <thead>
       <tr>
         <th>Visitor</th>
@@ -20,10 +33,9 @@
         <th>Our line</th>
         <th>Our O/U</th>
         <th>Weather</th>
-        <th class="market">Open</th>
-        <th class="market">Market now</th>
-        <th class="market">Mkt O/U</th>
-        <th class="market">Our edge</th>
+        <th class="market">Line: open → now</th>
+        <th class="market">O/U: open → now</th>
+        <th class="market">Pick</th>
       </tr>
     </thead>
     <tbody>
@@ -31,25 +43,43 @@
       {%- for g in games %}
       {%- set day = g.local_start.strftime('%A, %B %-d') %}
       {%- if day != ns.day %}{% set ns.day = day %}
-      <tr class="day-break"><th colspan="10" scope="colgroup">{{ day }}</th></tr>
+      <tr class="day-break"><th colspan="9" scope="colgroup">{{ day }}</th></tr>
       {%- endif %}
       {%- set state = g.state or 'pre' %}
+
+      {#- ---- Spread: our line vs. the current line and the open ---- #}
       {%- set has_market = g.market_spread is not none %}
       {%- set diff = (g.spread|float - g.market_spread|float) if has_market else 0 %}
-      {%- set tdiff = (g.total|float - g.market_total|float) if g.market_total is not none else none %}
-      {%- set edge_class = 'edge-5' if diff|abs >= 5 else ('edge-3' if diff|abs >= 3 else '') %}
-      {#- Opening line: odiff = our line vs. the open; move = how far the market has moved since #}
+      {%- set gap = diff|abs %}
       {%- set has_open = g.open_spread is defined and g.open_spread is not none %}
       {%- set odiff = (g.spread|float - g.open_spread|float) if has_open else 0 %}
       {%- set move = (g.market_spread|float - g.open_spread|float) if (has_open and has_market) else 0 %}
       {%- set toward = (move < 0 and odiff < 0) or (move > 0 and odiff > 0) %}
+      {%- set against = has_open and has_market and move|abs >= 0.5 and not toward %}
       {%- set has_range = has_open and g.open_hi is defined and g.open_hi is not none and g.open_hi != g.open_lo %}
-      {#- Best opening number for the side we like: home gets the highest number, away the lowest #}
       {%- set best_open = (g.open_hi if odiff < 0 else g.open_lo) if has_range else none %}
-      <tr class="{{ edge_class }}">
+
+      {#- ---- Pick tier (same rule as PICK_RATES_SQL) ----
+           play:    we differ from the current line by 3+ and the market isn't moving against us
+           caution: we differ by 3+ but the market has moved the other way since the open
+           pass:    under 3 points (including "the market already moved to us") #}
+      {%- if not has_market %}{% set tier = none %}
+      {%- elif gap < 3 %}{% set tier = 'pass' %}
+      {%- elif against %}{% set tier = 'caution' %}
+      {%- else %}{% set tier = 'play' %}
+      {%- endif %}
+      {%- set pick_home = diff < 0 %}
+      {%- set pick_team = g.home if pick_home else g.away %}
+
+      {#- ---- Total ---- #}
+      {%- set has_mtotal = g.market_total is not none %}
+      {%- set tdiff = (g.total|float - g.market_total|float) if has_mtotal else 0 %}
+      {%- set has_otot = g.open_total is defined and g.open_total is not none %}
+
+      <tr class="game {{ 'pick-' ~ tier if tier }} {{ 'big-gap' if tier == 'play' and gap >= 5 }}">
         {{ team_cell(g.away, g.away_espn_id, g.away_rank, g.away_record, g.away_conf_record) }}
         {{ team_cell(g.home, g.home_espn_id, g.home_rank, g.home_record, g.home_conf_record) }}
-        <td class="kickoff">
+        <td class="kickoff" data-label="Kickoff">
           {%- if state == 'post' and g.away_score is not none -%}
             <span class="final">Final {{ g.away_score }}–{{ g.home_score }}</span>
           {%- elif state == 'in' -%}
@@ -57,15 +87,15 @@
           {%- elif g.start_time_tbd -%}TBD
           {%- else -%}{{ g.local_start.strftime('%-I:%M %p') }}
           {%- endif -%}
-          {%- if g.game_id and state == 'pre' %}<div><a class="adjust-link" href="/overrides?game_id={{ g.game_id }}">Adjust</a></div>{% endif -%}
+          {%- if g.game_id and state == 'pre' %} <a class="adjust-link" href="/overrides?game_id={{ g.game_id }}">Adjust</a>{% endif -%}
         </td>
-        <td class="our-line">
+        <td class="our-line" data-label="Our line">
           <strong>{{ line_text(g.spread, g.home, g.away) }}</strong>
           {%- if g.adjustment_notes %} <span class="adj-badge" title="{{ g.adjustment_notes }}">adj</span>{% endif -%}
           {%- if g.spread_miss is not none %} <span class="band" title="Average miss of our backtest predictions made with {{ g.weeks_played if g.weeks_played < 6 else '6+' }} weeks of data">±{{ '%.0f'|format(g.spread_miss|float) }}</span>{% endif %}
           {%- if g.adjustment_notes %}<div class="muted small">model: {{ line_text(g.model_spread, g.home, g.away) }}</div>{% endif -%}
         </td>
-        <td class="num our-total">
+        <td class="our-total" data-label="Our O/U">
           <strong>{{ '%.1f'|format(g.total|float) }}</strong>
           {%- if g.total_miss is not none %} <span class="band">±{{ '%.0f'|format(g.total_miss|float) }}</span>{% endif %}
           {%- if g.adjustment_notes %}<div class="muted small">model: {{ '%.1f'|format(g.model_total|float) }}</div>{% endif -%}
@@ -74,7 +104,7 @@
         {%- set gust = g.gust_mph|float if (g.gust_mph is defined and g.gust_mph is not none) else 0 %}
         {%- set rain = g.precip_in|float if (g.precip_in is defined and g.precip_in is not none) else 0 %}
         {%- set rough = gust >= 25 or rain >= 0.1 %}
-        <td class="weather {{ 'rough' if rough }}">
+        <td class="weather {{ 'rough' if rough }}" data-label="Weather">
           {%- if g.dome -%}
             <span class="muted">Dome</span>
           {%- elif has_wx -%}
@@ -86,78 +116,119 @@
             <span class="muted">–</span>
           {%- endif -%}
         </td>
-        <td class="market open-line">
-          {%- if has_open -%}
-            {{ line_text(g.open_spread, g.home, g.away) }}
-            {%- if best_open is not none and odiff|abs >= 0.5 %}<div class="muted small" title="Best opening number across books for the side we like">best: {{ line_text(best_open, g.home, g.away) }}</div>{% endif -%}
-          {%- else -%}–{%- endif -%}
-        </td>
-        <td class="market">
-          {{- line_text(g.market_spread, g.home, g.away) if has_market else '–' -}}
-          {%- if has_open and has_market and move|abs >= 0.5 -%}
-            {%- if odiff|abs >= 0.5 %}
-            <div class="small {{ 'moved-toward' if toward else 'moved-away' }}" title="How far the market has moved since it opened, relative to our line">
-              {{- '%.1f'|format(move|abs) }} {{ 'our way' if toward else 'against us' -}}
-            </div>
-            {%- else %}
-            <div class="muted small">moved {{ '%.1f'|format(move|abs) }}</div>
+
+        {#- Market line: open → now, with a chip for how it moved relative to our number #}
+        <td class="market line-move" data-label="Line: open → now">
+          {%- if has_market -%}
+            {%- if has_open and move|abs >= 0.5 -%}
+              <span class="muted">{{ line_text(g.open_spread, g.home, g.away) }} →</span>
+            {%- endif %}
+            {{ line_text(g.market_spread, g.home, g.away) }}
+            {%- if has_open and move|abs >= 0.5 -%}
+              {%- if odiff|abs >= 0.5 %}
+              <span class="chip {{ 'chip-toward' if toward else 'chip-against' }}" title="How far the line has moved since it opened, relative to our number">
+                {{- '▲' if toward else '▼' }} {{ '%.1f'|format(move|abs) }} {{ 'our way' if toward else 'against' -}}
+              </span>
+              {%- else %}
+              <span class="chip chip-neutral">moved {{ '%.1f'|format(move|abs) }}</span>
+              {%- endif -%}
+            {%- elif has_open %} <span class="muted small">no move</span>
             {%- endif -%}
-          {%- endif -%}
+            {%- if best_open is not none and odiff|abs >= 0.5 %}<div class="muted small" title="Best opening number across books for the side we like">best open: {{ line_text(best_open, g.home, g.away) }}</div>{% endif -%}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
         </td>
-        <td class="market num">{{ '%g'|format(g.market_total|float) if g.market_total is not none else '–' }}</td>
-        <td class="market edge">
-          {%- if has_market and diff|abs >= 0.5 -%}
-            {{ g.home if diff < 0 else g.away }} <span class="edge-pts">+{{ '%.1f'|format(diff|abs) }}</span>
-          {%- elif has_market -%}<span class="muted">agree</span>
-          {%- endif -%}
-          {%- if has_open and odiff|abs >= 0.5 -%}
-            <div class="small at-open">at open: {{ g.home if odiff < 0 else g.away }} +{{ '%.1f'|format(odiff|abs) }}</div>
-            {%- if odiff|abs >= 3 and diff|abs < 3 and has_market %}<div class="small moved-toward" title="We disagreed by 3+ at the open, and the market has since moved our way">edge mostly gone</div>{% endif -%}
-          {%- endif -%}
-          {%- if tdiff is not none and tdiff|abs >= 0.5 -%}
-            <div class="muted small">{{ 'Over' if tdiff > 0 else 'Under' }} {{ '%.1f'|format(tdiff|abs) }}</div>
-          {%- endif -%}
+
+        <td class="market total-move" data-label="O/U: open → now">
+          {%- if has_mtotal -%}
+            {%- if has_otot and (g.market_total|float - g.open_total|float)|abs >= 0.5 -%}
+              <span class="muted">{{ '%g'|format(g.open_total|float) }} →</span>
+            {%- endif %}
+            {{ '%g'|format(g.market_total|float) }}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+
+        {#- Summary: which side, how sure (backtest record for this kind of pick) #}
+        <td class="market pick" data-label="Pick">
+          {%- if tier == 'play' or tier == 'caution' -%}
+            <div class="pick-main">
+              <span class="tier tier-{{ tier }}">{{ 'Play' if tier == 'play' else 'Caution' }}</span>
+              <strong>{{ pick_team }} {{ side_number(g.market_spread, pick_home) }}</strong>
+              {{ rate_text(rates.get(tier)) }}
+            </div>
+            <div class="muted small">
+              {{- '%.1f'|format(gap) }} pts off the line
+              {%- if has_open and odiff|abs >= 0.5 %} · {{ '%.1f'|format(odiff|abs) }} at open{% endif -%}
+              {%- if tier == 'caution' %} · market moving the other way: check news{% endif -%}
+            </div>
+          {%- elif tier == 'pass' -%}
+            <div class="pick-main">
+              <span class="tier tier-pass">Pass</span>
+              {{ rate_text(rates.get('pass')) }}
+            </div>
+            <div class="muted small">
+              {%- if has_open and odiff|abs >= 3 -%}
+                edge gone: was {{ '%.1f'|format(odiff|abs) }} at open, {{ '%.1f'|format(gap) }} now
+              {%- elif gap >= 0.5 -%}
+                lean {{ pick_team }}, only {{ '%.1f'|format(gap) }} off
+              {%- else -%}
+                we agree with the market
+              {%- endif -%}
+            </div>
+          {%- else -%}<span class="muted">no market line yet</span>{%- endif -%}
+
+          {%- if has_mtotal and tdiff|abs >= 3 %}
+            {%- set ou = 'over' if tdiff > 0 else 'under' %}
+            <div class="pick-total small">
+              <span class="tier tier-info">Info</span>
+              {{ ou|capitalize }} {{ '%g'|format(g.market_total|float) }} · {{ '%.1f'|format(tdiff|abs) }} off
+              {{ rate_text(rates.get(ou)) }}
+            </div>
+          {%- endif %}
         </td>
       </tr>
       {%- else %}
-      <tr><td colspan="10" class="empty">No predictions for this week yet.</td></tr>
+      <tr><td colspan="9" class="empty">No predictions for this week yet.</td></tr>
       {%- endfor %}
     </tbody>
   </table>
 </div>
 
-<p class="muted small legend market">
-  <span class="swatch edge-3"></span> we differ from the market by 3+ points
-  <span class="swatch edge-5"></span> 5+ points. "Our edge" names the team we rate higher than the market does.
-  Large gaps are worth checking for injuries or news the model can't see.
-</p>
-<p class="muted small legend market">
-  <strong>Open</strong> is the average opening line across books ("best" = the best opening number for the side we like).
-  <strong>Market now</strong> shows how far the line has moved since: <span class="moved-toward">our way</span> or
-  <span class="moved-away">against us</span>. In our backtest we've done best when we disagree with the
-  <em>opening</em> line; a gap that's still there at kickoff, after the market has moved, has been a losing bet.
-</p>
+<div class="legend market show-market">
+  <p class="muted small">
+    <span class="tier tier-play">Play</span> we differ from the current line by 3+ and the market isn't moving against us
+    (rows in blue, darker at 5+).
+    <span class="tier tier-caution">Caution</span> 3+ apart but the line has moved the other way since it opened: the market
+    may know something (injury, QB) the model doesn't.
+    <span class="tier tier-pass">Pass</span> under 3 points, including when the market has already moved to our number.
+    <span class="tier tier-info">Info</span> totals 3+ apart; for display only, our totals haven't beaten the market.
+  </p>
+  <p class="muted small">
+    The % is how that kind of pick has done in our backtest (2021–25, graded at the closing line), out of that many past games.
+    Break-even at −110 is 52.4%. Line chips: <span class="chip chip-toward">▲ our way</span> the line has moved toward our
+    number since it opened, <span class="chip chip-against">▼ against</span> away from it. Our edge has been biggest at the
+    opening line, so the earlier in the week, the better; "best open" is the best opening number across books.
+  </p>
+</div>
 <p class="muted small">Weather: forecast at kickoff (Open-Meteo, updated each morning). ⚠ = gusts 25+ mph or 0.1+ in.
   of rain. Our model doesn't use weather and has tended to over-predict totals in games like these; the market
   usually prices it in. Worth a look on the Overrides page.</p>
 
 <script>
-  // Market columns are hidden by default so our own number is what you see first.
+  // Market columns and picks are shown by default; "Hide" is remembered in this browser.
   (function () {
     var table = document.getElementById("predictions");
     var legends = document.querySelectorAll(".legend");
     var button = document.getElementById("market-toggle");
     function set(show) {
       table.classList.toggle("show-market", show);
-      document.body.classList.toggle("wide", show);   // let the page use the extra width
       legends.forEach(function (el) { el.classList.toggle("show-market", show); });
       button.setAttribute("aria-pressed", show ? "true" : "false");
-      button.textContent = show ? "Hide market" : "Show market";
-      try { localStorage.setItem("showMarket", show ? "1" : "0"); } catch (e) {}
+      button.textContent = show ? "Hide market & picks" : "Show market & picks";
+      try { localStorage.setItem("hideMarket", show ? "0" : "1"); } catch (e) {}
     }
-    var saved = false;
-    try { saved = localStorage.getItem("showMarket") === "1"; } catch (e) {}
-    set(saved);
+    var show = true;
+    try { show = localStorage.getItem("hideMarket") !== "1"; } catch (e) {}   // new key: the old one saved "hidden" on every visit
+    set(show);
     button.addEventListener("click", function () {
       set(!table.classList.contains("show-market"));
     });

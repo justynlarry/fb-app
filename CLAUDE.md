@@ -83,8 +83,9 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
 2. **Predictions.** visiting team | home team | day, date, kickoff |
    predicted line | predicted over/under, each with an uncertainty band from the backtest
    (e.g. "−6.5 ±11"; wider early season / vs FCS). Market spread/total and the difference
-   are **hidden by default** (one-click reveal, to avoid anchoring); when shown, highlight
-   disagreements of 3+ and 5+ points.
+   were hidden by default to avoid anchoring; **since 2026-11-12 the user wants them shown by default**
+   ("Hide market & picks" button, remembered per browser). Pick column: Play / Caution / Pass with backtest
+   win rate and game count (`PICK_RATES_SQL` and predictions.html share the tier rule).
 3. Later: team ratings page, backtest report, overrides entry.
 
 ## Model
@@ -154,6 +155,20 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     (hindsight) and best of several cuts, so optimistic. Decision: don't add to the model; show a
     forecast weather flag (gusts 25+ / rain) on the predictions page and log daily forecasts for a
     future honest out-of-sample test.
+
+- **Model v4 (2026-11-12):** ratings weight this season's games by recency (half-life 4 weeks; last
+  season's games treated as 8+ weeks old) and ridge ALPHA=1. Backtest 2018–25: spread miss 12.87 (v3 12.88),
+  ATS 3+ at open 52.3%, best open number 53.4%, CLV(3+) 61%. Chosen over half-life 3 (slightly better ATS,
+  worse accuracy, edge of the tested range) after 7 variants; expect real results a bit lower.
+  Rejected: gradient boosting (worse in every variant).
+- **2026 season to date (v4 trained on ≤2025, 685 games to Nov 9):** ATS 3+ at open 50.0%, at close 44.4%,
+  CLV 64.8%. The market moves toward us; a gap still there at kickoff loses. Hence the opening line +
+  movement on the predictions page. Gaps of 2–3 pts went 49.0% (backtest), overs at 3+ 49.0%.
+- **Drift seen 2024–26:** home teams beat our spread by ~1 pt/season; we under-predict totals ~2 pts
+  (2023, 2026). Tested and rejected (2026-11-12): (a) weighting recent seasons in the points model
+  (half-life 1/2/4 seasons): accuracy slightly better, ATS at open and CLV worse; (b) current-season bias
+  correction of spread/total (residual mean so far, shrunk K=100/300, ± half of last season's): no ATS
+  gain, CLV down, total miss worse (the in-season bias is too noisy). Don't retry without new information.
 
 ## Parking lot (not started; pick up when the user asks)
 

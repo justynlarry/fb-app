@@ -164,6 +164,37 @@ ORDER BY g.start_time, a.school
 """
 
 
+# How each kind of pick did in the backtest. The tier rule must match predictions.html
+PICK_RATES_SQL = """
+SELECT CASE WHEN abs(model_spread - close_spread) < 3 THEN 'pass'
+            WHEN abs(close_spread - open_spread) >= 0.5
+             AND sign(close_spread - open_spread) <> sign(model_spread - open_spread) THEN 'caution'
+            ELSE 'play'
+       END AS tier,
+       count(spread_win) AS games,
+       avg(spread_win::int) AS win_rate
+FROM backtest_games
+WHERE model_version = %(version)s
+  AND is_backtest
+  AND season >= 2021
+  AND open_spread IS NOT NULL
+  AND close_spread IS NOT NULL
+GROUP BY 1
+
+UNION ALL
+
+SELECT CASE WHEN total_diff > 0 THEN 'over' ELSE 'under' END,
+       count(total_win),
+       avg(total_win::int)
+FROM backtest_games
+WHERE model_version = %(version)s
+  AND is_backtest
+  AND season <> 2020
+  AND abs(total_diff) >= 3
+GROUP BY 1
+"""
+
+
 # Backtest results, grouped by {group_by} (filled in from GROUPINGS below, never from user input)
 BACKTEST_SQL = """
 SELECT {group_by} AS label,
@@ -304,12 +335,14 @@ def predictions_page(request: Request):
     with connect() as conn:
         conn.row_factory = dict_row
         games = conn.execute(PREDICTIONS_SQL, {"version": MODEL_VERSION}).fetchall()
+        rates = conn.execute(PICK_RATES_SQL, {"version": MODEL_VERSION}).fetchall()
+    pick_rates = {r["tier"]: r for r in rates}      # e.g. {"play": {...}, "pass": {...}}
     for g in games:
         g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
     return templates.TemplateResponse(
         request,
         "predictions.html",
-        {"games": games, "version": MODEL_VERSION, "active": "predictions"},
+        {"games": games, "pick_rates": pick_rates, "version": MODEL_VERSION, "active": "predictions"},
     )
 
 
