@@ -211,7 +211,7 @@
           {%- else -%}<span class="muted">no market line yet</span>{%- endif -%}
 
           {%- if pk.total_side %}
-            <div class="pick-total small">
+            <div class="pick-total small bet">
               <span class="tier tier-info">Info</span>
               {{ pk.total_side|capitalize }} {{ '%g'|format((pk.bet_total if pk.bet_total is not none else g.market_total)|float) }}
               {%- if pk.bet_total is not none %} {{ price_text(pk.total_price) }} {{ book_name(pk.total_book) }}{% endif %}
@@ -221,6 +221,15 @@
               {%- elif not started %}
                 {{ rate_text(rates.get(pk.total_side)) }}
               {%- endif %}
+            </div>
+          {%- elif has_mtotal and pk.total_gap is not none %}
+            {#- Under 3 off: a lean only, not graded or recorded -#}
+            <div class="pick-total small muted">
+              {%- if pk.total_gap|float >= 0.5 -%}
+                O/U lean {{ 'Over' if tdiff > 0 else 'Under' }} {{ '%g'|format(g.market_total|float) }} · {{ '%.1f'|format((pk.total_gap|float * 10)|round(0, 'floor') / 10) }} off
+              {%- else -%}
+                O/U {{ '%g'|format(g.market_total|float) }}: we agree
+              {%- endif -%}
             </div>
           {%- endif %}
         </td>
@@ -240,6 +249,7 @@
     may know something (injury, QB) the model doesn't.
     <span class="tier tier-pass">Pass</span> under 3 points, including when the market has already moved to our number.
     <span class="tier tier-info">Info</span> totals 3+ apart; for display only, our totals haven't beaten the market.
+    Under 3 apart, a grey "O/U lean" line shows which way our total leans (not recorded or graded).
   </p>
   <p class="muted small">
     "Now" is the median of every sportsbook's current line (The Odds API, updated each morning, Sunday afternoon
