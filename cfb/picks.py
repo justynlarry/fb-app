@@ -114,6 +114,28 @@ def make_pick(g):
     return pick
 
 
+def recorded_pick(g):
+    """The pick as it was saved before kickoff (from pick_results), in the same shape as make_pick()."""
+    return {
+        "tier": g["rec_tier"],
+        "side": g["rec_side"],
+        "gap": abs(g["rec_our_spread"] - g["rec_market_spread"]) if g["rec_market_spread"] is not None else None,
+        "bet_spread": g["rec_bet_spread"],
+        "bet_price": g["rec_bet_price"],
+        "bet_book": g["rec_bet_book"],
+        "total_side": g["rec_total_side"],
+        "total_gap": abs(g["rec_our_total"] - g["rec_market_total"]) if g["rec_market_total"] is not None else None,
+        "bet_total": g["rec_bet_total"],
+        "total_price": g["rec_total_price"],
+        "total_book": g["rec_total_book"],
+        "outcome": g["spread_outcome"],
+        "units": g["spread_units"],
+        "total_outcome": g["total_outcome"],
+        "total_units": g["total_units"],
+        "recorded": True,
+    }
+
+
 def record_picks():
     """Save our current pick for every game that hasn't kicked off (run after each odds snapshot)."""
     recorded_at = datetime.now(timezone.utc)

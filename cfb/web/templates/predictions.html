@@ -3,6 +3,27 @@
 {% block title %}Predictions{% endblock %}
 {% block body_class %}full{% endblock %}
 
+{#- W / L / P badge with units. Before the 5 AM refresh grades it, show a provisional result from ESPN's final. -#}
+{%- macro result_badge(outcome, units, provisional) -%}
+  {%- if outcome == 'win' -%}<span class="outcome win">W</span> <span class="units pos">{{ '%+.2f'|format(units|float) }}</span>
+  {%- elif outcome == 'loss' -%}<span class="outcome loss">L</span> <span class="units neg">−1.00</span>
+  {%- elif outcome == 'push' -%}<span class="outcome push">P</span>
+  {%- elif provisional -%}<span class="outcome {{ provisional }} provisional" title="From ESPN's final score; official after the 5 AM refresh">{{ provisional[0]|upper }}</span>
+  {%- endif -%}
+{%- endmacro -%}
+
+{#- 'win' / 'loss' / 'push' from the final score, for a spread side (home/away) or a total side (over/under) -#}
+{%- macro provisional_outcome(is_final, g, side, number, kind) -%}
+  {%- if is_final and side and number is not none -%}
+    {%- set n = number|float -%}
+    {%- set v = (g.away_score - g.home_score) if kind == 'spread' else (g.away_score + g.home_score) -%}
+    {%- if v == n -%}push
+    {%- elif (side == 'home' and v < n) or (side == 'away' and v > n) or (side == 'over' and v > n) or (side == 'under' and v < n) -%}win
+    {%- else -%}loss
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro -%}
+
 {%- macro rate_text(r) -%}
   {%- if r -%}<span class="rate" title="How this kind of pick did in our backtest (2021–25, graded at the closing line)">{{ '%.0f'|format(100 * r.win_rate|float) }}% <span class="muted">· {{ '{:,}'.format(r.games) }} games</span></span>{%- endif -%}
 {%- endmacro -%}
@@ -67,7 +88,7 @@
       {%- set tdiff = (g.total|float - g.market_total|float) if has_mtotal else 0 %}
       {%- set has_otot = g.open_total is defined and g.open_total is not none %}
 
-      <tr class="game {{ 'pick-' ~ tier if tier }} {{ 'big-gap' if tier == 'play' and gap >= 5 }}">
+      <tr class="game {{ 'pick-' ~ tier if tier }} {{ 'big-gap' if tier == 'play' and g.pick.gap is not none and g.pick.gap|float >= 5 }} {{ 'started' if g.started is defined and g.started }}">
         {{ team_cell(g.away, g.away_espn_id, g.away_rank, g.away_record, g.away_conf_record) }}
         {{ team_cell(g.home, g.home_espn_id, g.home_rank, g.home_record, g.home_conf_record) }}
         <td class="kickoff" data-label="Kickoff">
@@ -82,6 +103,7 @@
         </td>
         <td class="our-line" data-label="Our line">
           <strong>{{ line_text(g.spread, g.home, g.away) }}</strong>
+          {%- if g.model_version is defined and g.model_version != version %} <span class="adj-badge" title="Predicted before kickoff by model {{ g.model_version }} (before {{ version }} existed)">{{ g.model_version }}</span>{% endif -%}
           {%- if g.adjustment_notes %} <span class="adj-badge" title="{{ g.adjustment_notes }}">adj</span>{% endif -%}
           {%- if g.spread_miss is not none %} <span class="band" title="Average miss of our backtest predictions made with {{ g.weeks_played if g.weeks_played < 6 else '6+' }} weeks of data">±{{ '%.0f'|format(g.spread_miss|float) }}</span>{% endif %}
           {%- if g.adjustment_notes %}<div class="muted small">model: {{ line_text(g.model_spread, g.home, g.away) }}</div>{% endif -%}
@@ -115,7 +137,7 @@
               <span class="muted">{{ line_text(g.open_spread, g.home, g.away) }} →</span>
             {%- endif %}
             {{ line_text(g.market_spread, g.home, g.away) }}
-            {%- if n_books %} <span class="muted small" title="Median of {{ n_books }} sportsbooks' current lines">({{ n_books }} books)</span>{% endif -%}
+            {%- if n_books %} <span class="muted small" title="Median of {{ n_books }} sportsbooks' lines">({{ 'close, ' if g.started is defined and g.started }}{{ n_books }} books)</span>{% endif -%}
             {%- if has_open and move|abs >= 0.5 -%}
               {%- if odiff|abs >= 0.5 %}
               <span class="chip {{ 'chip-toward' if toward else 'chip-against' }}" title="How far the line has moved since it opened, relative to our number">
@@ -139,7 +161,11 @@
           {%- else -%}<span class="muted">–</span>{%- endif -%}
         </td>
 
-        {#- Summary: which side, how sure (backtest record for this kind of pick) #}
+        {#- Summary: which side, how sure (backtest record for this kind of pick).
+             Games that have started show the pick as it was recorded before kickoff, with its result. #}
+        {%- set pk = g.pick %}
+        {%- set started = g.started is defined and g.started %}
+        {%- set is_final = state == 'post' and g.away_score is not none %}
         <td class="market pick" data-label="Pick">
           {%- if tier == 'play' or tier == 'caution' -%}
             <div class="pick-main">
@@ -151,40 +177,50 @@
               {%- else %}
               <strong>{{ pick_team }} {{ side_number(g.market_spread, pick_home) }}</strong>
               {%- endif %}
-              {{ rate_text(rates.get(tier)) }}
+              {%- if started and pk.recorded %}
+                {{ result_badge(pk.outcome, pk.units, provisional_outcome(is_final, g, pk.side, best_spread, 'spread')) }}
+              {%- elif not started %}
+                {{ rate_text(rates.get(tier)) }}
+              {%- endif %}
             </div>
             <div class="muted small">
-              {{- '%.1f'|format(gap) }} pts off the line
-              {%- if has_open and odiff|abs >= 0.5 %} · {{ '%.1f'|format(odiff|abs) }} at open{% endif -%}
-              {%- if tier == 'caution' %} · market moving the other way: check news{% endif -%}
+              {%- if started and pk.recorded -%}
+                as recorded before kickoff · {{ '%.1f'|format(pk.gap|float) }} pts off the line
+              {%- elif started -%}
+                not tracked (picks are recorded from Nov 12 on)
+              {%- else -%}
+                {{- '%.1f'|format(pk.gap|float) }} pts off the line
+                {%- if has_open and odiff|abs >= 0.5 %} · {{ '%.1f'|format(odiff|abs) }} at open{% endif -%}
+                {%- if tier == 'caution' %} · market moving the other way: check news{% endif -%}
+              {%- endif -%}
             </div>
           {%- elif tier == 'pass' -%}
             <div class="pick-main">
               <span class="tier tier-pass">Pass</span>
-              {{ rate_text(rates.get('pass')) }}
+              {%- if not started %} {{ rate_text(rates.get('pass')) }}{% endif %}
             </div>
             <div class="muted small">
-              {%- if has_open and odiff|abs >= 3 -%}
-                edge gone: was {{ '%.1f'|format(odiff|abs) }} at open, {{ '%.1f'|format(gap) }} now
-              {%- elif gap >= 0.5 -%}
-                lean {{ pick_team }}, only {{ '%.1f'|format(gap) }} off
+              {%- if not started and has_open and odiff|abs >= 3 -%}
+                edge gone: was {{ '%.1f'|format(odiff|abs) }} at open, {{ '%.1f'|format(pk.gap|float) }} now
+              {%- elif pk.gap is not none and pk.gap|float >= 0.5 -%}
+                lean {{ pick_team }}, only {{ '%.1f'|format(pk.gap|float) }} off
               {%- else -%}
                 we agree with the market
               {%- endif -%}
             </div>
           {%- else -%}<span class="muted">no market line yet</span>{%- endif -%}
 
-          {%- if has_mtotal and tdiff|abs >= 3 %}
-            {%- set ou = 'over' if tdiff > 0 else 'under' %}
+          {%- if pk.total_side %}
             <div class="pick-total small">
               <span class="tier tier-info">Info</span>
-              {%- set bt = g.get('best_' ~ ou ~ '_total') %}
-              {%- if bt is not none %}
-              {{ ou|capitalize }} {{ '%g'|format(bt|float) }} {{ price_text(g.get('best_' ~ ou ~ '_price')) }} {{ book_name(g.get('best_' ~ ou ~ '_book')) }}
-              {%- else %}
-              {{ ou|capitalize }} {{ '%g'|format(g.market_total|float) }}
-              {%- endif %} · {{ '%.1f'|format(tdiff|abs) }} off
-              {{ rate_text(rates.get(ou)) }}
+              {{ pk.total_side|capitalize }} {{ '%g'|format((pk.bet_total if pk.bet_total is not none else g.market_total)|float) }}
+              {%- if pk.bet_total is not none %} {{ price_text(pk.total_price) }} {{ book_name(pk.total_book) }}{% endif %}
+              {%- if pk.total_gap is not none %} · {{ '%.1f'|format(pk.total_gap|float) }} off{% endif %}
+              {%- if started and pk.recorded %}
+                {{ result_badge(pk.total_outcome, pk.total_units, provisional_outcome(is_final, g, pk.total_side, pk.bet_total, 'total')) }}
+              {%- elif not started %}
+                {{ rate_text(rates.get(pk.total_side)) }}
+              {%- endif %}
             </div>
           {%- endif %}
         </td>

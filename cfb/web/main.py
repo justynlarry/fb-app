@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from cfb.db import connect
 from cfb.model import MODEL_VERSION
-from cfb.picks import make_pick
+from cfb.picks import make_pick, recorded_pick
 from cfb.qbs import qb_out_suggestion
 
 WEB_DIR = Path(__file__).parent
@@ -123,6 +123,16 @@ SELECT g.id AS game_id,
        p.total + COALESCE(adj.home_adj, 0) + COALESCE(adj.away_adj, 0) AS total,
        adj.notes AS adjustment_notes,
        p.weeks_played,
+       p.model_version,
+       g.start_time <= now() AS started,
+       r.tier AS rec_tier, r.side AS rec_side,
+       r.our_spread AS rec_our_spread, r.market_spread AS rec_market_spread,
+       r.bet_spread AS rec_bet_spread, r.bet_price AS rec_bet_price, r.bet_book AS rec_bet_book,
+       r.spread_outcome, r.spread_units,
+       r.our_total AS rec_our_total, r.market_total AS rec_market_total,
+       r.total_side AS rec_total_side, r.bet_total AS rec_bet_total,
+       r.total_price AS rec_total_price, r.total_book AS rec_total_book,
+       r.total_outcome, r.total_units,
        mm.spread_miss,
        mm.total_miss,
        COALESCE(mn.spread, l.spread, m.spread) AS market_spread,
@@ -147,9 +157,14 @@ FROM games g
 JOIN current_week w ON w.season = g.season
                    AND w.week = g.week
                    AND w.season_type = g.season_type
-JOIN predictions p ON p.game_id = g.id
-                  AND p.model_version = %(version)s
-                  AND NOT p.is_backtest
+JOIN LATERAL (          -- this version's prediction, or else the latest pre-game one from an older version
+    SELECT *
+    FROM predictions pr
+    WHERE pr.game_id = g.id
+      AND NOT pr.is_backtest
+    ORDER BY pr.model_version = %(version)s DESC, pr.created_at DESC
+    LIMIT 1
+) p ON true
 JOIN teams h ON h.id = g.home_id
 JOIN teams a ON a.id = g.away_id
 LEFT JOIN model_miss mm ON mm.bucket = LEAST(p.weeks_played, 6)
@@ -158,6 +173,9 @@ LEFT JOIN adjustments adj ON adj.game_id = g.id
 LEFT JOIN live_scores l ON l.game_id = g.id
 LEFT JOIN venues ven ON ven.id = g.venue_id
 LEFT JOIN market_now mn ON mn.game_id = g.id
+LEFT JOIN pick_results r ON r.game_id = g.id
+                        AND r.model_version = p.model_version
+                        AND r.taken = 'last'
 LEFT JOIN LATERAL (
     SELECT temperature_f, wind_mph, gust_mph, precip_in
     FROM weather_forecasts f
@@ -395,7 +413,10 @@ def predictions_page(request: Request):
     pick_rates = {r["tier"]: r for r in rates}      # e.g. {"play": {...}, "pass": {...}}
     for g in games:
         g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
-        g["pick"] = make_pick(g)        # same rule the worker uses to record picks
+        if g["started"] and g["rec_tier"] is not None:
+            g["pick"] = recorded_pick(g)    # what we actually picked before kickoff
+        else:
+            g["pick"] = make_pick(g)        # same rule the worker uses to record picks
     return templates.TemplateResponse(
         request,
         "predictions.html",
