@@ -12,9 +12,10 @@ from sklearn.linear_model import Ridge
 from cfb.db import connect
 
 METRICS = ["epa_per_play", "success_rate", "explosiveness", "pass_epa", "rush_epa", "plays", "points"]
-ALPHA = 2.0         # Ridge shrinkage. ~2 average games pulling each team toward average
-PRIOR_WEEKS = 6     # Last season's games fade out over this many weeks
-
+ALPHA = 1.0             # Ridge shrinkage. ~1 average game pulling each team toward average
+PRIOR_WEEKS = 6         # Last season's games fade out over this many weeks
+RECENCY_HALF_LIFE = 4   # Weeks: a game this old counts half as much as last week's
+OFFSEASON_AGE_WEEKS = 8 # Treat last season's games as at least this many weeks old
 
 # One row per team per game (that team's offense). FBS and FCS games only.
 GAME_STATS_SQL = """
@@ -121,13 +122,16 @@ def ratings_as_of(season, before):
     weeks_played = count_weeks_played(season, before)
     current = load_game_stats(season, before)
     if len(current) > 0:
-        current["weight"] = 1.0
+        # Recent games count more: a game RECENCY_HALF_LIFE weeks old counts half as much
+        week = current["week"].where(current["season_type"] == "regular", weeks_played)
+        weeks_ago = (weeks_played - week).clip(lower=0)
+        current["weight"] = 0.5 ** (weeks_ago / RECENCY_HALF_LIFE)
         parts.append(current)
 
     fade = max(0.0, 1 - weeks_played / PRIOR_WEEKS)
     if fade > 0:
         last_season = load_game_stats(season - 1, before)
-        last_season["weight"] = fade
+        last_season["weight"] = fade * 0.5 ** (OFFSEASON_AGE_WEEKS / RECENCY_HALF_LIFE)
         parts.append(last_season)
     history = pd.concat(parts, ignore_index=True)
 
