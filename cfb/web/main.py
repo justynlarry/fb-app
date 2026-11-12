@@ -269,6 +269,54 @@ ORDER BY r.start_time DESC, a.school
 """
 
 
+# The same picks graded at the median line of all books at -110, to show what line shopping adds.
+# pick_log doesn't save a median price, so -110 (the usual price) stands in for it.
+SHOPPING_SQL = """
+WITH graded AS (
+    SELECT tier AS kind,
+        spread_units AS best_units,
+        abs(bet_spread - market_spread) AS points_gained,
+        CASE
+            WHEN result = market_spread THEN 0
+            WHEN side = 'home' AND result < market_spread THEN 100.0 / 110
+            WHEN side = 'away' AND result > market_spread THEN 100.0 / 110
+            ELSE -1
+        END AS median_units
+    FROM pick_results
+    WHERE model_version = %(version)s
+      AND taken = 'last'
+      AND tier IN ('play', 'caution')
+      AND spread_outcome IS NOT NULL
+      AND market_spread IS NOT NULL
+
+    UNION ALL
+
+    SELECT 'total',
+        total_units,
+        abs(bet_total - market_total),
+        CASE
+            WHEN actual_total = market_total THEN 0
+            WHEN total_side = 'over' AND actual_total > market_total THEN 100.0 / 110
+            WHEN total_side = 'under' AND actual_total < market_total THEN 100.0 / 110
+            ELSE -1
+        END
+    FROM pick_results
+    WHERE model_version = %(version)s
+      AND taken = 'last'
+      AND total_outcome IS NOT NULL
+      AND market_total IS NOT NULL
+)
+SELECT kind,
+    count(*) AS graded,
+    sum(best_units) AS best_units,
+    sum(median_units) AS median_units,
+    avg(points_gained) AS avg_points,
+    count(*) FILTER (WHERE points_gained > 0) AS better_number
+FROM graded
+GROUP BY kind
+"""
+
+
 # Backtest results, grouped by {group_by} (filled in from GROUPINGS below, never from user input)
 BACKTEST_SQL = """
 SELECT {group_by} AS label,
@@ -447,12 +495,13 @@ def results_page(request: Request):
         conn.row_factory = dict_row
         summary = conn.execute(RESULTS_SUMMARY_SQL, {"version": MODEL_VERSION}).fetchall()
         recent = conn.execute(RECENT_PICKS_SQL, {"version": MODEL_VERSION}).fetchall()
+        shopping = conn.execute(SHOPPING_SQL, {"version": MODEL_VERSION}).fetchall()
     for r in recent:
         r["local_start"] = r["start_time"].astimezone(LOCAL_TZ)
     return templates.TemplateResponse(
         request,
         "results.html",
-        {"summary": summary, "recent": recent, "version": MODEL_VERSION, "active": "results"},
+        {"summary": summary, "recent": recent, "shopping": shopping, "version": MODEL_VERSION, "active": "results"},
     )
 
 
