@@ -169,6 +169,15 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   (half-life 1/2/4 seasons): accuracy slightly better, ATS at open and CLV worse; (b) current-season bias
   correction of spread/total (residual mean so far, shrunk K=100/300, ± half of last season's): no ATS
   gain, CLV down, total miss worse (the in-season bias is too noisy). Don't retry without new information.
+- **Round 3 (2026-11-12, scratch, 0 calls), all rejected:** on v4 rows, walk-forward 2018–2026:
+  (a) last season's final SP+ off/def as faded priors: spread 12.860→12.841, total 13.111→13.044 (best total
+  gain yet) but ATS 3+ at open 51.9→50.0, CLV 61.3→60.0, worse in 4 of 6 seasons; O/U at open unchanged
+  (51.8%). It makes us agree with the market more (fewer 3+ gaps), not beat it. (b) Transfer portal
+  (stars in − out before Aug 20, incoming 3★+ QB; data 2021+ only): coefficients ~0.1 pt/SD, open3 +0.5,
+  CLV flat/down in 3 of 5 seasons = noise. (c) Schedule spots (bye, short week ≤5 days, travel km, time
+  zones, 2nd straight road game): short week ≈ −3.9 pts for that team, but ATS/CLV worse (priced in).
+  None helped weeks 0–3. Lesson: information the market already uses (SP+, schedule) raises accuracy and
+  lowers edge; our edge comes from the recency-weighted EPA ratings.
 
 ## Parking lot (not started; pick up when the user asks)
 

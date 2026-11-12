@@ -9,6 +9,16 @@
   {%- if n|abs < 0.05 -%}PK{%- else -%}{{ '%+.1f'|format(n) }}{%- endif -%}
 {%- endmacro -%}
 
+{#- Sportsbook key from The Odds API -> name -#}
+{%- macro book_name(key) -%}
+  {{- {'draftkings': 'DraftKings', 'fanduel': 'FanDuel', 'betmgm': 'BetMGM', 'williamhill_us': 'Caesars',
+       'betrivers': 'BetRivers', 'fanatics': 'Fanatics', 'bovada': 'Bovada', 'betonlineag': 'BetOnline',
+       'betus': 'BetUS', 'lowvig': 'LowVig', 'mybookieag': 'MyBookie'}.get(key, key) -}}
+{%- endmacro -%}
+
+{#- American odds: -110, +105 -#}
+{%- macro price_text(p) -%}{%- if p is not none -%}{{ '%+d'|format(p|int) }}{%- endif -%}{%- endmacro -%}
+
 {%- macro rate_text(r) -%}
   {%- if r -%}<span class="rate" title="How this kind of pick did in our backtest (2021–25, graded at the closing line)">{{ '%.0f'|format(100 * r.win_rate|float) }}% <span class="muted">· {{ '{:,}'.format(r.games) }} games</span></span>{%- endif -%}
 {%- endmacro -%}
@@ -70,6 +80,12 @@
       {%- endif %}
       {%- set pick_home = diff < 0 %}
       {%- set pick_team = g.home if pick_home else g.away %}
+      {#- Best number available right now for the side we like (The Odds API, latest snapshot) #}
+      {%- set has_best = g.best_home_spread is defined and g.best_home_spread is not none %}
+      {%- set best_spread = (g.best_home_spread if pick_home else g.best_away_spread) if has_best else none %}
+      {%- set best_price = (g.best_home_price if pick_home else g.best_away_price) if has_best else none %}
+      {%- set best_book = (g.best_home_book if pick_home else g.best_away_book) if has_best else none %}
+      {%- set n_books = g.books_count if (g.books_count is defined and g.books_count) else none %}
 
       {#- ---- Total ---- #}
       {%- set has_mtotal = g.market_total is not none %}
@@ -124,6 +140,7 @@
               <span class="muted">{{ line_text(g.open_spread, g.home, g.away) }} →</span>
             {%- endif %}
             {{ line_text(g.market_spread, g.home, g.away) }}
+            {%- if n_books %} <span class="muted small" title="Median of {{ n_books }} sportsbooks' current lines">({{ n_books }} books)</span>{% endif -%}
             {%- if has_open and move|abs >= 0.5 -%}
               {%- if odiff|abs >= 0.5 %}
               <span class="chip {{ 'chip-toward' if toward else 'chip-against' }}" title="How far the line has moved since it opened, relative to our number">
@@ -152,7 +169,13 @@
           {%- if tier == 'play' or tier == 'caution' -%}
             <div class="pick-main">
               <span class="tier tier-{{ tier }}">{{ 'Play' if tier == 'play' else 'Caution' }}</span>
+              {%- if best_spread is not none %}
+              <strong>{{ pick_team }} {{ side_number(best_spread, pick_home) }}</strong>
+              <span class="price">{{ price_text(best_price) }}</span>
+              <span class="book">{{ book_name(best_book) }}</span>
+              {%- else %}
               <strong>{{ pick_team }} {{ side_number(g.market_spread, pick_home) }}</strong>
+              {%- endif %}
               {{ rate_text(rates.get(tier)) }}
             </div>
             <div class="muted small">
@@ -180,7 +203,12 @@
             {%- set ou = 'over' if tdiff > 0 else 'under' %}
             <div class="pick-total small">
               <span class="tier tier-info">Info</span>
-              {{ ou|capitalize }} {{ '%g'|format(g.market_total|float) }} · {{ '%.1f'|format(tdiff|abs) }} off
+              {%- set bt = g.get('best_' ~ ou ~ '_total') %}
+              {%- if bt is not none %}
+              {{ ou|capitalize }} {{ '%g'|format(bt|float) }} {{ price_text(g.get('best_' ~ ou ~ '_price')) }} {{ book_name(g.get('best_' ~ ou ~ '_book')) }}
+              {%- else %}
+              {{ ou|capitalize }} {{ '%g'|format(g.market_total|float) }}
+              {%- endif %} · {{ '%.1f'|format(tdiff|abs) }} off
               {{ rate_text(rates.get(ou)) }}
             </div>
           {%- endif %}
@@ -203,6 +231,9 @@
     <span class="tier tier-info">Info</span> totals 3+ apart; for display only, our totals haven't beaten the market.
   </p>
   <p class="muted small">
+    "Now" is the median of every sportsbook's current line (The Odds API, updated each morning, Sunday afternoon
+    and evening, and Saturday before kickoff). Play and Caution show the <strong>best number available</strong> for
+    our side, then the best price, and the book that has it.
     The % is how that kind of pick has done in our backtest (2021–25, graded at the closing line), out of that many past games.
     Break-even at −110 is 52.4%. Line chips: <span class="chip chip-toward">▲ our way</span> the line has moved toward our
     number since it opened, <span class="chip chip-against">▼ against</span> away from it. Our edge has been biggest at the

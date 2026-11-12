@@ -16,6 +16,7 @@ from cfb.backfill import refresh_recent_qbs
 from cfb.db import connect
 from cfb.load import refresh_season
 from cfb.model import predict_upcoming
+from cfb.odds import save_snapshot
 from cfb.weather import update_forecasts
 
 FAST = 30           # seconds between polls while games are on
@@ -79,12 +80,27 @@ def daily_update():
         print(f"daily update FAILED: {err!r}")
 
 
+def odds_snapshot():
+    """Save every book's current lines (2 Odds API credits). Skips in the off-season."""
+    if not games_near(current_season()):
+        return
+    try:
+        save_snapshot()
+    except Exception as err:
+        print(f"odds snapshot FAILED: {err!r}")
+
+
 def main():
     print("worker started")
 
     # Daily job runs in the background; the live-score loop below keeps going
     scheduler = BackgroundScheduler(timezone=os.environ.get("TZ", "America/Denver"))
     scheduler.add_job(daily_update, "cron", hour=DAILY_HOUR, minute=0, id="daily_update")
+    # Odds API snapshots: every morning, Sunday for the openers, Saturday before kickoffs
+    # ~47 snapshots x 2 credits = ~94 of our 500 credits each month
+    scheduler.add_job(odds_snapshot, "cron", hour=6, minute=0, id="odds_daily")
+    scheduler.add_job(odds_snapshot, "cron", day_of_week="sun", hour="16,20", minute=0, id="odds_openers")
+    scheduler.add_job(odds_snapshot, "cron", day_of_week="sat", hour="9,12", minute=0, id="odds_gameday")
     scheduler.start()
     print(f"next daily update: {scheduler.get_job('daily_update').next_run_time}")
 
