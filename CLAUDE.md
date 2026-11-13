@@ -290,6 +290,21 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   little weight (0.25, gone by week 6) and returning production is already a feature, so this path can't move
   early-season accuracy. **Test 3 (shrink toward each team's prior) was not run**: its precondition (a weeks
   0–5 gain in Test 2) failed. Don't retry either without new information. Script: scratch `test2_returning.py`.
+- **Test 4 (pre-registered, 2026-11-13), rejected: coach / matchup history.** Residual = team's actual margin −
+  v5's predicted margin (v5 walk-forward 2018–25, 2020 excluded); correction = shrunk mean of prior-season residuals.
+  Rule: pooled ATS 3+ at open 2021–25 up, ≥ baseline in 4 of 5 seasons, CLV not down >1, MAE not worse.
+  (C) coach career, K=100: ATS 52.40 → 52.86% (n=2,079, ±2.1) but by season +0.7/−0.9/−0.4/+0.4/+2.3 (3 of 5) → fails;
+  CLV 61.1 → 61.8, spread miss 12.77 → 12.70, better in all 5 seasons (K=50/200 similar). Accuracy gain is consistent,
+  betting gain isn't. (H) team vs same opponent, K=5: 52.43%, 2 of 5 seasons, CLV −1.7, miss worse. (CC) coach vs
+  coach, K=5: 51.93%. 2026 not looked at for this question (possible one-shot holdout for C if pre-registered).
+  Script: scratch `coach_test.py` (session 2026-11-13).
+- **Test 5 (pre-registered, 2026-11-13), rejected: fumble-recovery luck** from sportsdataverse play-by-play
+  (scrimmage fumbles; off_luck = 0.5·fumbles − lost, def_luck = opp lost − 0.5·opp fumbles, season-to-date means as
+  points-model features `off_fumluck`/`oppdef_fumluck`). Same rule as Test 4. ATS 3+ open 52.43 → 52.25% (n≈2,170),
+  ≥ baseline in 1 of 5 seasons, CLV 61.2 → 60.8, spread miss 12.83 = 12.83. Coefficients tiny and wrong-signed
+  (+0.9 / −0.2 pts per fumble/game; feature SD 0.24). PBP covers 96–100% of our FBS games, but fumble counts in
+  2021–23 are ~25% lower than other seasons (ESPN text parsing), so 2021 is noisy. pyarrow is in requirements.txt;
+  read only the needed columns (files have 506 columns; 4 GB VM). Script: scratch `fumble_test.py`.
 
 ## Build order
 

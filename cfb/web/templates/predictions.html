@@ -183,6 +183,12 @@
                 {{ rate_text(rates.get(tier)) }}
               {%- endif %}
             </div>
+            {%- if not started and pk.gap is not none and pk.gap|float >= 5 %}
+            <div class="news-check small">
+              <span class="news-flag" title="Our 5+ point gaps went 41% at the closing line in 2026: big disagreements are often news the model doesn't have">Check news</span>
+              injuries / QB before betting · <a href="/overrides?game_id={{ g.game_id }}">enter override</a>
+            </div>
+            {%- endif %}
             <div class="muted small">
               {%- if started and pk.recorded -%}
                 as recorded before kickoff · {{ '%.1f'|format(pk.gap|float) }} pts off the line
@@ -247,6 +253,8 @@
     (rows in blue, darker at 5+).
     <span class="tier tier-caution">Caution</span> 3+ apart but the line has moved the other way since it opened: the market
     may know something (injury, QB) the model doesn't.
+    <span class="news-flag">Check news</span> 5+ apart: our biggest gaps have done worst (41% at the close in 2026),
+    usually because of an injury or QB change the model can't see. Check before betting and enter an override if needed.
     <span class="tier tier-pass">Pass</span> under 3 points, including when the market has already moved to our number.
     <span class="tier tier-info">Info</span> totals 3+ apart; for display only, our totals haven't beaten the market.
     Under 3 apart, a grey "O/U lean" line shows which way our total leans (not recorded or graded).

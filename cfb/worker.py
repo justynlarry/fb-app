@@ -3,6 +3,7 @@
 - Every 30 s (game time) or 10 min (otherwise): live scores from ESPN.
 - Every day at 5 AM: refresh this season from CFBD (games, stats, lines, latest week's QBs:
   4 calls), re-predict upcoming games, and save kickoff weather forecasts (Open-Meteo).
+  If it didn't finish, it's retried at 5:30 and 7:30.
 """
 
 import os
@@ -23,6 +24,9 @@ from cfb.weather import update_forecasts
 FAST = 30           # seconds between polls while games are on
 SLOW = 600          # seconds between polls otherwise (10 minutes)
 DAILY_HOUR = 5      # local time for the daily CFBD refresh + predictions
+RETRY_HOURS = "5,7"     # retry at 5:30 and 7:30 if the 5 AM update didn't finish
+
+last_daily_ok = None    # date the daily update last finished (reset if the worker restarts)
 
 
 def games_window_open():
@@ -67,6 +71,7 @@ def games_near(season):
 
 def daily_update():
     """Refresh this season from CFBD and re-predict upcoming games. Skips in the off-season."""
+    global last_daily_ok
     season = current_season()
     if not games_near(season):
         print(f"daily update: no {season} games this week or next, skipping")
@@ -77,8 +82,16 @@ def daily_update():
         refresh_recent_qbs(season)
         predict_upcoming(season)
         update_forecasts()
+        last_daily_ok = datetime.now().date()
     except Exception as err:
         print(f"daily update FAILED: {err!r}")
+
+
+def daily_retry():
+    """Run the daily update again if this morning's didn't finish."""
+    if last_daily_ok != datetime.now().date():
+        print("daily update hasn't finished today, retrying.")
+        daily_update()
 
 
 def odds_snapshot():
@@ -101,12 +114,18 @@ def main():
 
     # Daily job runs in the background; the live-score loop below keeps going
     scheduler = BackgroundScheduler(timezone=os.environ.get("TZ", "America/Denver"))
-    scheduler.add_job(daily_update, "cron", hour=DAILY_HOUR, minute=0, id="daily_update")
+    scheduler.add_job(daily_update, "cron", hour=DAILY_HOUR, minute=0, id="daily_update",
+                      misfire_grace_time=3600, coalesce=True)
+    scheduler.add_job(daily_retry, "cron", hour=RETRY_HOURS, minute=30, id="daily_retry",
+                      misfire_grace_time=3600, coalesce=True)
     # Odds API snapshots: every morning, Sunday for the openers, Saturday before kickoffs
     # ~47 snapshots x 2 credits = ~94 of our 500 credits each month
-    scheduler.add_job(odds_snapshot, "cron", hour=6, minute=0, id="odds_daily")
-    scheduler.add_job(odds_snapshot, "cron", day_of_week="sun", hour="16,20", minute=0, id="odds_openers")
-    scheduler.add_job(odds_snapshot, "cron", day_of_week="sat", hour="9,12", minute=0, id="odds_gameday")
+    scheduler.add_job(odds_snapshot, "cron", hour=6, minute=0, id="odds_daily",
+                      misfire_grace_time=3600, coalesce=True)
+    scheduler.add_job(odds_snapshot, "cron", day_of_week="sun", hour="16,20", minute=0, id="odds_openers",
+                      misfire_grace_time=3600, coalesce=True)
+    scheduler.add_job(odds_snapshot, "cron", day_of_week="sat", hour="9,12", minute=0, id="odds_gameday",
+                      misfire_grace_time=3600, coalesce=True)
     scheduler.start()
     print(f"next daily update: {scheduler.get_job('daily_update').next_run_time}")
 

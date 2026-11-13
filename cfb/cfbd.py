@@ -26,7 +26,14 @@ def get(endpoint, params, refresh=False):
             if row is not None:
                 return row[0]
         headers = {"Authorization": f"Bearer {os.environ['CFBD_API']}"}
-        resp = httpx.get(BASE_URL + endpoint, params=params, headers=headers, timeout=60)
+        for attempt in (1, 2):
+            try:
+                resp = httpx.get(BASE_URL + endpoint, params=params, headers=headers, timeout=180)
+                break
+            except httpx.TimeoutException:
+                if attempt == 2:
+                    raise
+                print(f"CFBD timeout on {endpoint}, retrying once")
         resp.raise_for_status()
         body = resp.json()
 

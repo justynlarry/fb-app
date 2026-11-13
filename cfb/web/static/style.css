@@ -379,6 +379,23 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .pick-total.bet { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px;
   background: var(--toward-bg); color: var(--toward); border: 1px solid var(--toward); }
 .pick-total.bet .tier-info { color: var(--toward); border-color: var(--toward); }
+/* 5+ point gap: look for injury / QB news before betting */
+.news-check { margin-top: 0.25rem; color: var(--caution); }
+.news-check a { color: inherit; }
+.news-flag {
+  display: inline-block;
+  padding: 0.05em 0.5em;
+  border-radius: 999px;
+  background: var(--caution-bg);
+  color: var(--caution);
+  border: 1px solid var(--caution);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: 0.1em;
+  cursor: help;
+}
 .rate { font-variant-numeric: tabular-nums; font-size: 0.85em; font-weight: 600; }
 .pick .price { font-variant-numeric: tabular-nums; font-weight: 600; }
 .pick .book { color: var(--muted); font-size: 0.85em; }
