@@ -38,6 +38,12 @@
   <button type="button" class="toggle" id="market-toggle" aria-pressed="true">Hide market &amp; picks</button>
 </div>
 
+<div class="reminder" id="holdout-reminder" hidden>
+  <strong>Reminder:</strong> the 2026 coach-career holdout is due (run once, after conference championship weekend).
+  Ask Claude to run <code>docs/model-tests.md</code> §5A exactly as written.
+  <button type="button" class="toggle" id="holdout-dismiss">Dismiss</button>
+</div>
+
 <div class="table-wrap sticky-wrap">
   <table class="scores predictions show-market" id="predictions">
     <thead>
@@ -291,6 +297,20 @@
     set(show);
     button.addEventListener("click", function () {
       set(!table.classList.contains("show-market"));
+    });
+  })();
+
+  // Holdout reminder: shows from Dec 7, 2026 (local time) until dismissed in this browser.
+  (function () {
+    var box = document.getElementById("holdout-reminder");
+    if (!box || new Date() < new Date(2026, 11, 7)) return;
+    var dismissed = false;
+    try { dismissed = localStorage.getItem("holdout5aDismissed") === "1"; } catch (e) {}
+    if (dismissed) return;
+    box.hidden = false;
+    document.getElementById("holdout-dismiss").addEventListener("click", function () {
+      box.hidden = true;
+      try { localStorage.setItem("holdout5aDismissed", "1"); } catch (e) {}
     });
   })();
 </script>

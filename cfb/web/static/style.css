@@ -379,6 +379,13 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .pick-total.bet { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px;
   background: var(--toward-bg); color: var(--toward); border: 1px solid var(--toward); }
 .pick-total.bet .tier-info { color: var(--toward); border-color: var(--toward); }
+/* One-off reminder banner (predictions page) */
+.reminder { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; margin: 0 0 0.75rem;
+  padding: 0.6rem 0.9rem; border: 1px solid var(--caution); border-radius: 6px;
+  background: var(--caution-bg); color: var(--caution); }
+.reminder code { color: inherit; }
+.reminder .toggle { margin-left: auto; }
+
 /* 5+ point gap: look for injury / QB news before betting */
 .news-check { margin-top: 0.25rem; color: var(--caution); }
 .news-check a { color: inherit; }

@@ -97,8 +97,9 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   used only to evaluate the model (backtest, CLV) and to display side by side. Confidence comes
   from backtest evidence, especially ATS record when we disagree by 3+/5+ and closing line value.
   Treat large disagreements as "investigate" flags (injuries, QB changes) handled via overrides.
-- Per-play efficiency only (EPA/play split pass/rush, success rate, explosiveness,
-  points per opportunity), garbage time excluded.
+- Per-play efficiency only (EPA/play split pass/rush, success rate, explosiveness), plus plays (pace) and
+  points, garbage time excluded (`cfb/ratings.py` METRICS). Points per opportunity is NOT a v5 metric
+  (corrected 2026-11-13; drive-based ppo was tested in Round 4).
 - Opponent adjustment by ridge regression on game-level data:
   `metric ~ team_offense + opponent_defense + home_field`. Group or down-weight FCS opponents.
 - Predict **each team's points** (adjusted offense vs. opponent adjusted defense, plus pace),
@@ -265,11 +266,20 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   disagreements; closing line value (did the line move toward the model between open and close).
 - Report results honestly; matching the market is the realistic first goal.
 - **Statistics to quote with every result:** n, SE = sqrt(p(1-p)/n), 95% interval ±1.96 SE. Per season
-  n≈400–450 3+ picks (±4.7); pooled 2021–25 n≈2,150 (±2.1). Telling 53.4% from 52.4% at 95% needs ~8,000
-  picks. Opening lines exist only 2021+ (DraftKings 2023+, ESPN Bet 2023–25, Bovada); 2018–20 have close
-  only, so every "at open" figure is 2021–25. "Best open" = at most 3 books (1 in 2021–22), no prices.
+  n≈400–450 3+ picks (±4.7); pooled 2021–25 n≈2,150 (±2.1). Telling 53.4% from 52.4%: ±1 pt at 95% needs
+  ≈9,600 picks (≈22 seasons); 80% power to detect it needs ≈19,600 (≈45 seasons). Opening lines exist only
+  2021+ (DraftKings 2023+, ESPN Bet 2023–25, Bovada); 2018–20 have close only, so every "at open" figure is
+  2021–25. "Best open" = at most 3 books (1 in 2021–22), no prices.
 - **CLV is direction only.** On 3+ picks the line moves +0.6 pts toward us vs a 6.3-pt average gap
   (~10% of the gap); that's how 2026 shows 64.8% CLV with 50% ATS at open. Report CLV in points too.
+  Rule A's "CLV not down >1.0" means 1.0 percentage point of CLV %.
+- **Slope metric (2026-11-13):** regress (result − line) on (our line − line) over all games. v5: +0.104 ± 0.048
+  at open (2021–25, n=4,256), +0.015 ± 0.037 at close (2018–25). Paired Δslope (same games, 2,000-game bootstrap)
+  has SE ≈ 0.008–0.009 for one feature. Open/close sanity check holds: on v5's 3+-at-open picks, 52.40% at
+  open vs 50.74% at close (gap 1.67) ≈ CLV 0.614 pts × 2.5–3.3% per pt. **Rule B (slope main test) approved
+  2026-11-13 for all tests from Test 6 on**; adoption policy (edge vs accuracy), pre-registrations A–C and
+  combined-test candidates: all in `docs/model-tests.md`. Under Rule A, v5 vs v4 passes (4 of 5 seasons); T4 coach career fails Rule A but has
+  Δslope +0.026 ± 0.009 (hypothesis for the 2026 holdout, not a reversal).
 - **Holdouts and multiple testing (2026-11-12):** ~25 variants tried. The tier rule and Rounds 2–4 looked
   at 2026, so 2026 is used up for those; v4's own 2026 record is roughly clean. Clean from here: pick_log
   since 2026-11-12 and the 2027 season with the model frozen at kickoff. **Write the acceptance rule before
@@ -277,11 +287,13 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
 - **Outside review (2026-11-12), 0-call findings:** P(cover) from N(gap, σ) is wrong for us (σ of our miss
   16.3 vs market 15.5; actual cover 48–55% at every gap size, a naive σ=15 model says 59–77%). Key numbers:
   3 = 9.4%, 7 = 7.9% of margins (value half-points there when line shopping). Gaps still 3+ at close won
-  50.3% (−2.9% ROI): bet early. Bowls 53.6% (n=97), not worse; CFP 46% (n=13). Home-field drift real
-  (2024–26 ≈ −1.1/season) but already tested 3 ways, rejected. Fumble luck impossible from CFBD advanced stats.
+  50.3% in 2021–25 (−4.0% ROI at −110; the earlier −2.9% was the 2018–25 rate, 50.8%): bet early. Bowls
+  53.6% (n=97), not worse; CFP 46% (n=13). Home-field drift real (2024–26 ≈ −1.1/season) but already tested
+  3 ways, rejected. Fumble luck impossible from CFBD advanced stats.
 - **Test 1 (pre-registered, 2026-11-12), one-shot holdout on 2026 games through Nov 9:** weeknight (Mon–Thu ET)
-  games with MAC/Sun Belt/C-USA, 3+ at open: 2021–25 74-44, 2026 11-9 (55%, n=20), pooled 61.6% (lower bound
-  53.5%) → **kept as a hypothesis**: tag and track, no model change. FCS opponent: 2021–25 131-95, 2026 37-45
+  games with MAC/Sun Belt/C-USA, 3+ at open: discovery 2021–25 74-44 (62.7% ± 8.7), holdout 2026 11-9
+  (55.0% ± 21.8, n=20) → **kept as a hypothesis**: tag and track, no model change. Don't quote the pooled
+  61.6%: discovery games can't confirm their own finding. FCS opponent: 2021–25 131-95, 2026 37-45
   (45.1%) → **rejected**. 2026 is now used up for both questions.
 - **Test 2 (pre-registered, 2026-11-12), rejected:** weight last season's games per team by returning
   production (× max(0.1, 1 + k·z), z = mean of both teams' standardized returning PPA; k=0.25, 0.5, 0.5 + QB
@@ -305,6 +317,28 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   (+0.9 / −0.2 pts per fumble/game; feature SD 0.24). PBP covers 96–100% of our FBS games, but fumble counts in
   2021–23 are ~25% lower than other seasons (ESPN text parsing), so 2021 is noisy. pyarrow is in requirements.txt;
   read only the needed columns (files have 506 columns; 4 GB VM). Script: scratch `fumble_test.py`.
+- **Test 6 (pre-registered, Rule B, 2026-11-13): combined weak features.** v5 + coach career (T4 residual, K=100,
+  now a learned feature) + Round 4 drive metrics; points model Ridge(α=1) on standardized features; this
+  reproduces stored v5 (mean |diff| 0.004 pts).
+  - (A) **Passed:** Δslope at open +0.044 ± 0.021 (2.1 SE), ATS 3+ open 52.41 → 53.38% (n=2,132), CLV pts
+    0.615 → 0.610, spread miss 12.826 → 12.737.
+  - (B) Leave-one-out: coach career carries it (+0.038 ± 0.019); the drive metrics add nothing.
+  - (C) Selection on 2021–23 → v5 + coach career, confirmed once on 2024–25: 1.80 SE vs a 1.96 bar → **failed**.
+  - **User decision (2026-11-13): not adopted; wait for the 2026 holdout**, amended to v5 + coach career as a learned
+    feature (model-tests.md section 5A). Rule B was approved after T4's slope was known, and the candidates were
+    picked from the same data, so A is biased upward.
+  - **NEXT ACTION: run holdout 5A once, on or after 2026-12-07** (after conference championship weekend).
+    Reminders: this line, a project memory, and a notice on the predictions page from Dec 7.
+  - Live use of the drive metrics would also cost 1 CFBD call/day (`/drives`); coach career needs none.
+  - Script: scratch `t6.py`, plan `combined_test_plan.md`.
+- **Test 7 (pre-registered, 2026-11-13), rejected: weather for totals.** Open-Meteo historical-forecast archive
+  2021–25 (947 requests incl. a gap refetch; 98% coverage), observed ERA5 for training, judged at the close.
+  Total slope Δ +0.014 ± 0.015 (0.97 SE), O/U 3+ close 50.0%, total miss 12.965 vs 12.971. Weather stays a
+  page flag only.
+- **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
+  close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
+  with reports vs without, difference-in-differences across each conference's first report season.
+  (2) Totals bias +2.08 (2026) ≈ +2.04 (2023); the market was also low (+1.07, +1.28). No new test.
 
 ## Build order
 
