@@ -103,15 +103,22 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `metric ~ team_offense + opponent_defense + home_field`. Group or down-weight FCS opponents.
 - Predict **each team's points** (adjusted offense vs. opponent adjusted defense, plus pace),
   so one model gives both outputs: line = home − away, total = home + away.
-- Preseason priors (last season's ratings, returning production, talent, recruiting,
-  coaching changes, portal), faded out by weeks 5–6.
+- Preseason information enters two ways: last season's games stay in the ratings regression at weight
+  0.25 × fade (fade 1 → 0 over PRIOR_WEEKS = 6), and talent / returning production / new coach are
+  points-model features faded linearly over PRIOR_INPUT_WEEKS = 16. Ridge (ALPHA=1) shrinks teams toward
+  league average. Home field = one points-model coefficient, refit each season on all earlier seasons.
+  No explicit special teams (only through the opponent-adjusted points rating).
 - Manual overrides table (e.g. "QB out, −N points, team X, game Y") applied before predictions.
 - **Coaching & injuries (planned, 2026-11-11):**
   - Head coaches: automatic. `/coaches` (already cached) for season-to-season changes;
     `/coaches/tenures` for interim/mid-season changes. Use as a model-v2 input.
   - Coordinators: no source in CFBD or ESPN. User enters OC/DC in a manual table each
     offseason (step 6).
-  - Injuries: no free feed (CFBD has none; ESPN college game summaries have none, checked).
+  - Injuries: no API (CFBD has none; ESPN college game summaries have none, checked). **Correction
+    (2026-11-12):** all Power 4 conferences publish availability reports for conference games (SEC since
+    2024, ACC and Big 12 since 2025, Big Ten 4/week since 2026, last one 2 h before kickoff), as web pages in
+    four formats, name + status only. Not covered: non-conference and G5 games. Use: flag key absences on the
+    overrides page, not a model feature (the market reacts at once).
     Instead: detect QB changes automatically from who actually threw passes each game — usable in
     the backtest to measure what a backup QB costs. **Correction (2026-11-11):** `/passing/players/games`
     is NOT one call per season; it requires `team`, `week` or `passerId` besides `year` (400 otherwise).
@@ -209,13 +216,21 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   season −3.2 vs our line (n=207; 1st–2nd game after −1.2 and they cover the open 55%; 3rd+ game −4.6, cover 41%),
   walk-forward 52.29 → 52.56%, by season +0.1/0/+0.6/+0.6, never worse. `/coaches` 2015 fetched (1 call) so
   2016 changes can be found; the loader saves 69 changes 2016–25.
-- **Model v5 (in progress, 2026-11-12): mid-season coach change as a points-model feature.**
+- **Model v5 (adopted 2026-11-12 by the user, as an accuracy fix, not a proven betting edge):
+  mid-season coach change as a points-model feature.**
   - `coach_changes` table (016): team, season, `changed_at` (games kicking off after it have the new coach),
     outgoing/incoming, `source` ('cfbd' derived from cached `/coaches`, or 'manual' for the live season).
   - Loader fills 2016–25 from cached `/coaches` (0 calls); 2026 firings are entered by hand.
   - Feature in `side_row`: `coach_change` (this team) and `opp_coach_change`, 1 only in regular-season games after
     the change. The regression learns the size walk-forward (no hand-picked constant, no lookahead) and moves
     both spread and total. Judge it with the usual backtest; accept only if ATS at open/CLV hold up by season.
+  - **Backtest:** spread 12.870 → 12.859, ATS 3+ open 52.3 → 52.4%, CLV 61.2 → 61.1%; affected games miss
+    12.43 → 12.14, 3+ picks 55.1 → 57.3% (n≈105). ATS by season 2021–25 +0.4/0/+0.1/−0.4/+0.5, CLV
+    −0.2/+0.7/−0.6/+0.5/−0.6: CLV did not clearly hold up under the stated rule; the user adopted it for accuracy.
+  - **Learned coefficients:** changed team scores ≈ −1.9 and allows ≈ +2.2 pts (margin ≈ −4, total ≈ 0;
+    2021–25 trainings −3.8 to −4.7 margin). Bias on affected teams: −3.3 under v4 → +0.4 under v5. The market
+    already prices most of it (teams only −1.2 vs the open), so corrections mostly remove bad picks or land
+    under the 3-pt threshold. **2026 changes must be entered by hand** in `coach_changes`, or v5 = v4 for 2026.
 
 ## Parking lot (not started; pick up when the user asks)
 
@@ -229,9 +244,16 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     wanted (e.g. personal bet log, per-user overrides): `users` table, argon2/bcrypt password
     hashes, secure session cookies, login page; never roll our own crypto.
   - Tunnel token goes in `.env` (never committed). Ask the user before creating anything on Cloudflare.
-- **Coach-change adjustment:** being built as v5, see the Model section.
-  Needs a hand-entered `coach_changes` table for the live season, since CFBD fills in current-season coaches only
-  after the season. (`weeks_played` was fixed in v3, commit 70f6be1: a week counts once its last game kicks off.)
+- **Coach-change adjustment:** adopted as v5, see the Model section. The live season needs hand entries in
+  `coach_changes` (an entry form on the overrides page would help). (`weeks_played` was fixed in v3, commit
+  70f6be1: a week counts once its last game kicks off.)
+- **Bet log:** actual bets, prices and books taken (real ROI vs pick_log's hypothetical best price).
+- **sportsdataverse play-by-play (verified 2026-11-12):** free ESPN-derived parquet files per season
+  (2016–26, ~50 MB each; `EPA`, `wp_before`, `fumble_lost`; `game_id` = ESPN id = games.espn_id). Needs
+  `pyarrow`. Would allow fumble-luck and win-probability garbage-time adjustments, or replacing
+  /stats/game/advanced. A different EPA model from CFBD's: don't mix them in one metric.
+- **The Odds API team totals:** `team_totals` only via /events/{id}/odds, 1 credit per game per market
+  (~60 per snapshot); no history to backtest. Skipped for now.
 - **Weather** (see Model section) and **overrides page** (step 6), coordinator table.
 - **Backtest page:** version selector / side-by-side v1 vs v2.
 
@@ -242,6 +264,32 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
 - Report: model MAE vs. closing-line MAE (spread and total); cover rate at 3+ and 5+ point
   disagreements; closing line value (did the line move toward the model between open and close).
 - Report results honestly; matching the market is the realistic first goal.
+- **Statistics to quote with every result:** n, SE = sqrt(p(1-p)/n), 95% interval ±1.96 SE. Per season
+  n≈400–450 3+ picks (±4.7); pooled 2021–25 n≈2,150 (±2.1). Telling 53.4% from 52.4% at 95% needs ~8,000
+  picks. Opening lines exist only 2021+ (DraftKings 2023+, ESPN Bet 2023–25, Bovada); 2018–20 have close
+  only, so every "at open" figure is 2021–25. "Best open" = at most 3 books (1 in 2021–22), no prices.
+- **CLV is direction only.** On 3+ picks the line moves +0.6 pts toward us vs a 6.3-pt average gap
+  (~10% of the gap); that's how 2026 shows 64.8% CLV with 50% ATS at open. Report CLV in points too.
+- **Holdouts and multiple testing (2026-11-12):** ~25 variants tried. The tier rule and Rounds 2–4 looked
+  at 2026, so 2026 is used up for those; v4's own 2026 record is roughly clean. Clean from here: pick_log
+  since 2026-11-12 and the 2027 season with the model frozen at kickoff. **Write the acceptance rule before
+  every test** and don't loosen it after seeing results.
+- **Outside review (2026-11-12), 0-call findings:** P(cover) from N(gap, σ) is wrong for us (σ of our miss
+  16.3 vs market 15.5; actual cover 48–55% at every gap size, a naive σ=15 model says 59–77%). Key numbers:
+  3 = 9.4%, 7 = 7.9% of margins (value half-points there when line shopping). Gaps still 3+ at close won
+  50.3% (−2.9% ROI): bet early. Bowls 53.6% (n=97), not worse; CFP 46% (n=13). Home-field drift real
+  (2024–26 ≈ −1.1/season) but already tested 3 ways, rejected. Fumble luck impossible from CFBD advanced stats.
+- **Test 1 (pre-registered, 2026-11-12), one-shot holdout on 2026 games through Nov 9:** weeknight (Mon–Thu ET)
+  games with MAC/Sun Belt/C-USA, 3+ at open: 2021–25 74-44, 2026 11-9 (55%, n=20), pooled 61.6% (lower bound
+  53.5%) → **kept as a hypothesis**: tag and track, no model change. FCS opponent: 2021–25 131-95, 2026 37-45
+  (45.1%) → **rejected**. 2026 is now used up for both questions.
+- **Test 2 (pre-registered, 2026-11-12), rejected:** weight last season's games per team by returning
+  production (× max(0.1, 1 + k·z), z = mean of both teams' standardized returning PPA; k=0.25, 0.5, 0.5 + QB
+  passing-PPA term), baseline v5, 2021–25. Weeks 0–5 miss moved ≤0.006 (12.995 → 12.994–13.001), ATS 3+ open
+  52.43 → 52.29/52.51/52.40%, not lower in only 2 of 5 seasons each, CLV +0.2–0.3. Last season's games carry too
+  little weight (0.25, gone by week 6) and returning production is already a feature, so this path can't move
+  early-season accuracy. **Test 3 (shrink toward each team's prior) was not run**: its precondition (a weeks
+  0–5 gain in Test 2) failed. Don't retry either without new information. Script: scratch `test2_returning.py`.
 
 ## Build order
 
