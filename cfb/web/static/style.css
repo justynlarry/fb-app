@@ -383,6 +383,7 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .reminder { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; margin: 0 0 0.75rem;
   padding: 0.6rem 0.9rem; border: 1px solid var(--caution); border-radius: 6px;
   background: var(--caution-bg); color: var(--caution); }
+.reminder[hidden] { display: none; }    /* display:flex above would otherwise override the hidden attribute */
 .reminder code { color: inherit; }
 .reminder .toggle { margin-left: auto; }
 
