@@ -259,7 +259,7 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     Docker network (172.16/12); `/docs`/`/openapi.json` disabled; overrides POSTs admin-only (`require_admin`).
     Never add `--forwarded-allow-ips='*'` to uvicorn.
   - Accounts: `docker compose exec app python -m cfb.users add|reset|list|disable|enable <name> [--admin]`; the user runs
-    `add`/`reset` himself so temporary passwords never appear in chat. LAN logins required too (no IP exceptions).
+    `add`/`reset` themselves so temporary passwords never appear in chat. LAN logins required too (no IP exceptions).
   - Tested 2026-11-14 (18 LAN checks + real login through the tunnel, real public IP logged).
   - **Pending: user to delete the Cloudflare Access app "CFB"** (decision: app login only). Then re-run the curl check
     (expect 303 to `/login`, POST 403/401, `Secure` on the cookie over HTTPS). Until then friends log in twice and
