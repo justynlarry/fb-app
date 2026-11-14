@@ -115,7 +115,15 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     `/coaches/tenures` for interim/mid-season changes. Use as a model-v2 input.
   - Coordinators: no source in CFBD or ESPN. User enters OC/DC in a manual table each
     offseason (step 6).
-  - Injuries: no API (CFBD has none; ESPN college game summaries have none, checked). **Correction
+  - Injuries: no API (CFBD has none; ESPN college game summaries have none, checked). ESPN team endpoints
+    also checked 2026-11-14, all 138 FBS teams: `site/.../teams/{id}` has no injury field (also with
+    `?enable=injuries`), `.../teams/{id}/injuries` returns `{}`, roster `injuries` lists are all empty, and core
+    `sports.core.api.espn.com/.../teams/{id}/injuries` holds only 5 stale 2020–22 notes. ESPN keeps no college data.
+    Paid APIs (docs only, 2026-11-14): SportsDataIO CFB has `/v3/cfb/scores/json/InjuredPlayers` (tracked since
+    2024), but its free trial covers only UEFA Champions League, so CFB needs a paid plan. API-Sports American
+    Football (`APISPORTS_KEY` in `.env`, free 100 req/day, seasons 2022–24 only) tested 2026-11-14: `/injuries?team=`
+    returned 0 for Alabama, Ohio State and Toledo in-season but 10 for an NFL team. Its `/leagues` table lists
+    NCAA injuries only for 2026, and returns nothing. No CFB injury feed; possibly useful if NFL is added. **Correction
     (2026-11-12):** all Power 4 conferences publish availability reports for conference games (SEC since
     2024, ACC and Big 12 since 2025, Big Ten 4/week since 2026, last one 2 h before kickoff), as web pages in
     four formats, name + status only. Not covered: non-conference and G5 games. Use: flag key absences on the
@@ -235,6 +243,12 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
 
 ## Parking lot (not started; pick up when the user asks)
 
+- **Remote access: LIVE since 2026-11-14** at `https://cfb.lokistoboggan.com` (Cloudflare Tunnel, `cloudflared` service
+  in compose, pinned 2026.10.7, token `CLOUDFLARE_TUNNEL_TOKEN` in `.env`; Access app "CFB", team `sr-one`, email
+  allow-list, one-time PIN). Lesson: the tunnel first went live with NO Access policy attached (pages and
+  `POST /api/overrides` open for a few minutes; no writes happened). After any Cloudflare change, check unauthenticated
+  `curl` on `/`, `/docs` and a POST returns 302 to `sr-one.cloudflareaccess.com`. Next: verify `Cf-Access-Jwt-Assertion`
+  in the app (fail closed), user types it. Original plan below.
 - **Remote access (user request 2026-11-11):** reach the app from anywhere, not just LAN/Tailscale.
   - Domain on Cloudflare + **Cloudflare Tunnel**: a `cloudflared` container in compose connects
     *outbound* to Cloudflare and forwards to `http://app:8000` on the Docker network. No inbound
