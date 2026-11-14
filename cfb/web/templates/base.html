@@ -10,6 +10,8 @@
 <body class="{% block body_class %}{% endblock %}">
   <header class="site-header">
     <a class="brand" href="/">CFB Predictor</a>
+    {%- set user = request.state.user if request.state.user is defined else none %}
+    {%- if user %}
     <nav>
       <a href="/scores" class="{{ 'active' if active == 'scores' }}">Scores</a>
       <a href="/predictions" class="{{ 'active' if active == 'predictions' }}">Predictions</a>
@@ -17,6 +19,13 @@
       <a href="/results" class="{{ 'active' if active == 'results' }}">Results</a>
       <a href="/backtest" class="{{ 'active' if active == 'backtest' }}">Backtest</a>
     </nav>
+    <div class="site-user">
+      <a href="/account/password" title="Change password">{{ user.username }}</a>
+      <form method="post" action="/logout">
+        <button type="submit" class="link-button">Log out</button>
+      </form>
+    </div>
+    {%- endif %}
   </header>
   <main>
     {% block content %}{% endblock %}

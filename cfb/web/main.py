@@ -1,15 +1,25 @@
 """Web UI. Pages only read from Postgres; the worker does all the fetching."""
+import ipaddress
 import os
 from pathlib import Path
+from urllib.parse import quote, urlsplit
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
+from cfb.auth import (
+    SESSION_DAYS,
+    authenticate,
+    change_password,
+    create_session,
+    end_session,
+    session_user,
+)
 from cfb.db import connect
 from cfb.model import MODEL_VERSION
 from cfb.picks import make_pick, recorded_pick
@@ -18,9 +28,81 @@ from cfb.qbs import qb_out_suggestion
 WEB_DIR = Path(__file__).parent
 LOCAL_TZ = ZoneInfo(os.environ.get("TZ", "America/Denver"))
 
-app = FastAPI()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=WEB_DIR / "templates")
+
+SESSION_COOKIE = "session"
+DOCKER_NETWORK = ipaddress.ip_network("172.16.0.0/12")   # the cloudflared container lives here
+
+
+def client_ip(request):
+    """The visitor's real IP. Through the tunnel, Cloudflare puts it in a header."""
+    direct = request.client.host if request.client else None
+    if direct and ipaddress.ip_address(direct) in DOCKER_NETWORK:
+        return request.headers.get("cf-connecting-ip") or direct
+    return direct
+
+
+def same_origin(request):
+    """True if a POST came from one of our own pages (blocks cross-site form posts)."""
+    origin = request.headers.get("origin")
+    if origin is None:
+        return False
+    return urlsplit(origin).netloc == request.headers.get("host")
+
+
+def safe_next(url):
+    """Only redirect to our own pages (blocks /login?next_url=https://evil.example)."""
+    if url.startswith("/") and not url.startswith("//") and "\\" not in url:
+        return url
+    return "/"
+
+
+def set_session_cookie(request, response, token):
+    """Store the session token in an HttpOnly cookie."""
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=SESSION_DAYS * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=request.headers.get("x-forwarded-proto") == "https",
+    )
+
+
+def require_admin(request):
+    """Stop non-admins from changing data."""
+    if not request.state.user["is_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can change overrides.")
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    """Every page needs a logged-in user, except the login page and static files."""
+    path = request.url.path
+    if request.method == "POST" and not same_origin(request):
+        return PlainTextResponse("Forbidden", status_code=403)
+    if path == "/login" or path.startswith("/static/"):
+        return await call_next(request)
+
+    with connect() as conn:
+        user = session_user(conn, request.cookies.get(SESSION_COOKIE))
+
+    if user is None:
+        if request.headers.get("hx-request"):
+            # HTMX refresh (scores page): tell the browser to go to the login page
+            return Response(status_code=401, headers={"HX-Redirect": "/login"})
+        if request.method != "GET":
+            return PlainTextResponse("Please log in.", status_code=401)
+        return RedirectResponse("/login?next_url=" + quote(path), status_code=303)
+
+    if user["must_change_password"] and path not in ("/account/password", "/logout"):
+        return RedirectResponse("/account/password", status_code=303)
+
+    request.state.user = user
+    return await call_next(request)
+
 
 # This week's FBS games with their latest live snapshot (if any).
 # "This week" = the week of the next game that hasn't been over for 24+ hours.
@@ -430,6 +512,89 @@ def current_week_games():
     return games
 
 
+@app.get("/login")
+def login_page(request: Request, next_url: str = "/"):
+    """The login form."""
+    return templates.TemplateResponse(
+        request, "login.html", {"error": None, "next_url": safe_next(next_url), "username": ""}
+    )
+
+
+@app.post("/login")
+def login(
+    request: Request,
+    username: str = Form(""),
+    password: str = Form(""),
+    next_url: str = Form("/"),
+):
+    """Check the password; on success set the session cookie and go on."""
+    with connect() as conn:
+        user_id, error = authenticate(conn, username, password, client_ip(request))
+        token = None
+        if user_id is not None:
+            token = create_session(conn, user_id)
+    if error:
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": error, "next_url": safe_next(next_url), "username": username},
+            status_code=401,
+        )
+    response = RedirectResponse(safe_next(next_url), status_code=303)
+    set_session_cookie(request, response, token)
+    return response
+
+
+@app.post("/logout")
+def logout(request: Request):
+    """End this session and go back to the login page."""
+    with connect() as conn:
+        end_session(conn, request.cookies.get(SESSION_COOKIE))
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE)
+    return response
+
+
+@app.get("/account/password")
+def password_page(request: Request):
+    """The change-password form."""
+    forced = request.state.user["must_change_password"]
+    return templates.TemplateResponse(
+        request, "password.html", {"error": None, "done": False, "forced": forced}
+    )
+
+
+@app.post("/account/password")
+def password_change(
+    request: Request,
+    current_password: str = Form(""),
+    new_password: str = Form(""),
+    confirm_password: str = Form(""),
+):
+    """Change your own password."""
+    user = request.state.user
+    if new_password != confirm_password:
+        error = "The two new passwords don't match."
+    else:
+        with connect() as conn:
+            error = change_password(
+                conn, user["id"], current_password, new_password,
+                request.cookies.get(SESSION_COOKIE),
+            )
+    if error:
+        return templates.TemplateResponse(
+            request,
+            "password.html",
+            {"error": error, "done": False, "forced": user["must_change_password"]},
+            status_code=400,
+        )
+    if user["must_change_password"]:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(
+        request, "password.html", {"error": None, "done": True, "forced": False}
+    )
+
+
 @app.get("/")
 def home():
     return RedirectResponse("/scores")
@@ -522,8 +687,9 @@ def overrides_page(request: Request, game_id: int | None = None):
 
 
 @app.post("/api/overrides")
-def add_override(override: OverrideIn):
+def add_override(request: Request, override: OverrideIn):
     """Save one adjustment. The team must be playing in that game."""
+    require_admin(request)
     params = override.model_dump()
     params["reason"] = params["reason"].strip()
     if not params["reason"]:
@@ -547,8 +713,9 @@ def add_override(override: OverrideIn):
 
 
 @app.post("/api/overrides/{override_id}/remove")
-def remove_override(override_id: int):
+def remove_override(request: Request, override_id: int):
     """Switch an override off (kept in the table for history)."""
+    require_admin(request)
     with connect() as conn:
         removed = conn.execute(
             "UPDATE overrides SET active = false WHERE id = %s AND active", (override_id,)

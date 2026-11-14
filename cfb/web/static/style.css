@@ -286,7 +286,7 @@ h2 { font-size: 1.05rem; margin: 1.75rem 0 0.5rem; }
 }
 .field { display: flex; flex-direction: column; gap: 0.3rem; border: 0; padding: 0; margin: 0; min-width: 0; }
 .field > span, .field > legend { font-size: 0.8rem; font-weight: 600; padding: 0; }
-.field select, .field input[type="text"], .field input[type="number"] {
+.field select, .field input[type="text"], .field input[type="number"], .field input[type="password"] {
   font: inherit;
   padding: 0.45rem 0.55rem;
   border: 1px solid var(--border);
@@ -500,3 +500,16 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .results-summary .tier { white-space: nowrap; }
 .outcome.provisional { background: transparent; box-shadow: inset 0 0 0 1px currentColor; }
 .predictions .pick .outcome { margin-left: 0.15rem; }
+
+/* ---------- Login / account ---------- */
+.site-user { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
+.site-user a { text-decoration: none; opacity: 0.85; }
+.site-user a:hover { opacity: 1; text-decoration: underline; }
+.site-user form { margin: 0; }
+.site-user .link-button { color: var(--header-text); opacity: 0.7; }
+.site-user .link-button:hover { opacity: 1; }
+.auth-panel { max-width: 22rem; margin: 3rem auto; padding: 0.5rem 1.25rem 1.25rem; }
+.auth-panel h1 { font-size: 1.3rem; margin: 0.75rem 0 1rem; }
+.auth-form { display: flex; flex-direction: column; gap: 0.9rem; margin-bottom: 0.75rem; }
+.auth-form button.primary { align-self: flex-start; }
+@media (max-width: 480px) { .auth-panel { margin: 1.5rem auto; } }

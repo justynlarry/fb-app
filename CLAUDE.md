@@ -247,8 +247,25 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   in compose, pinned 2026.10.7, token `CLOUDFLARE_TUNNEL_TOKEN` in `.env`; Access app "CFB", team `sr-one`, email
   allow-list, one-time PIN). Lesson: the tunnel first went live with NO Access policy attached (pages and
   `POST /api/overrides` open for a few minutes; no writes happened). After any Cloudflare change, check unauthenticated
-  `curl` on `/`, `/docs` and a POST returns 302 to `sr-one.cloudflareaccess.com`. Next: verify `Cf-Access-Jwt-Assertion`
-  in the app (fail closed), user types it. Original plan below.
+  `curl` on `/`, `/docs` and a POST: expect a redirect to a login (Access's or ours), never a 200.
+- **App login: LIVE since 2026-11-14** (user's choice over Access-only: friends get accounts in the app).
+  - Tables `users`, `sessions`, `login_attempts` (017). `cfb/auth.py`: argon2id password hashes, session token =
+    `secrets.token_urlsafe(32)` in an HttpOnly SameSite=Lax cookie `session` (Secure when `X-Forwarded-Proto: https`),
+    only its sha256 stored, 30 days; rate limit 5 fails/username and 20/IP per 15 min; same message + dummy hash for
+    unknown users; `change_password` logs out other devices.
+  - `cfb/web/main.py`: `require_login` middleware (fails closed: every path except `/login` and `/static/` needs a
+    session; HTMX gets 401 + `HX-Redirect`; temporary passwords forced to `/account/password`); every POST must have a
+    matching `Origin` (CSRF); `safe_next` blocks open redirects; `client_ip` trusts `CF-Connecting-IP` only from the
+    Docker network (172.16/12); `/docs`/`/openapi.json` disabled; overrides POSTs admin-only (`require_admin`).
+    Never add `--forwarded-allow-ips='*'` to uvicorn.
+  - Accounts: `docker compose exec app python -m cfb.users add|reset|list|disable|enable <name> [--admin]`; the user runs
+    `add`/`reset` himself so temporary passwords never appear in chat. LAN logins required too (no IP exceptions).
+  - Tested 2026-11-14 (18 LAN checks + real login through the tunnel, real public IP logged).
+  - **Pending: user to delete the Cloudflare Access app "CFB"** (decision: app login only). Then re-run the curl check
+    (expect 303 to `/login`, POST 403/401, `Secure` on the cookie over HTTPS). Until then friends log in twice and
+    must be on the Access email list.
+  - Typing rule exceptions (one-off, user's request 2026-11-14): Claude typed step 4f and the rest of step 4 in
+    `main.py`. The rule itself is unchanged.
 - **Remote access (user request 2026-11-11):** reach the app from anywhere, not just LAN/Tailscale.
   - Domain on Cloudflare + **Cloudflare Tunnel**: a `cloudflared` container in compose connects
     *outbound* to Cloudflare and forwards to `http://app:8000` on the Docker network. No inbound

@@ -7,6 +7,8 @@
     weather. The model's own numbers are never changed; the predictions page shows both.</p>
 </div>
 
+{%- set is_admin = request.state.user is defined and request.state.user.is_admin %}
+{%- if is_admin %}
 <section class="panel" aria-labelledby="add-title">
   <h2 id="add-title">Add an adjustment</h2>
   {%- if games %}
@@ -57,6 +59,9 @@
   <p class="muted">No games this week.</p>
   {%- endif %}
 </section>
+{%- else %}
+<p class="muted">Only admins can add or remove adjustments.</p>
+{%- endif %}
 
 <h2>Active adjustments</h2>
 <div class="table-wrap">
@@ -72,7 +77,7 @@
         <td class="num {{ 'neg' if o.points < 0 else 'pos' }}">{{ '%+.1f'|format(o.points|float) }}</td>
         <td class="reason">{{ o.reason }}</td>
         <td class="muted small">{{ o.created_at.astimezone(o.local_start.tzinfo).strftime('%b %-d, %-I:%M %p') }}</td>
-        <td><button type="button" class="link-button remove" data-id="{{ o.id }}">Remove</button></td>
+        <td>{% if is_admin %}<button type="button" class="link-button remove" data-id="{{ o.id }}">Remove</button>{% endif %}</td>
       </tr>
       {%- else %}
       <tr><td colspan="6" class="empty">No active adjustments.</td></tr>
