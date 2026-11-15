@@ -107,14 +107,14 @@ async def require_login(request: Request, call_next):
     return await call_next(request)
 
 
-# This week's FBS games with their latest live snapshot (if any).
+# This week's games for one league (FBS only for college) with their latest live snapshot (if any).
 # "This week" = the week of the next game that hasn't been over for 24+ hours.
 SCORES_SQL = """
 WITH current_week AS (
     SELECT season, week, season_type
     FROM games
-    WHERE league = 'cfb'
-      AND 'fbs' IN (home_classification, away_classification)
+    WHERE league = %(league)s
+      AND (league <> 'cfb' OR 'fbs' IN (home_classification, away_classification))
       AND start_time > now() - interval '24 hours'
     ORDER BY start_time
     LIMIT 1
@@ -146,8 +146,8 @@ JOIN current_week w ON w.season = g.season
 JOIN teams h ON h.id = g.home_id
 JOIN teams a ON a.id = g.away_id
 LEFT JOIN live_scores l ON l.game_id = g.id
-WHERE g.league = 'cfb'
-  AND 'fbs' IN (g.home_classification, g.away_classification)
+WHERE g.league = %(league)s
+  AND (g.league <> 'cfb' OR 'fbs' IN (g.home_classification, g.away_classification))
 ORDER BY g.start_time, a.school
 """
 
@@ -313,7 +313,8 @@ SELECT taken,
        count(*) FILTER (WHERE spread_outcome = 'loss') AS losses,
        count(*) FILTER (WHERE spread_outcome = 'push') AS pushes,
        COALESCE(sum(spread_units), 0) AS units,
-       count(*) FILTER (WHERE spread_outcome IS NULL AND side IS NOT NULL) AS pending
+       count(*) FILTER (WHERE spread_outcome IS NULL AND side IS NOT NULL AND start_time <= now()) AS awaiting,
+       count(*) FILTER (WHERE spread_outcome IS NULL AND side IS NOT NULL AND start_time > now()) AS upcoming
 FROM pick_results
 WHERE model_version = %(version)s
 GROUP BY taken, tier
@@ -327,12 +328,81 @@ SELECT taken,
        count(*) FILTER (WHERE total_outcome = 'loss'),
        count(*) FILTER (WHERE total_outcome = 'push'),
        COALESCE(sum(total_units), 0),
-       count(*) FILTER (WHERE total_outcome IS NULL)
+       count(*) FILTER (WHERE total_outcome IS NULL AND start_time <= now()),
+       count(*) FILTER (WHERE total_outcome IS NULL AND start_time > now())
 FROM pick_results
 WHERE model_version = %(version)s
   AND total_side IS NOT NULL
 GROUP BY taken
 """
+
+
+# Our first saved line graded against CFBD's opening line (average of books) at an assumed -110.
+# No line movement exists yet at the open, so 3+ apart = 'play', otherwise 'pass' (no 'caution').
+OPEN_RESULTS_SQL = """
+WITH opening AS (
+    SELECT game_id,
+        avg(spread_open) AS open_spread,
+        avg(over_under_open) AS open_total
+    FROM lines
+    GROUP BY game_id
+),
+picks AS (
+    SELECT p.start_time, p.our_spread, p.our_total,
+        o.open_spread, o.open_total,
+        g.completed,
+        g.away_points - g.home_points AS result,
+        g.away_points + g.home_points AS actual_total
+    FROM pick_results p
+    JOIN opening o ON o.game_id = p.game_id
+    JOIN games g ON g.id = p.game_id
+    WHERE p.model_version = %(version)s
+      AND p.taken = 'first'
+      AND o.open_spread IS NOT NULL
+),
+graded AS (
+    SELECT start_time,
+        CASE WHEN abs(our_spread - open_spread) >= 3 THEN 'play' ELSE 'pass' END AS tier,
+        CASE
+            WHEN NOT completed OR our_spread = open_spread THEN NULL
+            WHEN result = open_spread THEN 'push'
+            WHEN our_spread < open_spread AND result < open_spread THEN 'win'
+            WHEN our_spread > open_spread AND result > open_spread THEN 'win'
+            ELSE 'loss'
+        END AS spread_outcome,
+        abs(our_total - open_total) >= 3 AS total_pick,
+        CASE
+            WHEN NOT completed THEN NULL
+            WHEN actual_total = open_total THEN 'push'
+            WHEN our_total > open_total AND actual_total > open_total THEN 'win'
+            WHEN our_total < open_total AND actual_total < open_total THEN 'win'
+            ELSE 'loss'
+        END AS total_outcome
+    FROM picks
+)
+SELECT 'open' AS taken,
+    tier,
+    count(spread_outcome) AS graded,
+    count(*) FILTER (WHERE spread_outcome = 'win') AS wins,
+    count(*) FILTER (WHERE spread_outcome = 'loss') AS losses,
+    count(*) FILTER (WHERE spread_outcome = 'push') AS pushes,
+    sum(CASE spread_outcome WHEN 'win' THEN 100.0 / 110 WHEN 'loss' THEN -1 ELSE 0 END) AS units
+FROM graded
+GROUP BY tier
+
+UNION ALL
+
+SELECT 'open',
+    'total',
+    count(total_outcome),
+    count(*) FILTER (WHERE total_outcome = 'win'),
+    count(*) FILTER (WHERE total_outcome = 'loss'),
+    count(*) FILTER (WHERE total_outcome = 'push'),
+    sum(CASE total_outcome WHEN 'win' THEN 100.0 / 110 WHEN 'loss' THEN -1 ELSE 0 END)
+FROM graded
+WHERE total_pick
+"""
+
 
 # The last pick before kickoff for every Play, Caution or total from the last 3 weeks (graded or not)
 RECENT_PICKS_SQL = """
@@ -505,11 +575,19 @@ def backtest_summary(group, include_2020):
         ).fetchall()
 
 
-def current_week_games():
-    """Run SCORES_SQL and add each game's kickoff in local time."""
+LEAGUES = ("cfb", "nfl")
+
+
+def pick_league(league):
+    """The league from the URL, or 'cfb' for anything we don't know."""
+    return league if league in LEAGUES else "cfb"
+
+
+def current_week_games(league):
+    """Run SCORES_SQL for one league and add each game's kickoff in local time."""
     with connect() as conn:
         conn.row_factory = dict_row     # rows come back as dicts: g["away"]
-        games = conn.execute(SCORES_SQL).fetchall()
+        games = conn.execute(SCORES_SQL, {"league": league}).fetchall()
     for g in games:
         g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
     return games
@@ -604,18 +682,21 @@ def home():
 
 
 @app.get("/scores")
-def scores_page(request: Request):
-    """The full scores page."""
+def scores_page(request: Request, league: str = "cfb"):
+    """The full scores page for one league (?league=cfb or nfl)."""
+    league = pick_league(league)
     return templates.TemplateResponse(
-        request, "scores.html", {"games": current_week_games(), "active": "scores"}
+        request, "scores.html",
+        {"games": current_week_games(league), "league": league, "active": "scores"},
     )
 
 
 @app.get("/scores/rows")
-def scores_rows(request: Request):
+def scores_rows(request: Request, league: str = "cfb"):
     """Just the table rows; HTMX swaps these in every 30 seconds."""
+    league = pick_league(league)
     return templates.TemplateResponse(
-        request, "_score_rows.html", {"games": current_week_games()}
+        request, "_score_rows.html", {"games": current_week_games(league), "league": league}
     )
 
 
@@ -662,6 +743,7 @@ def results_page(request: Request):
     with connect() as conn:
         conn.row_factory = dict_row
         summary = conn.execute(RESULTS_SUMMARY_SQL, {"version": MODEL_VERSION}).fetchall()
+        summary += conn.execute(OPEN_RESULTS_SQL, {"version": MODEL_VERSION}).fetchall()
         recent = conn.execute(RECENT_PICKS_SQL, {"version": MODEL_VERSION}).fetchall()
         shopping = conn.execute(SHOPPING_SQL, {"version": MODEL_VERSION}).fetchall()
     for r in recent:

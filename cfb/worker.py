@@ -1,6 +1,6 @@
 """Background worker.
 
-- Every 30 s (game time) or 10 min (otherwise): live scores from ESPN.
+- Every 30 s (game time) or 10 min (otherwise): live scores from ESPN, college and NFL.
 - Every day at 5 AM: refresh this season from CFBD (games, stats, lines, latest week's QBs:
   4 calls), re-predict upcoming games, and save kickoff weather forecasts (Open-Meteo).
   If it didn't finish, it's retried at 5:30 and 7:30.
@@ -30,14 +30,13 @@ last_daily_ok = None    # date the daily update last finished (reset if the work
 
 
 def games_window_open():
-    """True if any game kicked off in the last 5 hours or kicks off in the next 15 minutes."""
+    """True if any game (any league) kicked off in the last 5 hours or kicks off in the next 15 minutes."""
     with connect() as conn:
         row = conn.execute(
             """
             SELECT EXISTS (
                 SELECT 1 FROM games
-                WHERE league = 'cfb'
-                    AND start_time BETWEEN now() - interval '5 hours'
+                WHERE start_time BETWEEN now() - interval '5 hours'
                                        AND now() + interval '15 minutes'
             )
             """

@@ -513,3 +513,15 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .auth-form { display: flex; flex-direction: column; gap: 0.9rem; margin-bottom: 0.75rem; }
 .auth-form button.primary { align-self: flex-start; }
 @media (max-width: 480px) { .auth-panel { margin: 1.5rem auto; } }
+
+/* Results summary: one divider between the Early and Late groups (overrides the backtest table's every-2-columns rules) */
+.results-summary th, .results-summary td { border-left: none !important; }
+.results-summary th.late-group,
+.results-summary td:nth-child(6),
+.results-summary td:nth-child(10) { border-left: 2px solid var(--good) !important; }
+
+/* ---------- League tabs (scores page) ---------- */
+.league-tabs { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 1rem; }
+.league-tabs a { padding: 0.4rem 0.9rem; font-size: 0.85rem; color: var(--muted); text-decoration: none; background: var(--surface); }
+.league-tabs a + a { border-left: 1px solid var(--border); }
+.league-tabs a.active { background: var(--accent); color: #fff; }

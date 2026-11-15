@@ -22,6 +22,7 @@ NAME_FIXES = {
     "Appalachian State Mountaineers": "App State Mountaineers",
     "Sam Houston State Bearkats": "Sam Houston Bearkats",
     "Southern Mississippi Golden Eagles": "Southern Miss Golden Eagles",
+    "UMass Minutemen": "Massachusetts Minutemen",
 }
 
 

@@ -3,18 +3,28 @@
 {% block title %}Results{% endblock %}
 {% block body_class %}wide{% endblock %}
 
-{#- W-L-P, win % (pushes left out) and units for one summary row -#}
+{#- 95% interval on a win rate, in points: 1.96 x sqrt(p(1-p)/n) -#}
+{%- macro ci(wins, decided) -%}
+  {%- if decided -%}{%- set p = wins / decided -%}±{{ '%.0f'|format(196 * (p * (1 - p) / decided) ** 0.5) }}{%- endif -%}
+{%- endmacro -%}
+
+{#- Picks whose game has kicked off but isn't graded yet.  Falls back to the old combined count. -#}
+{%- macro awaiting(r) -%}
+  {{- (r.awaiting if r.awaiting is defined else r.pending) if r else 0 -}}
+{%- endmacro -%}
+
+{#- W-L-P, win % (pushes left out, with its 95% interval) and units for one summary row -#}
 {%- macro record(r) -%}
   {%- if r and r.graded > 0 -%}
     {%- set decided = r.wins + r.losses -%}
     <td class="num">{{ r.wins }}–{{ r.losses }}{% if r.pushes %}–{{ r.pushes }}{% endif %}</td>
-    <td class="num {{ 'good-text' if decided and r.wins / decided >= 0.524 }}">{{ '%.1f'|format(100 * r.wins / decided) if decided else '–' }}{{ '%' if decided }}</td>
+    <td class="num"><span class="{{ 'good-text' if decided and r.wins / decided >= 0.524 }}">{{ '%.1f'|format(100 * r.wins / decided) if decided else '–' }}{{ '%' if decided }}</span>
+      {%- if decided %} <span class="muted small">{{ ci(r.wins, decided) }}</span>{% endif %}</td>
     <td class="num units {{ 'pos' if r.units|float > 0 else ('neg' if r.units|float < 0) }}">{{ '%+.2f'|format(r.units|float) }}</td>
     <td class="num">{{ '%+.1f'|format(100 * r.units|float / r.graded) }}%</td>
   {%- else -%}
     <td class="num muted">–</td><td class="num muted">–</td><td class="num muted">–</td><td class="num muted">–</td>
   {%- endif -%}
-  <td class="num muted">{{ r.pending if r else 0 }}</td>
 {%- endmacro -%}
 
 {%- macro outcome_badge(outcome, units) -%}
@@ -46,13 +56,13 @@
       {%- set decided = r.wins + r.losses %}
       <div class="card-value">{{ r.wins }}–{{ r.losses }}{% if r.pushes %}–{{ r.pushes }}{% endif %}</div>
       <div class="card-sub">
-        {{ '%.1f'|format(100 * r.wins / decided) if decided else '–' }}% ·
+        {{ '%.1f'|format(100 * r.wins / decided) if decided else '–' }}%{% if decided %} {{ ci(r.wins, decided) }}{% endif %} ·
         <span class="units {{ 'pos' if r.units|float > 0 else ('neg' if r.units|float < 0) }}">{{ '%+.2f'|format(r.units|float) }} units</span>
-        {%- if r.pending %} · {{ r.pending }} pending{% endif %}
+        {%- set w = awaiting(r)|int %}{% if w %} · {{ w }} awaiting result{% endif %}
       </div>
     {%- else %}
       <div class="card-value muted">–</div>
-      <div class="card-sub">{{ r.pending if r else 0 }} pending · no graded picks yet</div>
+      <div class="card-sub">no graded picks yet{% set w = awaiting(r)|int %}{% if w %} · {{ w }} awaiting result{% endif %}</div>
     {%- endif %}
   </div>
   {%- endfor %}
@@ -69,13 +79,15 @@
     <thead>
       <tr class="group-head">
         <th></th>
-        <th colspan="5">First pick we saved</th>
-        <th colspan="5" class="open-group">Last pick before kickoff</th>
+        <th colspan="4">Early: first line we saved</th>
+        <th colspan="4" class="late-group">Late: last line before kickoff</th>
+        <th colspan="4" class="late-group">True open: CFBD average at −110</th>
       </tr>
       <tr>
         <th>Tier</th>
-        <th class="num">W–L–P</th><th class="num">Win %</th><th class="num">Units</th><th class="num">ROI</th><th class="num">Pending</th>
-        <th class="num open-group">W–L–P</th><th class="num">Win %</th><th class="num">Units</th><th class="num">ROI</th><th class="num">Pending</th>
+        <th class="num">W–L–P</th><th class="num">Win % <span class="muted small">±95%</span></th><th class="num">Units</th><th class="num">ROI</th>
+        <th class="num late-group">W–L–P</th><th class="num">Win % <span class="muted small">±95%</span></th><th class="num">Units</th><th class="num">ROI</th>
+        <th class="num late-group">W–L–P</th><th class="num">Win % <span class="muted small">±95%</span></th><th class="num">Units</th><th class="num">ROI</th>
       </tr>
     </thead>
     <tbody>
@@ -84,14 +96,33 @@
         <td class="label"><span class="tier tier-{{ 'info' if tier == 'total' else tier }}">{{ label }}</span></td>
         {{ record(by.get(('first', tier))) }}
         {{ record(by.get(('last', tier))) }}
+        {{ record(by.get(('open', tier))) }}
       </tr>
       {%- endfor %}
     </tbody>
   </table>
 </div>
-<p class="muted small">Break-even at −110 is 52.4% (win % in green when above it). ROI = units won per unit risked.
-  Pass rows grade the side we leaned to, for comparison; they aren't bets. "First" is usually the line days before the
-  game; comparing it with "last" shows whether betting early pays.</p>
+{%- set ns = namespace(spread=0, total=0, known=false) %}
+{%- for r in summary if r.taken == 'last' and r.upcoming is defined %}
+  {%- set ns.known = true %}
+  {%- if r.tier == 'total' %}{% set ns.total = ns.total + r.upcoming %}{% elif r.tier in ('play', 'caution') %}{% set ns.spread = ns.spread + r.upcoming %}{% endif %}
+{%- endfor %}
+{%- if ns.known and (ns.spread or ns.total) %}
+<p class="muted small">Not in the table yet: picks for games that haven't kicked off
+  ({{ ns.spread }} Play/Caution, {{ ns.total }} totals). They can still change with the line until the last snapshot
+  before kickoff, then they're graded the morning after the game.</p>
+{%- endif %}
+<p class="muted small">Break-even at −110 is 52.4% (win % in green when above it). ±95% is the margin of error on the
+  win rate: with this few picks, anything inside it can't be told apart from a coin flip. Pass rows grade the side we
+  leaned to, for comparison; they aren't bets.</p>
+<p class="muted small"><strong>Which line?</strong> Neither column is exactly the market open or close. Each pick is
+  graded at the best number and price across books at the moment we saved it. Lines are saved every morning at 6 AM,
+  Sunday at 4 and 8 PM (soon after openers are posted), and Saturday at 9 AM and noon (Mountain). "Early" is the first
+  save for a game, usually Sunday afternoon (week 11: Thursday, Nov 12, when tracking began). "Late" is the last save
+  before kickoff: noon Saturday for afternoon and night games, 6 AM the same day for weeknight games, so it can be
+  several hours before the true close. "True open" grades our first saved line against CFBD's opening line (average of
+  the books' openers) at an assumed −110: the real open, but not a number or price you could have bet at one book.
+  At the open there's no line movement yet, so every 3+ gap is a Play (no Caution row) and the rest are Pass.</p>
 
 <h2 class="section-title">Line shopping: best book vs. the median</h2>
 {%- set shop = {} %}

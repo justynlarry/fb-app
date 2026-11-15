@@ -243,6 +243,14 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
 
 ## Parking lot (not started; pick up when the user asks)
 
+- **NFL live scores (built 2026-11-15; Claude typed the Python that day at the user's request, rule unchanged).**
+  `cfb/espn.py` polls `LEAGUES = ("cfb", "nfl")`, each in its own try. For leagues in `SCHEDULE_FROM_ESPN` (NFL),
+  `sync_schedule` upserts that week's teams (`school` = ESPN displayName, e.g. "Detroit Lions") and games by
+  (league, espn_id); final scores go into `games` only when ESPN's `status.type.completed` is true (postponed games
+  are also state "post"). Scores page: `/scores?league=nfl` (tabs), `SCORES_SQL` takes `%(league)s`, FBS filter
+  only for cfb. NFL logos: `teamlogos/nfl/500/{espn_id}.png`. Next NFL steps (not started): nflverse backfill +
+  backtest (Dec–Jan), live predictions for 2027. The Odds API NFL would add ~2 credits per snapshot.
+
 - **Remote access: LIVE since 2026-11-14** at `https://cfb.lokistoboggan.com` (Cloudflare Tunnel, `cloudflared` service
   in compose, pinned 2026.10.7, token `CLOUDFLARE_TUNNEL_TOKEN` in `.env`; Access app "CFB", team `sr-one`, email
   allow-list, one-time PIN). Lesson: the tunnel first went live with NO Access policy attached (pages and

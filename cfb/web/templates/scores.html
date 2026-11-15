@@ -1,9 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Scores{% endblock %}
 {% block content %}
-<div class="page-head">
-  <h1>FBS Scores</h1>
-  <p class="muted">Updates every 30 seconds · times in Mountain</p>
+{%- set league = league | default('cfb') %}
+<div class="page-head page-head-row">
+  <div>
+    <h1>{{ 'NFL' if league == 'nfl' else 'FBS' }} Scores</h1>
+    <p class="muted">Updates every 30 seconds · times in Mountain</p>
+  </div>
+  <nav class="league-tabs" aria-label="League">
+    <a href="/scores?league=cfb" class="{{ 'active' if league == 'cfb' }}" {{ 'aria-current="page"' if league == 'cfb' }}>College</a>
+    <a href="/scores?league=nfl" class="{{ 'active' if league == 'nfl' }}" {{ 'aria-current="page"' if league == 'nfl' }}>NFL</a>
+  </nav>
 </div>
 
 <div class="table-wrap">
@@ -20,7 +27,7 @@
         <th>Line</th>
       </tr>
     </thead>
-    <tbody hx-get="/scores/rows" hx-trigger="every 30s" hx-swap="innerHTML">
+    <tbody hx-get="/scores/rows?league={{ league }}" hx-trigger="every 30s" hx-swap="innerHTML">
       {% include "_score_rows.html" %}
     </tbody>
   </table>

@@ -3,23 +3,43 @@
 ESPN doesn't document this feed and can change it without notice, so every
 field is read with .get() and one strange game never stops the rest.
 For college football, ESPN's event and team ids are the same as CFBD's.
+For the NFL, ESPN is also the schedule source: each poll adds or updates
+that week's teams and games (sync_schedule).  ESPN reuses id numbers across
+leagues, so every lookup is by (league, espn_id).
 """
+
+from datetime import datetime
 
 import httpx
 
 from cfb.db import connect
 
-SCOREBOARD_URL = (
-    "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard"
-)
-FBS_GROUP = 80      # ESPN's code for "all FBS games"
+# One ESPN scoreboard per league.  "groups": 80 = all FBS games; the NFL feed needs no filter.
+SCOREBOARDS = {
+    "cfb": ("https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard",
+            {"groups": 80, "limit": 300}),
+    "nfl": ("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+            {}),
+}
+LEAGUES = ("cfb", "nfl")
+SCHEDULE_FROM_ESPN = ("nfl",)       # leagues whose teams/games come from ESPN (college uses CFBD)
+SEASON_TYPES = {1: "preseason", 2: "regular", 3: "postseason"}  # ESPN's season "type" codes
 
 
-def fetch_scoreboard():
-    """Download this week's FBS scoreboard from ESPN."""
-    resp = httpx.get(SCOREBOARD_URL, params={"groups": FBS_GROUP, "limit": 300}, timeout=20)
+def fetch_scoreboard(league):
+    """Download this week's scoreboard for one league ('cfb' or 'nfl') from ESPN."""
+    url, params = SCOREBOARDS[league]
+    resp = httpx.get(url, params=params, timeout=20)
     resp.raise_for_status()
     return resp.json()
+
+
+def parse_time(value):
+    """ESPN's '2026-11-15T18:00Z' as a UTC datetime.  Missing or odd becomes None."""
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def to_int(value):
@@ -46,6 +66,17 @@ def team_record(side, record_type):
     return None
 
 
+def team_info(side):
+    """The team fields we store, from one competitor."""
+    team = side.get("team", {})
+    return {
+        "espn_id": to_int(team.get("id")),
+        "name": team.get("displayName"),            # 'Detroit Lions'
+        "mascot": team.get("name"),                 # 'Lions'
+        "abbreviation": team.get("abbreviation"),   # 'DET'
+    }
+
+
 def parse_event(event):
     """Turn one ESPN event into a flat dict of the fields we store."""
     comp = event["competitions"][0]
@@ -61,6 +92,15 @@ def parse_event(event):
 
     return {
         "espn_id": to_int(event.get("id")),
+        "start_time": parse_time(event.get("date")),
+        "time_valid": comp.get("timeValid", True),      # False while the kickoff is TBD
+        "completed": status_type.get("completed", False),   # True only for a real final
+        "season": event.get("season", {}).get("year"),
+        "season_type": SEASON_TYPES.get(event.get("season", {}).get("type")),
+        "week": event.get("week", {}).get("number"),
+        "neutral_site": comp.get("neutralSite", False),
+        "home_team": team_info(home),
+        "away_team": team_info(away),
         "state": status_type.get("state"),              # 'pre', 'in', 'post'
         "status_detail": status_type.get("shortDetail"),
         "period": status.get("period"),
@@ -94,18 +134,75 @@ def parse_scoreboard(data):
     return games
 
 
-def save_live_scores(games):
+def sync_schedule(league, games):
+    """Add or update this week's teams and games from ESPN (leagues in SCHEDULE_FROM_ESPN)."""
+    with connect() as conn:
+        for g in games:
+            home, away = g["home_team"], g["away_team"]
+            needed = (g["espn_id"], g["start_time"], g["season"], g["week"], g["season_type"],
+                      home["espn_id"], home["name"], away["espn_id"], away["name"])
+            if None in needed:
+                print(f"ESPN: {league} game {g['espn_id']} is missing schedule fields, skipping")
+                continue
+
+            team_ids = {}
+            for side, t in (("home", home), ("away", away)):
+                row = conn.execute(
+                    """
+                    INSERT INTO teams (league, espn_id, school, mascot, abbreviation)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (league, espn_id) DO UPDATE SET
+                        school       = EXCLUDED.school,
+                        mascot       = EXCLUDED.mascot,
+                        abbreviation = EXCLUDED.abbreviation
+                    RETURNING id
+                    """,
+                    (league, t["espn_id"], t["name"], t["mascot"], t["abbreviation"]),
+                ).fetchone()
+                team_ids[side] = row[0]
+
+            # Final scores go in games only once ESPN says the game is over (not postponed);
+            # live scores stay in live_scores.
+            done = g["completed"]
+            conn.execute(
+                """
+                INSERT INTO games (league, espn_id, season, week, season_type, start_time,
+                                   start_time_tbd, neutral_site, home_id, away_id,
+                                   home_points, away_points, completed)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (league, espn_id) DO UPDATE SET
+                    season         = EXCLUDED.season,
+                    week           = EXCLUDED.week,
+                    season_type    = EXCLUDED.season_type,
+                    start_time     = EXCLUDED.start_time,
+                    start_time_tbd = EXCLUDED.start_time_tbd,
+                    neutral_site   = EXCLUDED.neutral_site,
+                    home_id        = EXCLUDED.home_id,
+                    away_id        = EXCLUDED.away_id,
+                    home_points    = EXCLUDED.home_points,
+                    away_points    = EXCLUDED.away_points,
+                    completed      = EXCLUDED.completed
+                """,
+                (league, g["espn_id"], g["season"], g["week"], g["season_type"], g["start_time"],
+                 not g["time_valid"], g["neutral_site"], team_ids["home"], team_ids["away"],
+                 g["home_score"] if done else None, g["away_score"] if done else None, done),
+            )
+
+
+def save_live_scores(league, games):
     """Insert or update one live_scores row per game.  Returns how many were saved."""
     with connect() as conn:
         # ESPN id -> our id, for games and for teams (possession)
         game_ids = dict(
             conn.execute(
-                "SELECT espn_id, id FROM games WHERE league = 'cfb' AND espn_id IS NOT NULL"
+                "SELECT espn_id, id FROM games WHERE league = %s AND espn_id IS NOT NULL",
+                (league,),
             ).fetchall()
         )
         team_ids = dict(
             conn.execute(
-                "SELECT espn_id, id FROM teams WHERE league = 'cfb' AND espn_id IS NOT NULL"
+                "SELECT espn_id, id FROM teams WHERE league = %s AND espn_id IS NOT NULL",
+                (league,),
             ).fetchall()
         )
 
@@ -113,7 +210,7 @@ def save_live_scores(games):
         for g in games:
             game_id = game_ids.get(g["espn_id"])
             if game_id is None:
-                print(f"ESPN: game {g['espn_id']} isn't in our games table, skipping")
+                print(f"ESPN: {league} game {g['espn_id']} isn't in our games table, skipping")
                 continue
 
             conn.execute(
@@ -176,10 +273,46 @@ def save_live_scores(games):
     return saved
 
 
+def update_start_times(league, games):
+    """Move kickoffs that ESPN has changed since CFBD's 5 AM refresh.  Returns how many moved."""
+    moved = 0
+    with connect() as conn:
+        for g in games:
+            # Only games that haven't started, with a real time (not TBD)
+            if g["state"] != "pre" or g["start_time"] is None or not g["time_valid"]:
+                continue
+            row = conn.execute(
+                """
+                UPDATE games
+                SET start_time = %s, start_time_tbd = false
+                WHERE league = %s
+                  AND espn_id = %s
+                  AND (start_time <> %s OR start_time_tbd)
+                RETURNING id
+                """,
+                (g["start_time"], league, g["espn_id"], g["start_time"]),
+            ).fetchone()
+            if row:
+                print(f"ESPN: {league} game {row[0]} kickoff moved to {g['start_time']:%Y-%m-%d %H:%M} UTC")
+                moved += 1
+    return moved
+
+
 def poll():
-    """One poll: fetch, parse, save.  Returns how many games are live right now."""
-    games = parse_scoreboard(fetch_scoreboard())
-    saved = save_live_scores(games)
-    live = sum(1 for g in games if g["state"] == "in")
-    print(f"ESPN poll: {saved} saved, {live} live")
+    """One poll of every league: fetch, parse, save.  Returns how many games are live right now."""
+    live = 0
+    for league in LEAGUES:
+        try:
+            games = parse_scoreboard(fetch_scoreboard(league))
+            if league in SCHEDULE_FROM_ESPN:
+                sync_schedule(league, games)
+            saved = save_live_scores(league, games)
+            update_start_times(league, games)
+        except Exception as err:
+            # One league's feed failing must not stop the other
+            print(f"ESPN {league} poll failed: {err!r}")
+            continue
+        league_live = sum(1 for g in games if g["state"] == "in")
+        print(f"ESPN {league} poll: {saved} saved, {league_live} live")
+        live += league_live
     return live

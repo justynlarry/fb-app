@@ -1,11 +1,11 @@
 {#- Shared pieces used by more than one page. -#}
 
-{%- macro team_cell(name, espn_id, rank, record, conf_record, has_ball=false, won=false) -%}
+{%- macro team_cell(name, espn_id, rank, record, conf_record, has_ball=false, won=false, league='cfb') -%}
   <td class="team {{ 'winner' if won }}">
     <div class="team-cell">
       {%- if espn_id %}
       <img class="logo" alt="" loading="lazy" width="24" height="24"
-           src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500/{{ espn_id }}.png&h=48&w=48"
+           src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/{{ 'nfl' if league == 'nfl' else 'ncaa' }}/500/{{ espn_id }}.png&h=48&w=48"
            onerror="this.style.visibility='hidden'">
       {%- endif %}
       <div>

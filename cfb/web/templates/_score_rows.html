@@ -1,6 +1,7 @@
 {#- Table rows only. Returned by /scores/rows and swapped into the page by HTMX.
     Fields that aren't in the data yet (e.g. before a query change) just don't show. -#}
 {%- set COLS = 8 -%}
+{%- set league = league | default('cfb') -%}
 
 {%- macro timeouts(n) -%}
   {%- if n is none -%}
@@ -26,8 +27,8 @@
 <tr class="day-break"><th colspan="{{ COLS }}" scope="colgroup">{{ day }}</th></tr>
 {%- endif %}
 <tr class="state-{{ state }}">
-  {{ team_cell(g.away, g.away_espn_id, g.away_rank, g.away_record, g.away_conf_record, g.away_has_ball, away_won) }}
-  {{ team_cell(g.home, g.home_espn_id, g.home_rank, g.home_record, g.home_conf_record, g.home_has_ball, home_won) }}
+  {{ team_cell(g.away, g.away_espn_id, g.away_rank, g.away_record, g.away_conf_record, g.away_has_ball, away_won, league) }}
+  {{ team_cell(g.home, g.home_espn_id, g.home_rank, g.home_record, g.home_conf_record, g.home_has_ball, home_won, league) }}
   <td class="kickoff">
     {%- if state == 'pre' -%}
       {% if g.start_time_tbd %}TBD{% else %}{{ g.local_start.strftime('%-I:%M %p') }}{% endif %}
@@ -64,5 +65,5 @@
   </td>
 </tr>
 {%- else %}
-<tr><td colspan="{{ COLS }}" class="empty">No FBS games this week.</td></tr>
+<tr><td colspan="{{ COLS }}" class="empty">No {{ 'NFL' if league == 'nfl' else 'FBS' }} games this week.</td></tr>
 {%- endfor %}
