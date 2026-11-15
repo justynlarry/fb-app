@@ -248,8 +248,16 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `sync_schedule` upserts that week's teams (`school` = ESPN displayName, e.g. "Detroit Lions") and games by
   (league, espn_id); final scores go into `games` only when ESPN's `status.type.completed` is true (postponed games
   are also state "post"). Scores page: `/scores?league=nfl` (tabs), `SCORES_SQL` takes `%(league)s`, FBS filter
-  only for cfb. NFL logos: `teamlogos/nfl/500/{espn_id}.png`. Next NFL steps (not started): nflverse backfill +
-  backtest (Dec–Jan), live predictions for 2027. The Odds API NFL would add ~2 credits per snapshot.
+  only for cfb. NFL logos: `teamlogos/nfl/500/{espn_id}.png`. Next NFL steps: backtest (Dec–Jan), live
+  predictions for 2027. The Odds API NFL would add ~2 credits per snapshot.
+- **NFL backfill (`cfb/nflverse.py`, Claude-typed 2026-11-15):** `python -m cfb.nflverse 2016-2025` (any years;
+  re-running upserts, which is also how to refresh 2026). Teams from ESPN's team list (32); games from nflverse
+  `nfldata/games.csv`, matched by its `espn` column = ESPN event id; closing spread/total → `lines` provider
+  'nflverse' (sign flipped: nflverse `spread_line` +3 = home favored); play-by-play parquet → `team_game_stats`
+  (pass/rush plays with EPA, no 2-pt tries, garbage time = win prob outside 5–95%; explosiveness = mean EPA on
+  successful plays; success = nflverse's EPA>0, not CFBD's yardage rule, so never mix leagues in one metric).
+  Abbreviation fixes LA→LAR, OAK→LV, SD→LAC, WAS→WSH. No raw files kept (free to re-download). ~4 s per season.
+  NFL 2020 had no crowds (home field ≈ 0): flag it in the backtest.
 
 - **Remote access: LIVE since 2026-11-14** at `https://cfb.lokistoboggan.com` (Cloudflare Tunnel, `cloudflared` service
   in compose, pinned 2026.10.7, token `CLOUDFLARE_TUNNEL_TOKEN` in `.env`; Access app "CFB", team `sr-one`, email
