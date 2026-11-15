@@ -261,9 +261,14 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   - Accounts: `docker compose exec app python -m cfb.users add|reset|list|disable|enable <name> [--admin]`; the user runs
     `add`/`reset` themselves so temporary passwords never appear in chat. LAN logins required too (no IP exceptions).
   - Tested 2026-11-14 (18 LAN checks + real login through the tunnel, real public IP logged).
-  - **Pending: user to delete the Cloudflare Access app "CFB"** (decision: app login only). Then re-run the curl check
-    (expect 303 to `/login`, POST 403/401, `Secure` on the cookie over HTTPS). Until then friends log in twice and
-    must be on the Access email list.
+  - **Cloudflare Access app "CFB" deleted 2026-11-14**; the app login is the only gate. Verified over the internet:
+    every page 303 → `/login` (incl. `/docs`), HTMX 401 + `HX-Redirect`, POST without Origin 403 / without session 401,
+    forged cookie rejected, `next_url=https://…` → `/`, cookie `Secure` over HTTPS, real visitor IP logged (Cloudflare
+    itself 403s a client-sent `CF-Connecting-IP`).
+  - **HTTP → HTTPS is done in the app** (first lines of `require_login`: `X-Forwarded-Proto: http` + `CF-Connecting-IP`
+    → 301 to the same URL on https). Cloudflare's "Always Use HTTPS" was switched on twice on 2026-11-14 but never took
+    effect (cause unknown); the app redirect works regardless. LAN `http://192.168.0.81:8000` is unaffected.
+    HSTS not enabled yet (hard to undo; consider after a few weeks on HTTPS).
   - Typing rule exceptions (one-off, user's request 2026-11-14): Claude typed step 4f and the rest of step 4 in
     `main.py`. The rule itself is unchanged.
 - **Remote access (user request 2026-11-11):** reach the app from anywhere, not just LAN/Tailscale.

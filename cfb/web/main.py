@@ -81,6 +81,9 @@ def require_admin(request):
 async def require_login(request: Request, call_next):
     """Every page needs a logged-in user, except the login page and static files."""
     path = request.url.path
+    # Plain http:// through Cloudflare: send the browser to https:// before anything else
+    if request.headers.get("x-forwarded-proto") == "http" and request.headers.get("cf-connecting-ip"):
+        return RedirectResponse(str(request.url.replace(scheme="https")), status_code=301)
     if request.method == "POST" and not same_origin(request):
         return PlainTextResponse("Forbidden", status_code=403)
     if path == "/login" or path.startswith("/static/"):
