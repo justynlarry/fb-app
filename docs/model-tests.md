@@ -61,6 +61,15 @@ other variants.
 all games with an opening line, 2021–25. Its SE comes from a paired bootstrap: 2,000 resamples of games, with both
 models scored on the same resampled games. **Pass if Δslope ≥ 1.645 × paired SE** (one-sided 95%).
 
+**Amended 2026-11-16 (user decision), for every test registered from this date:**
+- **Pass bar 2.24 × paired SE** (one-sided 1.25%). With four new models planned, the chance that at least one
+  passes by luck is about 5%; at 1.645 it would be about 19%. The cost is that real but small effects fail more
+  often.
+- **"The open" is Bovada's `spread_open`**, with Bovada's own close for CLV (2021–25, n ≈ 4,170). The average of
+  books mixes in DraftKings and ESPN Bet lookahead lines from 2023 on.
+- A pass makes a candidate for a frozen holdout, never an adoption by itself.
+- Tests 6–7 keep the bar they were registered with. Holdout 5A moves to 2.24 (see 5A).
+
 **Supporting checks** (all must hold):
 - ATS 3+ at open not down by more than 1.0 percentage point.
 - CLV % not down by more than 1.0 percentage point.
@@ -106,7 +115,10 @@ the season-count condition is noisy, not because of a double standard.
 
 ### Pick rules (live)
 The logic lives in `cfb/picks.py make_pick()`, which both the page and `record_picks` use. `PICK_RATES_SQL`
-repeats it for the backtest rates, so change both together.
+gives the backtest rates (since 2026-11-16: Play and Pass graded at the Bovada open, 52.4% n=2,094 and 51.0%
+n=1,999; Caution at the close with the same moved-against test), so change both together. `pick_results`
+"first" = the pick at bet time (first snapshot with 4+ books, 8+ hours after both teams' previous kickoff;
+`019_pick_bet_time.sql`), not the first pick logged; lookahead picks stay in `pick_log` ungraded.
 
 | Tier | Rule |
 |---|---|
@@ -247,6 +259,8 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 | T6-B | 11-13 | Leave-one-out (diagnostic) | Info | Coach career carries it: +0.038 ± 0.019 (2.0 SE); without it ATS 3+ open 51.89%. Drive groups add nothing: ppo −0.002 ± 0.002, opp_rate −0.006 ± 0.004, start_ytg +0.001 ± 0.003. |
 | T6-C | 11-13 | Selection on 2021–23 (drops all 3 drive groups) → v5 + coach career, confirmed once on 2024–25 at 1.96 SE | **Failed** | Δslope +0.059 ± 0.033 = 1.80 SE (bar 1.96); ATS 3+ open 53.11 vs 52.98% (n=883, ±3.3); spread miss 12.562 vs 12.620. |
 | T7 | 11-13 | Weather for totals: forecasts in the test season, observed weather in training; judged at the close | **Rejected** | Total slope at close Δ +0.014 ± 0.015 (0.97 SE). O/U 3+ at close 49.98 vs 50.02% (n≈2,110). Total miss 12.965 vs 12.971. Spread no-harm check also failed, by a trivial amount (−0.0006 ± 0.0003). Learned effects: rain −2.5 pts per team per inch; wind −0.14 per mph. |
+| C | 11-16 | Per-metric ridge shrinkage (alphas from 2017–19 next-game error: EPA 2, SR 2, explosiveness 8, pass/rush EPA 4, plays 4, points 2) | **Rejected** | Bovada open 2021–25 (n=4,169): Δslope −0.002 ± 0.007 (−0.36 SE; bar 2.24). ATS 3+ 52.41 → 52.42%. CLV pts 0.562 → 0.508 (−3.5 paired SE). Spread MAE 12.826 → 12.891, worse in all 5 seasons. Weeks-played 5+ Δslope −0.006. Ratings predict next-game metrics 1–9% better, but the points model gets worse. |
+| F | 11-16 | DraftKings lookahead: v5 with ratings one week staler, at the DK open 2023–25 | **Supported** (tag and track in 2027; no betting on this alone) | n=2,150. Slope +0.175 ± 0.063 (2.77 SE; bar 2.24); by season +0.15/+0.28/+0.09. Bovada Sunday open moved toward us by +0.73 ± 0.09 pts on 3+ gaps (n=1,124). Info: ATS 3+ at the DK open 53.5% (604–525, ±2.9) vs 55.4% for normal v5, whose slope +0.225 is inflated by lookahead. Caveat: some DK opens are older than one week, which flatters this. |
 
 ### Slope metric (added 2026-11-13; information only for past decisions)
 **What it measures.** The slope is a continuous measure of edge that uses every game, not just the 3+ ones.
@@ -322,6 +336,22 @@ narrowly missed confirmation (T6-C). Confirm it on the 2026 holdout (pre-registr
 to coach career as a **learned points-model feature**, the version that carried Test 6. The change was made before
 any 2026 run of either version.
 
+**Second amendment (2026-11-16, before any 2026 run of this idea; no 2026 coach-career result has been seen).**
+The opening line for this holdout is **Bovada's `spread_open`**, not the average of books. Reason
+(`docs/audit-2026-11-16.md` 1.1): DraftKings' `spread_open` is a lookahead line posted before the previous
+week's games, so the average of books is half stale in 2026, where only Bovada and DraftKings have opens.
+- **Primary:** every metric below that says "at the open" is graded at the Bovada open. CLV uses Bovada's own
+  close. The games are every completed 2026 FBS-involved game with a Bovada open.
+- **Reported beside it, not used for the outcome:** the same metrics at the mixed open (average of books), as
+  first written.
+- **Small sample.** One season at one book: about 750 games and about 370 3+ picks (±5.1 on a win rate). The
+  one-season paired SE of Δslope is about 0.02, so power for an effect of +0.03 to +0.04 is still only 40–60%.
+  "Consistent" is the most likely outcome even if the effect is real.
+- **Bar raised to 2.24 × paired SE** (user decision 2026-11-16, before any 2026 result): "Confirmed" below now
+  needs Δslope ≥ 2.24 × paired SE instead of 1.645. This only makes the holdout harder to pass; with a
+  one-season paired SE of about 0.02 it needs Δslope of about +0.045, so "Confirmed" is unlikely and
+  "Consistent" (track in 2027) is the expected outcome even for a real effect.
+
 **Clean check.** 2026 hasn't been looked at for this idea.
 - `coach_test.py`, `slope.py` and `t6.py` all stop at 2025.
 - The 2026 analysis (`season2026.py`) scored plain v5 with no coach input.
@@ -344,7 +374,7 @@ after 2026-12-07, after conference championship weekend. Expect about 750 games,
 so detecting an in-sample-sized effect (+0.03 to +0.04) has roughly 40–60% power.
 
 **Outcomes, decided now:**
-- **Confirmed:** Δslope ≥ 1.645 × paired SE, AND spread MAE better, AND ATS 3+ at open not down by more than
+- **Confirmed:** Δslope ≥ 2.24 × paired SE (was 1.645; raised 2026-11-16), AND spread MAE better, AND ATS 3+ at open not down by more than
   2 pp, AND CLV points not down by more than 2 paired SEs.
 - **Consistent:** Δslope > 0, and the other checks as above. In this case, track it in 2027 frozen; there's no
   adoption on this alone.
@@ -418,3 +448,111 @@ the test uses. Picking the best few of about 30 tries overstates their effect, t
   - CPOE / passing detail
   - moneyline / win probability
   - comparison with outside ratings
+
+## 8. Tests approved 2026-11-16 (from `docs/audit-2026-11-16.md`; none run yet)
+All at the Bovada open, 2021–25, bar 2.24 × paired SE, no variants after results. A pass makes a candidate for a
+frozen 2027 holdout only. Three model runs (A, C, F): chance that at least one passes by luck is about 4%.
+**Status 2026-11-16:** C rejected, F supported (results in section 4). A and B wait for Dec 6–7.
+
+| # | Test | Models | Rule (written before any result) |
+|---|---|---|---|
+| A | Holdout 5A, as amended in section 5 | 1 | Section 5A outcomes, Confirmed at 2.24 SE |
+| B | Season-phase rule: no bets until weeks-played ≥ 5 | 0 | On 2026 games through Dec 6 at the Bovada open: *supported* if slope(weeks-played ≥ 5) − slope(0–4) > 0 AND ATS 3+ is higher for ≥ 5 than for 0–4. Not supported → drop. Supported → apply in 2027; pre-registration C judges it. Discovery (2021–25, FBS vs FBS): 0–4 47.6% (n=693), 5+ 54.1% (n=1,226); hindsight cut. 2026 by month has been seen at the mixed open (Sept 52.6%, Oct 52.6%). |
+| C | Per-metric shrinkage: each metric's ridge alpha set from 2017–19 data only, by how well the rating predicts the team's next game (no lines used) | 1 | Δslope ≥ 2.24 paired SE; ATS 3+ not down > 1.0 pp; CLV points not down > 2 paired SE; spread MAE not worse; **Δslope in weeks-played 5+ alone not negative** |
+| F | DraftKings lookahead: v5 unchanged, ratings cut off one week earlier, graded at the DraftKings open 2023–25 | 1 | *Supported* if slope at the DraftKings open ≥ 2.24 bootstrap SE above zero AND the Bovada Sunday open moved toward us on 3+ picks (mean > 0). Supported → tag and track lookahead picks in 2027, no betting on this alone. Weakness: CFBD gives no posting time, so some opens are older than one week. |
+
+**Dropped:** D (FCS-vs-FCS games change the scoring level by ≤ 0.05 pts/team; the totals bias comes from the model
+double-counting the league-wide scoring decline, which cancels in the spread: a totals-only fix, parked) and
+E (QB prior: its effect falls in weeks 0–4, which the free pass rule B would skip).
+
+### Run details for C and F (written 2026-11-16, before either was run)
+**C, per-metric shrinkage.**
+- Alpha grid, fixed now: 0.25, 0.5, 1, 2, 4, 8, 16, 32. If the best is at an edge, the edge is used (the grid is not
+  extended).
+- Choosing alpha (2017–19 only, no lines): for every week group of those seasons, fit each metric's ratings exactly as
+  `ratings_as_of` does (same recency and last-season weights, same columns), predict that metric for every team-game in
+  the week, and score the squared error weighted by plays. Each metric gets the alpha with the lowest total error.
+- Model: v5 with those alphas; nothing else changes (LinearRegression points model, walk-forward, trained on seasons < S).
+- Baseline: v5 rebuilt the same way in the same run (checked against the stored v5 predictions).
+- Judged on 2021–25 FBS-involved games: slope and ATS at the Bovada open, CLV = Bovada open → Bovada close, MAE on all
+  games with a closing line. Paired bootstrap, 2,000 resamples of games. Rule as in the table above.
+
+**F, DraftKings lookahead.**
+- "Ratings cut off one week earlier": each week group uses ratings as of the previous week group's first kickoff (by
+  time order), so last week's games are left out. The season's first group has nothing earlier and uses its own cutoff.
+- The points model is v5 as trained on normal rows from seasons < S, applied to these lagged rows (what a live
+  lookahead pick would have used).
+- Games: 2023–25 FBS-involved with a DraftKings `spread_open`. Slope of (result − DK open) on (lagged line − DK open),
+  bootstrap SE over games (2,000). "Moved toward us" = mean over 3+ gaps of sign(gap) × (Bovada open − DK open), on games
+  with both opens.
+- Reported as information only: ATS 3+ at the DK open, and normal (not lagged) v5's slope at the DK open.
+
+## 9. NFL (pre-registered 2026-11-16, approved by the user before any NFL model result was seen)
+No NFL opening lines exist in our data (nflverse gives closing lines only), so every NFL test is judged for
+**accuracy at the close**, not edge. Research behind these choices: R1/R2 in `CLAUDE.md` (player data only).
+
+### nfl-v1: team ratings only (the baseline for every NFL test)
+- Same structure as college v5: opponent-adjusted ridge ratings (α = 1) on the seven metrics, then a linear points
+  model per team (line = home − away, total = home + away). Features: offense and opposing-defense ratings, home
+  (0 at neutral sites). No college-only inputs (FCS, recruiting, returning production, coach changes).
+- **Settings grid (36 combinations):** recency half-life 4 / 6 / 8 / 12 weeks × last season's weight 0.25 / 0.5 /
+  0.75 × fade over 4 / 8 / 12 weeks.
+- **Chosen on 2017–19 only:** the combination with the lowest spread MAE over all 2017–19 games (walk-forward, points
+  model trained on earlier seasons; no lines used). Ties go to the longer half-life. Then frozen.
+- **2020:** its games feed the ratings, but its rows don't train the points model (no crowds, home field ≈ 0), and it
+  is never evaluated.
+- **Reported, not judged:** 2021–25 spread and total MAE vs the nflverse closing line, slope at the close, by season.
+- **Result of the search (run 2026-11-16, 294 s): half-life 6, last-season weight 0.5, fade over 12 weeks**
+  (2017–19 spread miss 10.460). Frozen. All 36 settings fell within 10.460–10.530, so the choice matters little; the
+  longest fade (12) was best at every half-life and is the edge of the grid (not extended, as registered).
+- **nfl-v1 backtest (2026-11-16), 2021–25, n=1,424, vs the nflverse close:** spread miss 10.220 vs 9.762; total miss
+  10.644 vs 10.313; slope at the close −0.089 ± 0.092; ATS 3+ at close 51.3% ±4.2 (n=540, info). Behind the close in
+  every season (0.09–0.65). Weeks 0–1 within 0.1–0.2 of the close. **Our line is too flat:** SD 4.0 vs 6.1 for the
+  close, result-on-our-line slope 1.28 (close 1.05), correlation with the close 0.82.
+
+### T-QB: starting-QB adjustment (vs nfl-v1)
+- Starter = nflverse schedule `home_qb_id` / `away_qb_id` (the actual starter: a small, stated optimism, since late
+  scratches are known only near kickoff).
+- QB value = EPA per dropback above that season's replacement level (QBs outside the top 32 by dropbacks), shrunk
+  with K = 410 dropbacks, from all his earlier games on any team (no games on or after the predicted game).
+- Feature `qb_adj` = starter's value − the dropback-weighted value of the QBs in the team's games that feed its
+  current ratings, using the same recency weights. `opp_qb_adj` likewise. The points model learns the weights.
+
+### T-skill: skill-player absences (vs nfl-v1 + T-QB)
+- Regular = mean share over his last 3 games for the team: RB ≥ 15% of carries + targets, WR/TE ≥ 12% of targets.
+  Absent = flagged before game day: roster status `RES`, injury report Out/Doubtful, or off the team's roster.
+  Game-day inactives (`INA`) are **not** used.
+- Player value = shrunk EPA per game above replacement (RB per opportunity K = 640; WR K = 400; TE K = 205; replacement
+  = outside the top 48 RB / 96 WR / 48 TE by volume), from earlier games only.
+- Features: sum of absent regulars' values split by game of the absence (1st; 2nd–3rd; 4th+), and `returning` =
+  value of regulars back after 3+ games out; each also for the opponent. The points model learns each weight.
+- Diagnostic (not part of the rule): a 1st-game weight above 1.0 means an absence costs more than the player's own
+  plays (the offense is built around him); weights falling toward 0 by the 4th+ game mean the ratings absorb it.
+
+### Rule for T-QB and T-skill (accuracy adoption)
+On 2021–25 (2020 excluded), against the nflverse closing line:
+1. Spread MAE better pooled and in at least 4 of 5 seasons.
+2. Slope at the close not down by more than 1 paired SE (paired bootstrap, 2,000 resamples of games).
+3. Total MAE not worse pooled.
+No variants after results. Two test models; adoption is "for accuracy" and never quoted as edge evidence.
+
+### T-QB result (run 2026-11-16, scratch `t_qb.py`): **passed the accuracy rule**
+2021–25, n=1,424, vs the nflverse close. Baseline reproduced stored nfl-v1 (mean |diff| 0.0025).
+- Spread miss 10.220 → 10.141 (close 9.762); better in 4 of 5 seasons (2021 −0.21, 2022 +0.18, 2023 −0.03, 2024 −0.12,
+  2025 −0.21). Total miss 10.644 → 10.568. Slope at the close −0.089 → −0.063 (Δ +0.026 ± 0.068).
+- Games with a big QB difference (|qb_adj| > 0.1 either side, n=203): 10.77 → 10.35 (close 10.00).
+- Line less flat: SD 4.03 → 4.79 (close 6.07); calibration slope 1.28 → 1.14.
+- Learned weight (2025 training): 26.4 pts per 1.0 EPA/dropback of qb_adj (0.1 ≈ 2.6 pts); opponent's −5.8.
+- Detail fixed before the run: replacement level for each season = the previous season's (no lookahead); a starter with
+  no NFL dropbacks since 2016 = replacement level (0). Adopted for accuracy only; T-skill is judged against v1 + QB.
+
+### T-skill result (run 2026-11-16, scratch `t_skill.py`): **rejected**
+2021–25, n=1,424, baseline = nfl-v1 + T-QB (reproduced: 10.1405).
+- Spread miss 10.141 → 10.249, better in 2 of 5 seasons (2021 +0.46, 2022 +0.08, 2023 −0.06, 2024 +0.09, 2025 −0.04).
+  Total miss 10.568 → 10.598. Slope at the close −0.063 → −0.109 (Δ −0.046 ± 0.049). Fails 3 of 4 conditions.
+- Data: 31,929 regular slots, 7,131 flagged absent, 1,000 returning; absent players' value mean 0.25, max 4.3 pts/game.
+- Diagnostic weights (2025 training, points per 1 pt of the player's EPA/game): 1st game −0.63, 2nd–3rd −0.62,
+  4th+ +0.03, returning −1.02 (wrong sign), opponent terms −0.4 to +0.3. **An absence costs about 0.6 of the player's
+  own EPA, not more**, and nothing by the 4th game (the ratings have absorbed it). No support for "the offense is
+  built around him" beyond his own plays. Detail fixed before the run: "returning" = his first 3 games back.
+- Use: suggested override sizes only (≈ 0.6 × the player's EPA/game for the first 3 games out). No variants.

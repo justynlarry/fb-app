@@ -50,6 +50,22 @@ Turn the predicted margin into a win probability and compare it with the market
 moneylines (`/lines` already includes `homeMoneyline`/`awayMoneyline`).
 *Source: the moneyline data is already in the cached `/lines` responses.*
 
+### NFL injury news and line moves
+Show each NFL game's injury news next to how the line moved, including news that comes after we'd have bet
+(Friday statuses, Sunday inactives): who is Out / Doubtful / Questionable or newly on IR, when it was posted,
+and the line before and after. The point is to see how much the market moves on injuries, not to bet on it.
+Sources: ESPN core API team injuries (live, timestamped, with a news note); nflverse injuries and weekly rosters
+(IR = roster status `RES`) for history. Line before/after needs NFL odds snapshots (about 2 Odds API credits each).
+*Source: user request, 2026-11-16.*
+
+### NFL late-season stakes test
+Once nfl-v1 exists: does a team with nothing to play for do worse than our line and the market expect? Build a
+standings-based measure (games left vs. distance from a playoff spot, clinched/eliminated) instead of the rough
+record proxy used in the exploration (≤ .350 vs .500+ in the final 4 weeks covered 47.6% ±4.6, n=445). Pre-register
+it and judge it on seasons not used in the exploration (2026 on), since 1999–2025 produced the idea.
+Division games and head-to-head records: parked (see CLAUDE.md, NFL situations).
+*Source: user, 2026-11-16.*
+
 ## Tracking
 
 ### Bet log

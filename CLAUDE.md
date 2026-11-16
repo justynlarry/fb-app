@@ -88,6 +88,9 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    win rate and game count. The live tier rule lives in `cfb/picks.py make_pick()` (used by the page AND the
    worker's `record_picks`, so the pick shown is the pick recorded); `PICK_RATES_SQL` repeats it for the
    backtest rates: change both together. Market "now" = median of The Odds API books (`market_now` view).
+   Week picker (2026-11-16): `/predictions?season=&week=[&season_type=postseason]`, lists weeks with live
+   (non-backtest) predictions, i.e. from 2026 week 11. "This week" on predictions/overrides = week of the next game not
+   over for 12+ h (scores page keeps 24 h). Past weeks show the last pre-game line and recorded pick, graded.
 3. Later: team ratings page, backtest report, overrides entry.
 
 ## Model
@@ -258,6 +261,49 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   successful plays; success = nflverse's EPA>0, not CFBD's yardage rule, so never mix leagues in one metric).
   Abbreviation fixes LA→LAR, OAK→LV, SD→LAC, WAS→WSH. No raw files kept (free to re-download). ~4 s per season.
   NFL 2020 had no crowds (home field ≈ 0): flag it in the backtest.
+- **NFL player research R1/R2 (2026-11-16, scratch `nfl_r1_r2.py`, nflverse files only, no results vs lines):**
+  free data: starting QB per game (schedule file), injury reports 2009+, weekly rosters (IR = status `RES`, game-day
+  inactive = `INA`, 2019+ only), snap counts, play-by-play player ids; all link by gsis id (OAK→LV, SD→LAC, STL→LA).
+  R1: of skill regulars who missed a game, 80–84% were flagged before game day (IR, Out/Doubtful, off the roster),
+  +8–9% only by game-day inactives; a flag means he really sat (≈100%). QB "misses" include benchings (60% flagged).
+  8,898 absent team-games 2016–25, 4,308 of them the 4th+ game of a spell (ratings already absorbing it).
+  R2: per-play efficiency barely repeats for RB/WR/TE (split-half r 0.10–0.16; ~400–650 opportunities for half
+  reliability), QB EPA/dropback r 0.36 (~410 dropbacks); usage shares repeat (r 0.81–0.93). Shrunk EPA/game above
+  replacement: QB median +2.4, top ~+7; RB/WR/TE median ~0, 90th pct +0.3–0.4, top ~+0.7–1.7 (Bijan +0.77 in 2025).
+  nfl-v1 settings chosen 2026-11-16 on 2017–19 (model-tests.md §9): half-life 6, last-season weight 0.5, fade 12 weeks.
+  nfl-v1 backtest 2021–25: spread miss 10.22 vs close 9.76, slope at close −0.09 ± 0.09; line too flat (SD 4.0 vs 6.1).
+  T-QB passed (accuracy): spread miss 10.22 → 10.14 (4 of 5 seasons), total 10.64 → 10.57, line SD 4.0 → 4.8; 26 pts per EPA/dropback.
+  T-skill rejected: 10.14 → 10.25 (2 of 5 seasons); an absence costs ≈ 0.6 × the player's own EPA/game for 3 games,
+  then 0. Use only for override suggestions.
+  **nfl-v2 built 2026-11-16:** tables `nfl_qb_games`, `nfl_starters` (020); `cfb/nflverse.py` loads starters + QB
+  dropbacks with the season; `cfb/nfl_qbs.py` (QB value, team-recent value, `add_qb_features`); `cfb/nfl_model.py`
+  FEATURES = V1_FEATURES + QB_FEATURES (`choose_settings` keeps v1 inputs). Reproduces T-QB exactly (10.1405); backtest
+  saved as `nfl-v2` (2,494 games; `nfl-v1` rows kept). nflverse lists projected starters for upcoming games.
+  **Live NFL predictions (2026-11-16):** `nfl_model.predict_upcoming(season)` (first run: 123 games); worker job
+  `nfl_daily_update` at 6:30 AM MT = `nflverse.load_seasons([season])` + predict (skips when no NFL games within 3 days
+  back / 10 ahead; `games_near(season, league)`). Watch-list item 3 done once the worker is restarted.
+  **NFL tab on the predictions page (2026-11-16):** `/predictions?league=nfl` (`nfl_predictions.html`,
+  `NFL_PREDICTIONS_SQL`, `make_week_nav` shared with college; `PREDICTION_WEEKS_SQL` takes `%(league)s`). Our line/total
+  with ±, starting QBs, nflverse line, no picks. Claude typed the main.py part at the user's request (rule unchanged).
+  Next: R3 tests (QB adjustment; skill-player absences) against nfl-v1, judged at the close.
+- **NFL situations, exploratory only (2026-11-16, scratch `nfl_situations.py`, nflverse closing lines 1999–2025):**
+  division underdogs 52.0% ±1.9 (n=2,611) vs 50.5% non-division, not steady by era (50.1% in 2010–19); division unders
+  51.7%. Late season, a team at ≤ .350 vs one at .500+ covers 47.6% ±4.6 (n=445, −1.5 pts); final week, a team not
+  starting its usual QB 43.4% ±7.5 (n=166). Head-to-head barely carries forward (r +0.03 ± 0.014; pairs 5+ pts one way
+  repeat 50.3%). Bills vs Patriots 1999–2019 −4.8 vs the line, but the Patriots were +3.3 vs everyone else in
+  2001–19, so it was the Patriots, not the matchup; Bills 2020–25 +1.3. Hypotheses only; none tested.
+  **Decisions (user, 2026-11-16):** late-season stakes = worth a pre-registered test once nfl-v1 exists, with a
+  standings-based "games left vs playoff position" measure instead of the record proxy, judged on later seasons, not
+  these. Division games and head-to-head: parked (not steady by era; head-to-head repeats college Test 4). Resting
+  starters: covered by T-QB.
+- **Year-rollover watch list (noted 2026-11-16):**
+  1. `cfb/model.py backtest()` defaults to `last_season=2025`. **Never backtest a season that has live predictions
+     under the same model version** (2026 for v5): `save_predictions` upserts on (game_id, model_version) and would
+     overwrite the real pre-game record with replays. Planned guard: don't overwrite rows where `is_backtest` is false.
+  2. `cfb/coaches.py load_coach_changes(last_season=2025)`: each August, once CFBD fills last season's `/coaches`,
+     run it with the new `last_season` (replaces hand-entered 'manual' rows only where source is 'cfbd').
+  3. NFL data has no daily refresh yet (`python -m cfb.nflverse 2026` by hand). Before NFL predictions go live, add a
+     daily NFL job to the worker and an NFL line to the August backfill steps.
 
 - **Remote access: LIVE since 2026-11-14** at `https://cfb.lokistoboggan.com` (Cloudflare Tunnel, `cloudflared` service
   in compose, pinned 2026.10.7, token `CLOUDFLARE_TUNNEL_TOKEN` in `.env`; Access app "CFB", team `sr-one`, email
@@ -380,6 +426,19 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     feature (model-tests.md section 5A). Rule B was approved after T4's slope was known, and the candidates were
     picked from the same data, so A is biased upward.
   - **NEXT ACTION: run holdout 5A once, on or after 2026-12-07** (after conference championship weekend).
+    Amended 2026-11-16, before any 2026 result: graded at the **Bovada open**, mixed open reported beside it.
+  - **Audit 2026-11-16 (`docs/audit-2026-11-16.md`):** CFBD `spreadOpen` differs by book. Bovada = true Sunday-evening
+    opener; DraftKings (and partly ESPN Bet) = lookahead line from before the previous week's games (v5 "wins" 55.4%
+    against it: an artifact). From now on "the open" = Bovada `spread_open` with Bovada's close for CLV: v5 2021–25
+    1,097–997 (52.39%), slope +0.113 ± 0.048, CLV 0.56 pts. Drop "best open". New tests need 2.24 paired SE.
+    Done 2026-11-16: view `018_bovada_open.sql` (adds `open_book_close`), Bovada filter in `UPCOMING_SQL`,
+    `PREDICTIONS_SQL`, `OPEN_RESULTS_SQL` (Claude typed these three at the user's request, rule unchanged), "Best #" removed.
+    5A bar raised to 2.24. Approved tests A, B, C, F: model-tests.md section 8. Also done (Claude-typed, same exception): `PICK_RATES_SQL`
+    grades Play/Pass at the Bovada open (Caution and totals at the close; `graded_at` column), and `019_pick_bet_time.sql`
+    makes `pick_results` "first" the pick at bet time (4+ books, 8+ h after both teams' previous kickoff).
+    Tests run 2026-11-16 (scratch `test_cf.py`): **C per-metric shrinkage rejected** (Δslope −0.36 SE, MAE worse all 5
+    seasons, CLV −3.5 SE); **F DraftKings lookahead supported** (slope +0.175 ± 0.063 at the DK open 2023–25, Bovada open
+    moved +0.73 pts toward us): track lookahead picks in 2027, don't bet on it alone. A and B wait for Dec 6–7.
     Reminders: this line, a project memory, and a notice on the predictions page from Dec 7.
   - Live use of the drive metrics would also cost 1 CFBD call/day (`/drives`); coach career needs none.
   - Script: scratch `t6.py`, plan `combined_test_plan.md`.
