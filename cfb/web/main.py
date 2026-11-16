@@ -406,6 +406,31 @@ WHERE g.league = 'nfl'
 ORDER BY g.start_time, a.school
 """
 
+# How each NFL tier did in the NFL backtest (2021-25), graded at the CLOSING line: there are no NFL
+# opening lines yet, so this is the only grade we have. Same 3-point rule as the college page.
+NFL_PICK_RATES_SQL = """
+SELECT CASE WHEN abs(model_spread - close_spread) >= 3 THEN 'play' ELSE 'pass' END AS tier,
+       count(spread_win) AS games,
+       avg(spread_win::int) AS win_rate
+FROM backtest_games
+WHERE model_version = %(version)s
+  AND is_backtest
+  AND season >= 2021
+GROUP BY 1
+
+UNION ALL
+
+SELECT CASE WHEN total_diff > 0 THEN 'over' ELSE 'under' END,
+       count(total_win),
+       avg(total_win::int)
+FROM backtest_games
+WHERE model_version = %(version)s
+  AND is_backtest
+  AND season >= 2021
+  AND abs(total_diff) >= 3
+GROUP BY 1
+"""
+
 NFL_CURRENT_WEEK_SQL = """
 SELECT season, week, season_type
 FROM games
@@ -870,12 +895,14 @@ def nfl_predictions_page(request, season, week, season_type):
         games = conn.execute(NFL_PREDICTIONS_SQL, params).fetchall()
         weeks = conn.execute(PREDICTION_WEEKS_SQL, {"league": "nfl"}).fetchall()
         current = conn.execute(NFL_CURRENT_WEEK_SQL).fetchone()
+        rates = conn.execute(NFL_PICK_RATES_SQL, {"version": NFL_MODEL_VERSION}).fetchall()
     for g in games:
         g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
     return templates.TemplateResponse(
         request,
         "nfl_predictions.html",
         {"games": games, "version": NFL_MODEL_VERSION, "active": "predictions", "league": "nfl",
+         "pick_rates": {r["tier"]: r for r in rates},
          "week_nav": make_week_nav(games, weeks, current, season, week, season_type)},
     )
 
