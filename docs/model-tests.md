@@ -556,3 +556,89 @@ No variants after results. Two test models; adoption is "for accuracy" and never
   own EPA, not more**, and nothing by the 4th game (the ratings have absorbed it). No support for "the offense is
   built around him" beyond his own plays. Detail fixed before the run: "returning" = his first 3 games back.
 - Use: suggested override sizes only (≈ 0.6 × the player's EPA/game for the first 3 games out). No variants.
+
+### T-CAL: stretch the NFL spread (pre-registered 2026-11-16, approved before running)
+- Problem: nfl-v2's line is too flat (2021–25: SD 4.8 vs 6.1 for the close; result-on-ours slope 1.14).
+- Model: spread × k, where k for season S = slope through the origin of the actual margin on nfl-v2's walk-forward
+  spread over 2017 … S−1 (2020 excluded). Totals unchanged. One model, no hand-set constant, no by-week variant.
+- Honesty note: the flatness was noticed on 2021–25, the judging seasons. Clean check: 2026 weeks 1–10 (≈149 games,
+  never looked at for the NFL), replayed walk-forward with k from 2017–25, not saved.
+- Rule (accuracy adoption), 2021–25 vs the nflverse close: (1) spread MAE better pooled and in ≥ 4 of 5 seasons;
+  (2) slope at the close not down > 1 paired SE (2,000-game paired bootstrap); (3) 2026: paired change in spread MAE
+  not worse than +1 paired SE. Info only: k by season, calibration slope and SD before/after, winner %, share of games
+  under 3, Play-tier record at the close. Pass → nfl-v3 = nfl-v2 × k (accuracy only). Fail → no variants.
+- Expected before the run: k ≈ 1.1–1.25, MAE gain of a few hundredths to ~0.1.
+- **Result (run 2026-11-16, scratch `t_cal.py`): rejected.** k learned from earlier seasons came out **below 1**,
+  not above: 0.92 (2021), 0.96, 0.94, 0.98, 1.02 (2025), 1.04 (2026). So the stretch mostly shrank the line further.
+  2021–25 (n=1,424): spread miss 10.140 → 10.144, better in 2 of 5 seasons; slope at the close −0.063 → −0.058
+  (Δ +0.005 ± 0.009); calibration slope 1.14 → 1.18, SD 4.79 → 4.61; winner % 62.3 = 62.3; Play tier 50.9% → 51.2%.
+  2026 clean check (n=149): miss 9.683 → 9.688 (paired +0.005 ± 0.015; close 9.58); 2026 calibration slope 1.35.
+  Fails (1); passes (2) and (3). No variants.
+- What it shows (information, not a result to act on): the line wasn't too flat in the early backtest seasons
+  (2017–20 predictions, made from 1–4 seasons of training data, were if anything too steep), and is too flat from
+  2021 on (calibration 1.14; 2026 1.35). Flatness isn't stable over time, so a k learned from the past can't fix it.
+  The cause is more likely in how the ratings or points model behave as training data grows (or the 17-game era).
+  Next candidate if pursued: find that cause first (descriptive, no lines), then pre-register a fix.
+
+### Why the NFL line is flat: descriptive look (2026-11-16, scratch `flat_cause.py`; our predictions vs results, no lines)
+Calibration = slope of the actual margin on our spread (1.0 = right; above 1 = too flat).
+- **Per season it's noisy:** walk-forward 0.79 (2017, trained on 1 season), 1.14, 1.18, 1.10, 1.14, 0.78 (2022), 1.21,
+  1.44, 1.15, 1.35 (2026). One season's SE is about ±0.16, so most of the swing is noise around ≈ 1.15.
+- **More training history → flatter:** the same 2021–25 games, predicted by points models trained on 2016–17 / –19 /
+  –22 / –25: calibration 0.85 / 1.05 / 1.21 / 1.19, spread SD 5.6 / 5.1 / 4.7 / 4.8. The early backtest seasons looked
+  steep because their points models were fitted on 1–3 seasons (overfit); with more data the real flatness shows.
+- **Too flat even in-sample:** one model fitted on all of 2016–26 still has calibration 1.16–1.37 in 10 of 11 seasons
+  (2022: 0.89). So it isn't the 17-game era or a change over time: the per-team points model under-states margins by
+  design. Likely reason: each row uses only the team's offense and the opponent's defense, but good teams are good at
+  everything; the team's own defense and the opponent's offense (field position, possessions) also drive its points
+  (T-QB's learned opponent-QB weight, −5.8, is one sign of that). The margin is the difference of two rows that each
+  miss half the matchup.
+- **Too steep early, too flat late:** walk-forward by weeks of data, 2021–26: 0–2 weeks 0.89, 3–5 0.95, 6–9 1.17, 10+
+  1.34 (2017–20: 0.64 / 0.80 / 1.27 / 1.20). One set of weights for the whole season averages a noisy early rating and
+  a reliable late one.
+- **The ratings themselves aren't the problem:** late-season SD of the points rating / SD of actual points per game is
+  0.77–0.90 in every season, with no break at 2021.
+- **Candidates to pre-register (not run):** (1) full matchup rows: add the team's own defense and the opponent's
+  offense ratings to each row; (2) let the rating weights change with weeks played (an interaction with season
+  progress). (1) addresses the in-sample flatness, (2) the early/late pattern.
+
+### T-MATCH: full matchup rows (pre-registered 2026-11-16, approved before running)
+- Baseline nfl-v2. Variant: + the team's own defense ratings (7 metrics) and the opponent's offense ratings (7), from
+  the same weekly ratings; no new data, 0 calls. Same frozen settings, LinearRegression, walk-forward, 2020 out.
+  All 14 inputs kept regardless of correlation (pairs |r| ≥ 0.95 reported, never dropped).
+- Rule (accuracy), 2021–25 vs the nflverse close: (1) spread MAE better pooled and in ≥ 4 of 5 seasons; (2) slope at
+  the close not down > 1 paired SE; (3) total MAE not worse pooled; (4) 2026 weeks 1–10 paired spread-MAE change not
+  worse than +1 paired SE. Info: calibration and SD before/after, in-sample calibration (fit on 2016–25), calibration
+  by weeks of data, winner %, under-3 share, Play-tier record at the close, learned weights.
+- Expected before the run: in-sample calibration ≈ 1.2 → toward 1.0; spread SD 4.8 → toward 5.5; MAE −0.05 to −0.15;
+  early-steep / late-flat not fixed. Pass → nfl-v3 (accuracy only); fail → no variants. 4th NFL model test.
+- **Result (run 2026-11-16, scratch `t_match.py`): rejected on the season count (3 of 5).** No input pairs ≥ 0.95.
+  2021–25 (n=1,424): spread miss 10.141 → 10.088 (2021 −0.16, 2022 +0.05, 2023 +0.02, 2024 −0.12, 2025 −0.06); total
+  miss 10.568 → 10.549; slope at the close −0.063 → +0.003 (Δ +0.066 ± 0.060). 2026 check (n=149): 9.683 → 9.704
+  (paired +0.02 ± 0.14), passes. Fails only (1b), 4 of 5 seasons.
+- Info: **the diagnosis was right**: in-sample calibration 1.22 → 1.00; walk-forward 1.14 → 0.92 (now slightly steep);
+  line SD 4.79 → 6.01 (close 6.07); winner % 62.4 → 64.2; games under 3 pts 42% → 35%; Play tier at the close
+  51.0% → 50.7%; 2026 calibration 1.35 → 1.05. By weeks of data the new line is too steep early (0–2: 0.71, 3–5: 0.82,
+  6–9: 0.84) and about right late (10+: 1.05), so the remaining problem is now the early-season one.
+  Learned weights mix signs across related metrics (e.g. own defense EPA −15.8 and success rate +18.8), as expected
+  with correlated inputs.
+- **User decision (2026-11-16): keep the rule.** nfl-v2 stays; the weeks-played test is registered against nfl-v2.
+  Any later combination of the two ideas is judged on the clean seasons (2026 on), not 2021–25.
+
+### T-WEEK: rating weights that change through the season (pre-registered 2026-11-16, approved before running)
+- Baseline nfl-v2. Variant: + p = min(weeks played, 17) / 17, and p × each of the 14 rating inputs (team offense 7,
+  opponent defense 7); not for QB adjustments or home. Same frozen settings, LinearRegression, walk-forward, 2020 out.
+  All 15 inputs kept (pairs |r| ≥ 0.95 reported only). 0 calls, nothing saved.
+- Rule (accuracy), same as T-MATCH: (1) spread MAE better pooled and in ≥ 4 of 5 seasons; (2) slope at the close not
+  down > 1 paired SE; (3) total MAE not worse pooled; (4) 2026 weeks 1–10 paired change not worse than +1 paired SE.
+  Info: calibration by weeks of data before/after (the point of the test), overall and in-sample calibration, SD,
+  winner %, under-3 share, Play tier at the close, learned early/late weights on the points ratings.
+- Expected before the run: 10+ weeks calibration 1.34 → ≈ 1.1; early stays ≈ 0.9–1.0; SD 4.8 → ≈ 5.2; MAE −0.02 to
+  −0.08; in-sample flatness mostly unfixed. Pass → nfl-v3 (accuracy only); fail → no variants. 5th NFL model test.
+- **Result (run 2026-11-16, scratch `t_week.py`): rejected.** 2021–25 (n=1,424): spread miss 10.141 → 10.178, better in
+  1 of 5 seasons (2021 only); total miss 10.568 → 10.618; slope at the close −0.063 → −0.082 (Δ −0.018 ± 0.028).
+  2026 check: 9.683 → 9.813 (paired +0.13 ± 0.05, worse by 2.5 SE). Fails (1), (3) and (4).
+- Info: late calibration did move (10+ weeks 1.34 → 1.21; early unchanged 0.87 / 0.96), but accuracy got worse.
+  35 input pairs had |r| ≥ 0.95: p × rating is nearly p itself (r ≈ 0.99) because the ratings weren't centred before
+  multiplying, so the learned early/late weights were unstable (e.g. opponent defense EPA −3.4 early, −28.3 late).
+  That is an explanation, not a licence for a variant: a centred version would be a new idea, judged on 2026 on.

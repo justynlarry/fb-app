@@ -285,6 +285,14 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   **NFL tab on the predictions page (2026-11-16):** `/predictions?league=nfl` (`nfl_predictions.html`,
   `NFL_PREDICTIONS_SQL`, `make_week_nav` shared with college; `PREDICTION_WEEKS_SQL` takes `%(league)s`). Our line/total
   with ±, starting QBs, nflverse line, no picks. Claude typed the main.py part at the user's request (rule unchanged).
+  T-CAL rejected (2026-11-16): spread × k learned from earlier seasons; k came out 0.92–1.04 (< 1), MAE 10.140 → 10.144.
+  Cause look (2026-11-16, model-tests.md §9): flat even in-sample (1.16–1.37 in 10 of 11 seasons); early backtest
+  seasons looked steep only because their models had 1–3 seasons of training. Too steep early (0–2 weeks 0.89), too
+  flat late (10+ weeks 1.34). Candidates: full matchup rows (own defense + opponent offense), weights by weeks played.
+  T-MATCH rejected on season count (3 of 5) though pooled 10.141 → 10.088, calibration 1.14 → 0.92, SD 4.8 → 6.0,
+  in-sample 1.22 → 1.00 (diagnosis confirmed); now too steep early (0–2 weeks 0.71). User kept the rule: nfl-v2 stays;
+  T-WEEK rejected (2026-11-16): 10.141 → 10.178 (1 of 5 seasons), 2026 worse by 2.5 SE; interactions with uncentred
+  ratings were nearly collinear with progress (r ≈ 0.99). nfl-v2 stays. Any centred/combined retry: judged on 2026+ only.
   Next: R3 tests (QB adjustment; skill-player absences) against nfl-v1, judged at the close.
 - **NFL situations, exploratory only (2026-11-16, scratch `nfl_situations.py`, nflverse closing lines 1999–2025):**
   division underdogs 52.0% ±1.9 (n=2,611) vs 50.5% non-division, not steady by era (50.1% in 2010–19); division unders
