@@ -660,3 +660,12 @@ Calibration = slope of the actual margin on our spread (1.0 = right; above 1 = t
 - Info: line SD 4.76 → 5.93 (close 5.94); 3+ picks on underdogs 88% → 67%; ATS 3+ 51.7% → 53.2% ± 3.4 (n=827);
   miss better in 6 of 11 seasons; calibration with 0–2 weeks of data 0.75 (too steep), 1.00–1.07 after.
 - Candidate nfl-v3, for accuracy and calibration only. The slope is at the close and was not the test.
+
+### T-QB2: QB value from full careers (run 2026-11-16, scratch `t_qb2.py`): **rejected**
+- Careers from 1999, dropbacks faded by seasons old, draft-bucket prior under 300 dropbacks, starter from
+  play-by-play. H = 2 seasons and K = 200 chosen on 2003–2010 by next-game error (K at the grid edge, not extended).
+- 2011–2025 without 2020 (n=3,827), baseline nfl-v2 trained from 1999: spread miss 10.268 → 10.268 (+0.0005 ± 0.012);
+  slope at the close +0.025 → +0.021; total miss 10.748 → 10.757; halves −0.002 (2011–19) and +0.005 (2021–25).
+  Fails 3 of 4 conditions. Better in 7 of 14 seasons. No variants.
+- Info: play-by-play and nflverse starters differ in 112 team-games since 1999. Rookie priors: round 1 about +0.08
+  to +0.14 EPA/dropback above replacement, later picks about +0.03.

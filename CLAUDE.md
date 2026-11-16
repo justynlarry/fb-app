@@ -316,8 +316,8 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   Too steep with 0–2 weeks of data (0.75). nfl-v1/v2 backtest rows kept.
   **Open NFL tests (audit section 6, rules written):** T-OPEN and T-LOOK need The Odds API history (paid: $30/month
   plan, 10 credits × markets × regions per snapshot, data from June 2020; ~16,000 credits estimated; ask first).
-  T-QB2 (QB value from full careers, faded, draft-slot prior) is free and not yet approved.
-  Next: R3 tests (QB adjustment; skill-player absences) against nfl-v1, judged at the close.
+  T-QB2 rejected 2026-11-16 (QB value from full careers, faded, draft-slot prior): miss 10.268 → 10.268 on
+  2011–25, n=3,827. The simple QB adjustment already captures it; don't retry without new information.
 - **NFL situations, exploratory only (2026-11-16, scratch `nfl_situations.py`, nflverse closing lines 1999–2025):**
   division underdogs 52.0% ±1.9 (n=2,611) vs 50.5% non-division, not steady by era (50.1% in 2010–19); division unders
   51.7%. Late season, a team at ≤ .350 vs one at .500+ covers 47.6% ±4.6 (n=445, −1.5 pts); final week, a team not
