@@ -108,18 +108,23 @@ def nfl_daily_update():
 
 
 def odds_snapshot():
-    """Save every book's current lines (2 Odds API credits), then our picks at those lines."""
-    if not games_near(current_season()):
-        return
-    try:
-        save_snapshot()
-    except Exception as err:
-        print(f"odds snapshot FAILED: {err!r}")
-        return
-    try:
-        record_picks()
-    except Exception as err:
-        print(f"recording picks FAILED: {err!r}")
+    """Save every book's current lines (2 Odds API credits per league in season), then our college picks."""
+    season = current_season()
+    saved_college = False
+    for league in ("cfb", "nfl"):
+        if not games_near(season, league):
+            continue
+        try:
+            save_snapshot(league)
+            if league == "cfb":
+                saved_college = True
+        except Exception as err:
+            print(f"odds snapshot ({league}) FAILED: {err!r}")
+    if saved_college:
+        try:
+            record_picks()
+        except Exception as err:
+            print(f"recording picks FAILED: {err!r}")
 
 
 def main():
@@ -134,7 +139,7 @@ def main():
     scheduler.add_job(nfl_daily_update, "cron", hour=6, minute=30, id="nfl_daily_update",
                       misfire_grace_time=3600, coalesce=True)
     # Odds API snapshots: every morning, Sunday for the openers, Saturday before kickoffs
-    # ~47 snapshots x 2 credits = ~94 of our 500 credits each month
+    # ~47 snapshots x 2 credits per league in season = ~94 (one league) to ~190 (both) of our 500 credits a month
     scheduler.add_job(odds_snapshot, "cron", hour=6, minute=0, id="odds_daily",
                       misfire_grace_time=3600, coalesce=True)
     scheduler.add_job(odds_snapshot, "cron", day_of_week="sun", hour="16,20", minute=0, id="odds_openers",

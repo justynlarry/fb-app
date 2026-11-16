@@ -252,7 +252,11 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   (league, espn_id); final scores go into `games` only when ESPN's `status.type.completed` is true (postponed games
   are also state "post"). Scores page: `/scores?league=nfl` (tabs), `SCORES_SQL` takes `%(league)s`, FBS filter
   only for cfb. NFL logos: `teamlogos/nfl/500/{espn_id}.png`. Next NFL steps: backtest (Dec–Jan), live
-  predictions for 2027. The Odds API NFL would add ~2 credits per snapshot.
+  predictions for 2027. NFL odds snapshots since 2026-11-16: `odds.save_snapshot(league)`, 2 credits per league in
+  season (~190 of 500 a month with both); picks stay college-only.
+  **Playoff weeks:** ESPN numbers them 1–5, nflverse 19–22. `espn.schedule_week()` converts before saving (the Pro
+  Bowl, ESPN week 4, is skipped). `nfl_qbs.py` orders games by season × 100 + week, so a wrong week breaks the QB
+  adjustment.
 - **NFL backfill (`cfb/nflverse.py`, Claude-typed 2026-11-15):** `python -m cfb.nflverse 2016-2025` (any years;
   re-running upserts, which is also how to refresh 2026). Teams from ESPN's team list (32); games from nflverse
   `nfldata/games.csv`, matched by its `espn` column = ESPN event id; closing spread/total → `lines` provider
@@ -290,9 +294,29 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   seasons looked steep only because their models had 1–3 seasons of training. Too steep early (0–2 weeks 0.89), too
   flat late (10+ weeks 1.34). Candidates: full matchup rows (own defense + opponent offense), weights by weeks played.
   T-MATCH rejected on season count (3 of 5) though pooled 10.141 → 10.088, calibration 1.14 → 0.92, SD 4.8 → 6.0,
-  in-sample 1.22 → 1.00 (diagnosis confirmed); now too steep early (0–2 weeks 0.71). User kept the rule: nfl-v2 stays;
+  in-sample 1.22 → 1.00 (diagnosis confirmed); now too steep early (0–2 weeks 0.71). User kept the rule: nfl-v2 stayed until nfl-v3 (below);
   T-WEEK rejected (2026-11-16): 10.141 → 10.178 (1 of 5 seasons), 2026 worse by 2.5 SE; interactions with uncentred
-  ratings were nearly collinear with progress (r ≈ 0.99). nfl-v2 stays. Any centred/combined retry: judged on 2026+ only.
+  ratings were nearly collinear with progress (r ≈ 0.99). nfl-v2 stayed until nfl-v3 (below). Any centred/combined retry: judged on 2026+ only.
+  **NFL audit 2026-11-16 (`docs/nfl-audit-2026-11-16.md`).** No lookahead found. Main points:
+  - No bettable NFL line: nflverse gives one number per game, no opener, time or book; its source changes in 2023 and
+    2025 (2026 matches ESPN's scoreboard line). Every NFL result is accuracy at roughly the close, never edge.
+  - nfl-v2's 3+ gaps were 87% underdogs (50.9% vs 51.0% for every underdog blind): a product of the flat line.
+  - T-QB's gain is 93% in games where a starter changed since the previous game (kickoff knowledge). Any "at open"
+    grading needs a starter rule that uses only what was known then. nflverse lists the wrong starter in 54 team-games.
+  - Injury files hold only the final (Friday) report, ~47–55 h before kickoff; the 2025 file has no timestamp.
+  - Key numbers: 3 = 14.7% of margins, 7 = 8.5%. +3.5 instead of +3 is worth about 5 points of win rate.
+  **T-HIST (2026-11-16, scratch, not judged):** nfl-v2 trained from 1999 on 2006–2016 (n=2,937): miss 10.737 vs close
+  10.557, slope +0.081 ± 0.089, calibration 1.23, 88% underdogs. 2006–2016 are the clean NFL judging seasons.
+  Pre-2016 data is NOT in the DB: loading it would change live QB values (`nfl_qbs.py` reads every `nfl_qb_games`
+  row), and 12 pre-2011 games share an ESPN id.
+  **nfl-v3 (adopted 2026-11-16, accuracy and calibration only, not edge):** nfl-v2 + full matchup rows
+  (`MATCH_FEATURES`: own defense and opponent offense ratings). T-MATCH re-run unchanged on 2006–2016 passed:
+  calibration 1.234 → 0.994 (3.6 SE), miss 10.737 → 10.730, slope at close +0.081 → +0.196 (info only; +0.003 on
+  2021–25). App backtest 2021–25: miss 10.088, calibration 0.92, SD 6.01 (close 6.07), 3+ gaps 50.6% at the close.
+  Too steep with 0–2 weeks of data (0.75). nfl-v1/v2 backtest rows kept.
+  **Open NFL tests (audit section 6, rules written):** T-OPEN and T-LOOK need The Odds API history (paid: $30/month
+  plan, 10 credits × markets × regions per snapshot, data from June 2020; ~16,000 credits estimated; ask first).
+  T-QB2 (QB value from full careers, faded, draft-slot prior) is free and not yet approved.
   Next: R3 tests (QB adjustment; skill-player absences) against nfl-v1, judged at the close.
 - **NFL situations, exploratory only (2026-11-16, scratch `nfl_situations.py`, nflverse closing lines 1999–2025):**
   division underdogs 52.0% ±1.9 (n=2,611) vs 50.5% non-division, not steady by era (50.1% in 2010–19); division unders
@@ -310,8 +334,8 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
      overwrite the real pre-game record with replays. Planned guard: don't overwrite rows where `is_backtest` is false.
   2. `cfb/coaches.py load_coach_changes(last_season=2025)`: each August, once CFBD fills last season's `/coaches`,
      run it with the new `last_season` (replaces hand-entered 'manual' rows only where source is 'cfbd').
-  3. NFL data has no daily refresh yet (`python -m cfb.nflverse 2026` by hand). Before NFL predictions go live, add a
-     daily NFL job to the worker and an NFL line to the August backfill steps.
+  3. NFL daily refresh is done (`nfl_daily_update`, 6:30 AM MT). Still to do each August: check the first NFL
+     snapshot and nflverse load for the new season.
 
 - **Remote access: LIVE since 2026-11-14** at `https://cfb.lokistoboggan.com` (Cloudflare Tunnel, `cloudflared` service
   in compose, pinned 2026.10.7, token `CLOUDFLARE_TUNNEL_TOKEN` in `.env`; Access app "CFB", team `sr-one`, email

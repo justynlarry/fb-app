@@ -642,3 +642,21 @@ Calibration = slope of the actual margin on our spread (1.0 = right; above 1 = t
   35 input pairs had |r| ≥ 0.95: p × rating is nearly p itself (r ≈ 0.99) because the ratings weren't centred before
   multiplying, so the learned early/late weights were unstable (e.g. opponent defense EPA −3.4 early, −28.3 late).
   That is an explanation, not a licence for a variant: a centred version would be a new idea, judged on 2026 on.
+
+### T-HIST: nfl-v2 on 2006–2016 (run 2026-11-16, scratch `t_hist.py`; replication, not judged)
+- Frozen nfl-v2 code and settings, data from 1999 (in memory, nothing loaded into the DB). Replay check on
+  2016–25: mean |diff| vs stored nfl-v2 0.0025.
+- 2006–2016, n=2,937, vs the nflverse close: spread miss 10.737 vs 10.557; slope +0.081 ± 0.089; calibration 1.23;
+  line SD 4.76 vs 5.94; ATS 3+ 51.7% ± 3.5 (n=778), 88% on underdogs; total miss 10.723 vs 10.545.
+- Expected beforehand: gap to the close 0.3–0.5 (was 0.18: missed), slope within 2 SE of 0 (held), calibration
+  > 1.1 (held). The flat line is structural. 2006–2016 are now the clean judging seasons for NFL tests.
+- Loader trap: 12 pre-2011 games have duplicate ESPN ids.
+
+### T-MATCH on clean seasons (run 2026-11-16, scratch `t_match_clean.py`): **passed**
+- Same inputs as T-MATCH, trained from 1999, judged once on 2006–2016 (n=2,937). Rule from
+  `docs/nfl-audit-2026-11-16.md` section 6.
+- Calibration 1.234 → 0.994 (gain 0.227 ± 0.063, 3.6 SE; bar 2.24). Spread miss 10.737 → 10.730 (−0.007 ± 0.030).
+  Slope at the close +0.081 → +0.196 (Δ +0.115 ± 0.049). Total miss 10.723 → 10.707. All four conditions hold.
+- Info: line SD 4.76 → 5.93 (close 5.94); 3+ picks on underdogs 88% → 67%; ATS 3+ 51.7% → 53.2% ± 3.4 (n=827);
+  miss better in 6 of 11 seasons; calibration with 0–2 weeks of data 0.75 (too steep), 1.00–1.07 after.
+- Candidate nfl-v3, for accuracy and calibration only. The slope is at the close and was not the test.

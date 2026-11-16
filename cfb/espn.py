@@ -25,6 +25,10 @@ LEAGUES = ("cfb", "nfl")
 SCHEDULE_FROM_ESPN = ("nfl",)       # leagues whose teams/games come from ESPN (college uses CFBD)
 SEASON_TYPES = {1: "preseason", 2: "regular", 3: "postseason"}  # ESPN's season "type" codes
 
+# ESPN numbers NFL playoff weeks 1-5; nflverse (our schedule of record) numbers them 19-22.
+# ESPN's week 4 is the Pro Bowl, which we don't store.
+NFL_PLAYOFF_WEEKS = {1: 19, 2: 20, 3: 21, 5: 22}   # wild card, divisional, conference, Super Bowl
+
 
 def fetch_scoreboard(league):
     """Download this week's scoreboard for one league ('cfb' or 'nfl') from ESPN."""
@@ -134,12 +138,20 @@ def parse_scoreboard(data):
     return games
 
 
+def schedule_week(league, g):
+    """The week number we store.  NFL playoff weeks are renumbered to match nflverse."""
+    if league == "nfl" and g["season_type"] == "postseason":
+        return NFL_PLAYOFF_WEEKS.get(g["week"])     # None for the Pro Bowl
+    return g["week"]
+
+
 def sync_schedule(league, games):
     """Add or update this week's teams and games from ESPN (leagues in SCHEDULE_FROM_ESPN)."""
     with connect() as conn:
         for g in games:
             home, away = g["home_team"], g["away_team"]
-            needed = (g["espn_id"], g["start_time"], g["season"], g["week"], g["season_type"],
+            week = schedule_week(league, g)
+            needed = (g["espn_id"], g["start_time"], g["season"], week, g["season_type"],
                       home["espn_id"], home["name"], away["espn_id"], away["name"])
             if None in needed:
                 print(f"ESPN: {league} game {g['espn_id']} is missing schedule fields, skipping")
@@ -183,7 +195,7 @@ def sync_schedule(league, games):
                     away_points    = EXCLUDED.away_points,
                     completed      = EXCLUDED.completed
                 """,
-                (league, g["espn_id"], g["season"], g["week"], g["season_type"], g["start_time"],
+                (league, g["espn_id"], g["season"], week, g["season_type"], g["start_time"],
                  not g["time_valid"], g["neutral_site"], team_ids["home"], team_ids["away"],
                  g["home_score"] if done else None, g["away_score"] if done else None, done),
             )

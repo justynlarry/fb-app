@@ -16,13 +16,15 @@ from cfb.nfl_qbs import add_qb_features
 from cfb.ratings import METRICS, ratings_as_of
 
 LEAGUE = "nfl"
-MODEL_VERSION = "nfl-v2"
+MODEL_VERSION = "nfl-v3"
+# Full matchup (T-MATCH, model-tests.md section 9): team's own defense and the opponent's offense
+MATCH_FEATURES = ["def_" + m for m in METRICS] + ["oppoff_" + m for m in METRICS]
 FIRST_SEASON = 2016         # first season with NFL stats in team_game_stats
 NO_CROWD_SEASONS = {2020}   # used for ratings, but not to train the points model
 
 V1_FEATURES = ["off_" + m for m in METRICS] + ["oppdef_" + m for m in METRICS] + ["home"]
 QB_FEATURES = ["qb_adj", "opp_qb_adj"]      # starting-QB adjustment (T-QB, model-tests.md section 9)
-FEATURES = V1_FEATURES + QB_FEATURES
+FEATURES = V1_FEATURES + QB_FEATURES + MATCH_FEATURES
 # Chosen 2026-11-16 by choose_settings() on 2017-19 (model-tests.md section 9). Frozen: don't re-tune.
 SETTINGS = {"half_life": 6, "last_weight": 0.5, "prior_weeks": 12}
 
@@ -59,7 +61,7 @@ def rating_args(settings):
 
 
 def side_row(game, team, opponent, home, points, ratings, weeks_played):
-    """One team's row:  its offense ratings vs. the opponent's defense ratings."""
+    """One team's row:  its offense and defense ratings, and the opponent's defense and offense ratings."""
     row = {
         "game_id": game["game_id"],
         "season": game["season"],
@@ -74,6 +76,8 @@ def side_row(game, team, opponent, home, points, ratings, weeks_played):
     for m in METRICS:
         row["off_" + m] = ratings.at[team, "off_" + m]
         row["oppdef_" + m] = ratings.at[opponent, "def_" + m]
+        row["def_" + m] = ratings.at[team, "def_" + m]          # this team's own defense
+        row["oppoff_" + m] = ratings.at[opponent, "off_" + m]   # this opponent's offense
     return row
 
 

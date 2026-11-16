@@ -1,7 +1,7 @@
 """Sportsbook lines from The Odds API (free Starter plan: 500 credits a month).
 
-One request returns every upcoming college game for every book in the region.
-Cost = markets x regions = 2 credits (spreads + totals, US books).
+One request returns every upcoming game in one league (college or NFL) for every book in the region.
+Cost = markets x regions = 2 credits per league (spreads + totals, US books).
 Market lines are for display and grading only, not model inputs.
 """
 
@@ -14,7 +14,8 @@ from psycopg.types.json import Jsonb
 
 from cfb.db import connect
 
-BASE_URL = "https://api.the-odds-api.com/v4/sports/americanfootball_ncaaf"
+BASE_URL = "https://api.the-odds-api.com/v4/sports"
+SPORTS = {"cfb": "americanfootball_ncaaf", "nfl": "americanfootball_nfl"}   # their name for each league
 PARAMS = {"regions": "us", "markets": "spreads,totals", "oddsFormat": "american"}
 
 # Their name -> our "school mascot", where it differs by more than accents or punctuation
@@ -33,10 +34,15 @@ def simplify(name):
     return "".join(ch for ch in name.lower() if ch.isalnum() or ch == " ")
 
 
-def team_lookup(conn):
-    """{simplified 'school mascot': team id} for every college team."""
-    rows = conn.execute("SELECT id, school, mascot FROM teams WHERE league = 'cfb'").fetchall()
-    return {simplify(f"{school} {mascot or ''}".strip()): team_id for team_id, school, mascot in rows}
+def team_lookup(conn, league="cfb"):
+    """{simplified team name: team id} for every team in one league."""
+    rows = conn.execute("SELECT id, school, mascot FROM teams WHERE league = %s", (league,)).fetchall()
+    lookup = {}
+    for team_id, school, mascot in rows:
+        # College: 'Ohio State' + 'Buckeyes'.  NFL: school is already 'Detroit Lions'.
+        name = school if league == "nfl" else f"{school} {mascot or ''}".strip()
+        lookup[simplify(name)] = team_id
+    return lookup
 
 
 def find_game(conn, home_id, away_id, kickoff):
@@ -48,8 +54,7 @@ def find_game(conn, home_id, away_id, kickoff):
         """
         SELECT id, home_id <> %(home)s AS swapped
         FROM games
-        WHERE league = 'cfb'
-          AND ((home_id = %(home)s AND away_id = %(away)s)
+        WHERE ((home_id = %(home)s AND away_id = %(away)s)
             OR (home_id = %(away)s AND away_id = %(home)s))
           AND start_time BETWEEN %(kickoff)s - interval '36 hours'
                              AND %(kickoff)s + interval '36 hours'
@@ -59,10 +64,10 @@ def find_game(conn, home_id, away_id, kickoff):
     return row if row else (None, None)
 
 
-def fetch_odds():
-    """Download current spreads and totals for every upcoming game (2 credits)."""
+def fetch_odds(league="cfb"):
+    """Download current spreads and totals for every upcoming game in one league (2 credits)."""
     params = {"apiKey": os.environ["ODDS_API_KEY"], **PARAMS}
-    resp = httpx.get(f"{BASE_URL}/odds", params=params, timeout=30)
+    resp = httpx.get(f"{BASE_URL}/{SPORTS[league]}/odds", params=params, timeout=30)
     if resp.status_code != 200:
         # Not raise_for_status(): its message includes the URL, and the URL contains our key
         raise RuntimeError(f"Odds API error {resp.status_code}: {resp.text[:200]}")
@@ -93,9 +98,9 @@ def book_line(book, home_team):
     return line
 
 
-def save_snapshot():
-    """Fetch every book's current lines and save them as one snapshot (2 credits)."""
-    events = fetch_odds()
+def save_snapshot(league="cfb"):
+    """Fetch every book's current lines for one league and save them as one snapshot (2 credits)."""
+    events = fetch_odds(league)
     fetched_at = datetime.now(timezone.utc)
     saved = 0
     unmatched = []
@@ -106,9 +111,9 @@ def save_snapshot():
             INSERT INTO api_responses (source, endpoint, params, status, body)
             VALUES ('odds_api', '/odds', %s, 200, %s)
             """,
-            (Jsonb({**PARAMS, "snapshot": fetched_at.isoformat()}), Jsonb(events)),
+            (Jsonb({**PARAMS, "league": league, "snapshot": fetched_at.isoformat()}), Jsonb(events)),
         )
-        teams = team_lookup(conn)
+        teams = team_lookup(conn, league)
 
         for event in events:
             home_id = teams.get(simplify(event["home_team"]))
@@ -140,7 +145,7 @@ def save_snapshot():
                     {**line, "game_id": game_id, "fetched_at": fetched_at},
                 )
                 saved += 1
-    print(f"odds snapshot: {saved} book lines for {len(events) - len(unmatched)} games")
+    print(f"odds snapshot ({league}): {saved} book lines for {len(events) - len(unmatched)} games")
     if unmatched:
         print(f"  not matched to our games: {unmatched}")
     return saved
