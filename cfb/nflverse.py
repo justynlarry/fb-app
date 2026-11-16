@@ -42,7 +42,8 @@ WP_MAX = 0.95
 
 # Only the play-by-play columns we use (the files have ~370)
 PBP_COLUMNS = ["game_id", "posteam", "pass", "rush", "epa", "success", "wp",
-               "down", "ydstogo", "drive", "two_point_attempt"]
+               "down", "ydstogo", "drive", "two_point_attempt",
+               "qb_dropback", "passer_player_id", "rusher_player_id"]
 
 
 def to_int(value):
@@ -247,9 +248,8 @@ def scrimmage_plays(season):
     return df[keep]
 
 
-def load_stats(conn, season, game_ids, team_ids):
+def load_stats(conn, season, game_ids, team_ids, plays):
     """Insert or update team_game_stats for one season (one row per team per game)."""
-    plays = scrimmage_plays(season)
     # Each game's two teams, from its nflverse id: {game_id: (home abbr, away abbr)}
     teams_in_game = {}
     for gid in plays["game_id"].unique():
@@ -308,6 +308,58 @@ def load_stats(conn, season, game_ids, team_ids):
           + (f", {len(missing)} games not in the schedule: {sorted(missing)[:3]}" if missing else ""))
 
 
+# ---------- 5. Quarterbacks (for the nfl-v2 QB adjustment) ----------
+
+def save_starters(conn, season, schedule, game_ids, team_ids):
+    """Each game's two starting QBs, from the nflverse schedule (known once the game is played)."""
+    saved = 0
+    for row in schedule:
+        if row["season"] != str(season) or row["game_id"] not in game_ids:
+            continue
+        for side in ("home", "away"):
+            qb_id = row[side + "_qb_id"]
+            if not qb_id:
+                continue        # a future game: no starter yet
+            conn.execute(
+                """
+                INSERT INTO nfl_starters (game_id, team_id, qb_id, qb_name, source)
+                VALUES (%s, %s, %s, %s, 'nflverse')
+                ON CONFLICT (game_id, team_id) DO UPDATE SET
+                    qb_id   = EXCLUDED.qb_id,
+                    qb_name = EXCLUDED.qb_name,
+                    source  = 'nflverse'
+                """,
+                (game_ids[row["game_id"]], team_id(team_ids, row[side + "_team"]),
+                 qb_id, row[side + "_qb_name"]),
+            )
+            saved += 1
+    print(f"starters {season}: {saved} saved")
+
+
+def save_qb_games(conn, season, plays, game_ids, team_ids):
+    """Every QB's dropbacks and total EPA in each game (same plays as team_game_stats)."""
+    dropbacks = plays[plays["qb_dropback"] == 1].copy()
+    dropbacks["qb_id"] = dropbacks["passer_player_id"].fillna(dropbacks["rusher_player_id"])
+    dropbacks = dropbacks.dropna(subset=["qb_id"])
+    saved = 0
+    for (gid, posteam, qb_id), qb_plays in dropbacks.groupby(["game_id", "posteam", "qb_id"]):
+        game_id = game_ids.get(gid)
+        if game_id is None:
+            continue
+        conn.execute(
+            """
+            INSERT INTO nfl_qb_games (game_id, team_id, qb_id, dropbacks, epa)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (game_id, team_id, qb_id) DO UPDATE SET
+                dropbacks = EXCLUDED.dropbacks,
+                epa       = EXCLUDED.epa
+            """,
+            (game_id, team_id(team_ids, posteam), qb_id, len(qb_plays), float(qb_plays["epa"].sum())),
+        )
+        saved += 1
+    print(f"qb games {season}: {saved} saved")
+
+
 # ---------- Command line ----------
 
 def parse_seasons(args):
@@ -322,12 +374,8 @@ def parse_seasons(args):
     return seasons
 
 
-def main():
-    seasons = parse_seasons(sys.argv[1:])
-    if not seasons:
-        print("usage: python -m cfb.nflverse 2016-2025   (or single years)")
-        sys.exit(1)
-
+def load_seasons(seasons):
+    """Load or refresh these NFL seasons: teams, games, lines, team stats, starters, QB games."""
     schedule = fetch_schedule()
     print(f"schedule: {len(schedule)} games in the nflverse file")
     with connect() as conn:
@@ -335,11 +383,22 @@ def main():
         conn.commit()
 
     for season in seasons:
-        # One transaction per season: a failure part-way leaves earlier seasons saved
+        # One transaction per season:  a failure part-way leaves earlier seasons saved
         with connect() as conn:
             game_ids = load_games(conn, season, schedule, team_ids)
-            load_stats(conn, season, game_ids, team_ids)
+            plays = scrimmage_plays(season)
+            load_stats(conn, season, game_ids, team_ids, plays)
+            save_starters(conn, season, schedule, game_ids, team_ids)
+            save_qb_games(conn, season, plays, game_ids, team_ids)
             conn.commit()
+
+
+def main():
+    seasons = parse_seasons(sys.argv[1:])
+    if not seasons:
+        print("usage: python -m cfb.nflverse 2016-2025   (or single years)")
+        sys.exit(1)
+    load_seasons(seasons)
 
 
 if __name__ == "__main__":

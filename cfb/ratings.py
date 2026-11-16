@@ -17,7 +17,7 @@ PRIOR_WEEKS = 6         # Last season's games fade out over this many weeks
 RECENCY_HALF_LIFE = 4   # Weeks: a game this old counts half as much as last week's
 OFFSEASON_AGE_WEEKS = 8 # Treat last season's games as at least this many weeks old
 
-# One row per team per game (that team's offense). FBS and FCS games only.
+# One row per team per game (that team's offense). College: FBS and FCS games only.
 GAME_STATS_SQL = """
 SELECT s.team_id,
        s.opponent_id,
@@ -30,25 +30,27 @@ SELECT s.team_id,
        CASE WHEN g.neutral_site THEN 0
             WHEN s.team_id = g.home_id THEN 1
             ELSE -1 END AS home,
-       CASE WHEN s.team_id = g.home_id THEN g.home_classification
-            ELSE g.away_classification END = 'fcs' AS fcs_offense,
-       CASE WHEN s.team_id = g.home_id THEN g.away_classification
-            ELSE g.home_classification END = 'fcs' AS fcs_defense
+       COALESCE(CASE WHEN s.team_id = g.home_id THEN g.home_classification
+                     ELSE g.away_classification END = 'fcs', false) AS fcs_offense,
+       COALESCE(CASE WHEN s.team_id = g.home_id THEN g.away_classification
+                     ELSE g.home_classification END = 'fcs', false) AS fcs_defense
 FROM team_game_stats s
 JOIN games g ON g.id = s.game_id
-WHERE g.league = 'cfb'
+WHERE g.league = %(league)s
   AND g.season = %(season)s
   AND g.start_time < %(before)s
-  AND g.home_classification IN ('fbs', 'fcs')
-  AND g.away_classification IN ('fbs', 'fcs')
+  -- college: FBS and FCS teams only (NFL games have no classification)
+  AND (g.league <> 'cfb' OR (g.home_classification IN ('fbs', 'fcs')
+                             AND g.away_classification IN ('fbs', 'fcs')))
 """
 
 
-def load_game_stats(season, before):
-    """Every FBS/FCS team-game in a season that kicked off before 'before' (a datetime)."""
+def load_game_stats(season, before, league="cfb"):
+    """Every team-game in a season that kicked off before 'before' (a datetime)."""
     with connect() as conn:
         conn.row_factory = dict_row
-        rows = conn.execute(GAME_STATS_SQL, {"season": season, "before": before}).fetchall()
+        params = {"league": league, "season": season, "before": before}
+        rows = conn.execute(GAME_STATS_SQL, params).fetchall()
     return pd.DataFrame(rows)
 
 
@@ -96,7 +98,7 @@ SELECT count(*)
 FROM (
     SELECT week
     FROM games
-    WHERE league = 'cfb'
+    WHERE league = %(league)s
       AND season = %(season)s
       AND season_type = 'regular'
     GROUP BY week
@@ -105,34 +107,38 @@ FROM (
 """
 
 
-def count_weeks_played(season, before):
+def count_weeks_played(season, before, league="cfb"):
     """How many regular-season weeks were completely finished before 'before'."""
     with connect() as conn:
-        return conn.execute(WEEKS_PLAYED_SQL, {"season": season, "before": before}).fetchone()[0]
+        params = {"league": league, "season": season, "before": before}
+        return conn.execute(WEEKS_PLAYED_SQL, params).fetchone()[0]
 
 
-def ratings_as_of(season, before):
+def ratings_as_of(season, before, league="cfb", half_life=RECENCY_HALF_LIFE,
+                  prior_weeks=PRIOR_WEEKS, offseason_age=OFFSEASON_AGE_WEEKS):
     """Rate every team using only games that kicked off before 'before'.
 
     Early in a season there's little data, so last season's games are mixed in with
-    a weight that fades from 1 to 0 over PRIOR_WEEKS weeks.
+    a weight that fades from 1 to 0 over prior_weeks weeks. The defaults are college's
+    settings; the NFL model passes its own.
     Returns (ratings, weeks_played). ratings has columns off_<metric>, def_<metric>.
     """
     parts = []
-    weeks_played = count_weeks_played(season, before)
-    current = load_game_stats(season, before)
+    weeks_played = count_weeks_played(season, before, league)
+    current = load_game_stats(season, before, league)
     if len(current) > 0:
-        # Recent games count more: a game RECENCY_HALF_LIFE weeks old counts half as much
+        # Recent games count more: a game half_life weeks old counts half as much
         week = current["week"].where(current["season_type"] == "regular", weeks_played)
         weeks_ago = (weeks_played - week).clip(lower=0)
-        current["weight"] = 0.5 ** (weeks_ago / RECENCY_HALF_LIFE)
+        current["weight"] = 0.5 ** (weeks_ago / half_life)
         parts.append(current)
 
-    fade = max(0.0, 1 - weeks_played / PRIOR_WEEKS)
+    fade = max(0.0, 1 - weeks_played / prior_weeks)
     if fade > 0:
-        last_season = load_game_stats(season - 1, before)
-        last_season["weight"] = fade * 0.5 ** (OFFSEASON_AGE_WEEKS / RECENCY_HALF_LIFE)
-        parts.append(last_season)
+        last_season = load_game_stats(season - 1, before, league)
+        if len(last_season) > 0:        # the first season we have data for has no season before it
+            last_season["weight"] = fade * 0.5 ** (offseason_age / half_life)
+            parts.append(last_season)
     history = pd.concat(parts, ignore_index=True)
 
     ratings = pd.DataFrame()

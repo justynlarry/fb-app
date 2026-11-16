@@ -12,7 +12,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from cfb import espn
+from cfb import espn, nfl_model, nflverse
 from cfb.backfill import refresh_recent_qbs
 from cfb.db import connect
 from cfb.load import refresh_season
@@ -50,20 +50,20 @@ def current_season():
     return today.year if today.month >= 8 else today.year - 1
 
 
-def games_near(season):
-    """True if the season has games within 3 days back or 10 days ahead (i.e. it's in season)."""
+def games_near(season, league="cfb"):
+    """True if the league has games within 3 days back or 10 days ahead (i.e. it's in season)."""
     with connect() as conn:
         row = conn.execute(
             """
             SELECT EXISTS (
                 SELECT 1 FROM games
-                WHERE league = 'cfb'
+                WHERE league = %s
                   AND season = %s
                   AND start_time BETWEEN now() - interval '3 days'
                                      AND now() + interval '10 days'
             )
             """,
-            (season,),
+            (league, season),
         ).fetchone()
     return row[0]
 
@@ -93,6 +93,20 @@ def daily_retry():
         daily_update()
 
 
+def nfl_daily_update():
+    """Reload this NFL season from nflverse (free, no API key) and re-predict upcoming games."""
+    season = current_season()
+    if not games_near(season, "nfl"):
+        print(f"NFL daily update: no {season} games this week or next, skipping")
+        return
+    print(f"NFL daily update: reloading {season} from nflverse and re-predicting")
+    try:
+        nflverse.load_seasons([season])
+        nfl_model.predict_upcoming(season)
+    except Exception as err:
+        print(f"NFL daily update FAILED: {err!r}")
+
+
 def odds_snapshot():
     """Save every book's current lines (2 Odds API credits), then our picks at those lines."""
     if not games_near(current_season()):
@@ -116,6 +130,8 @@ def main():
     scheduler.add_job(daily_update, "cron", hour=DAILY_HOUR, minute=0, id="daily_update",
                       misfire_grace_time=3600, coalesce=True)
     scheduler.add_job(daily_retry, "cron", hour=RETRY_HOURS, minute=30, id="daily_retry",
+                      misfire_grace_time=3600, coalesce=True)
+    scheduler.add_job(nfl_daily_update, "cron", hour=6, minute=30, id="nfl_daily_update",
                       misfire_grace_time=3600, coalesce=True)
     # Odds API snapshots: every morning, Sunday for the openers, Saturday before kickoffs
     # ~47 snapshots x 2 credits = ~94 of our 500 credits each month
