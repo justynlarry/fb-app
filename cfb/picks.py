@@ -15,7 +15,7 @@ PLAY_GAP = 3.0          # points off the market before a side is worth a bet
 TOTAL_GAP = 3.0         # same for totals (shown as info only)
 MOVE_MIN = 0.5      # a line "moved" if it changed by at least this much since the open
 
-# Upcoming games:  our line (overrides included), the CFBD open, and the market right now
+# Upcoming games:  our line (overrides included), the Bovada open (from CFBD), and the market right now
 UPCOMING_SQL = """
 WITH adjustments AS (
     SELECT o.game_id,
@@ -27,7 +27,8 @@ WITH adjustments AS (
         GROUP BY o.game_id
 ),
 opening AS (
-    SELECT game_id, avg(spread_open) AS open_spread
+    -- Bovada's is a true Sunday opener; other books' "open" can be a days-old lookahead line
+    SELECT game_id, avg(spread_open) FILTER (WHERE provider = 'Bovada') AS open_spread
     FROM lines
     GROUP BY game_id
 )
@@ -63,7 +64,8 @@ def make_pick(g):
     play:    we differ from the current line by 3+ and the market isn't moving against us
     caution:    3+ apart, but the line has moved the other way since it opened
     pass:       under 3 points apart
-    PICK_RATES_SQL (cfb/web/main.py) uses the same rule for the backtest rates: change both together.
+    PICK_RATES_SQL (cfb/web/main.py) gives the backtest rates: play/pass graded at the Bovada open,
+    caution with this same moved-against test at the close. Change both together.
     """
     pick = {"tier": None, "side": None, "gap": None, "moved": None, "toward": None,
             "bet_spread": None, "bet_price": None, "bet_book": None,

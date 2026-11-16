@@ -30,7 +30,6 @@
     {%- if r.open3_w is defined %}
     <td class="num rec">{{ r.open3_w }}–{{ r.open3_l }}</td>
     <td class="num {{ pct_class(r.open3_w, r.open3_l) }}">{{ pct(r.open3_w, r.open3_l) }}</td>
-    <td class="num {{ pct_class(r.best3_w, r.best3_l) }}">{{ pct(r.best3_w, r.best3_l) }}</td>
     {%- endif %}
   </tr>
   {%- endfor %}
@@ -49,7 +48,7 @@
       <th colspan="2">At close, we differ 5+</th>
       <th>O/U 3+</th>
       <th>Line moved to us</th>
-      {%- if with_open %}<th colspan="3" class="open-group">At the open, we differ 3+</th>{% endif %}
+      {%- if with_open %}<th colspan="2" class="open-group" title="Bovada's opening line">At the open, we differ 3+</th>{% endif %}
     </tr>
     <tr>
       <th>{{ first }}</th><th class="num">Games</th>
@@ -60,7 +59,7 @@
       <th class="num">%</th>
       <th class="num">%</th>
       {%- if with_open %}
-      <th class="num open-group">W–L</th><th class="num">%</th><th class="num" title="Best opening number among the sportsbooks for our side">Best #</th>
+      <th class="num open-group">W–L</th><th class="num">%</th>
       {%- endif %}
     </tr>
   </thead>
@@ -113,20 +112,16 @@
   <div class="card highlight">
     <div class="card-label">ATS at the open, differ 3+</div>
     <div class="card-value {{ pct_class(o.open3_w, o.open3_l) }}">{{ pct(o.open3_w, o.open3_l) }}</div>
-    <div class="card-sub">{{ o.open3_w }}–{{ o.open3_l }} · average opening line</div>
-  </div>
-  <div class="card highlight">
-    <div class="card-label">…with the best number</div>
-    <div class="card-value {{ pct_class(o.best3_w, o.best3_l) }}">{{ pct(o.best3_w, o.best3_l) }}</div>
-    <div class="card-sub">{{ o.best3_w }}–{{ o.best3_l }} · best opening line across books</div>
+    <div class="card-sub">{{ o.open3_w }}–{{ o.open3_l }} · Bovada's opening line</div>
   </div>
   {%- endif %}
 </section>
 <p class="muted small">Summary excludes 2020 (COVID season). "Line moved toward us" = closing line value:
   when we disagreed with the <em>opening</em> line, how often the market moved our way by kickoff.
-  "At the open" grades the side we'd have taken against the opening line, at that line; "best number"
-  takes the most favorable opening line among the books (line shopping). Opening lines are only available
-  from 2021, and only from about two books per game, so treat the opening results as approximate.</p>
+  "At the open" grades the side we'd have taken against Bovada's opening line, at that line, and line
+  movement is Bovada's open to Bovada's close. Only Bovada is used because it posts a true Sunday opener;
+  other books' "open" is often a lookahead line from before the previous week's games. Opening lines are
+  only available from 2021.</p>
 {%- endif %}
 
 <h2>By season</h2>
