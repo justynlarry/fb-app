@@ -22,6 +22,7 @@ from cfb.auth import (
 )
 from cfb.db import connect
 from cfb.model import MODEL_VERSION
+from cfb.nfl_model import MODEL_VERSION as NFL_MODEL_VERSION
 from cfb.picks import make_pick, recorded_pick
 from cfb.qbs import qb_out_suggestion
 
@@ -151,15 +152,21 @@ WHERE g.league = %(league)s
 ORDER BY g.start_time, a.school
 """
 
-# Our predictions for this week's games, with the typical miss for that point in
+# Our predictions for one week's games, with the typical miss for that point in
 # the season (from the backtest), any manual overrides, and the market line for comparison.
+# Which week: the one asked for (season, week, season_type), or when week is NULL, "this week" =
+# the week of the next game that hasn't been over for 12+ hours. 12, not 24 like the scores page,
+# so a normal Saturday rolls over Sunday morning, before the Sunday 4 PM openers.
 PREDICTIONS_SQL = """
 WITH current_week AS (
     SELECT season, week, season_type
     FROM games
     WHERE league = 'cfb'
       AND 'fbs' IN (home_classification, away_classification)
-      AND start_time > now() - interval '24 hours'
+      AND (
+            (%(week)s::int IS NULL AND start_time > now() - interval '12 hours')
+         OR (season = %(season)s::int AND week = %(week)s::int AND season_type = %(season_type)s::text)
+      )
     ORDER BY start_time
     LIMIT 1
 ),
@@ -176,10 +183,11 @@ market AS (
     SELECT game_id,
            avg(spread) AS spread,
            avg(over_under) AS total,
-           avg(spread_open) AS open_spread,
-           max(spread_open) AS open_hi,
-           min(spread_open) AS open_lo,
-           avg(over_under_open) AS open_total
+           -- The open is Bovada's only: other books' "open" can be a days-old lookahead line
+           avg(spread_open) FILTER (WHERE provider = 'Bovada') AS open_spread,
+           max(spread_open) FILTER (WHERE provider = 'Bovada') AS open_hi,
+           min(spread_open) FILTER (WHERE provider = 'Bovada') AS open_lo,
+           avg(over_under_open) FILTER (WHERE provider = 'Bovada') AS open_total
     FROM lines
     GROUP BY game_id
 ),
@@ -231,8 +239,11 @@ SELECT g.id AS game_id,
        mn.best_away_book, mn.best_away_spread, mn.best_away_price,
        mn.best_over_book, mn.best_over_total, mn.best_over_price,
        mn.best_under_book, mn.best_under_total, mn.best_under_price,
-       l.state,
-       l.away_score, l.home_score,
+       w.season AS view_season, w.week AS view_week, w.season_type AS view_season_type,
+       -- live_scores only holds recent games; older finals come from the games table
+       COALESCE(l.state, CASE WHEN g.completed THEN 'post' END) AS state,
+       COALESCE(l.away_score, g.away_points) AS away_score,
+       COALESCE(l.home_score, g.home_points) AS home_score,
        l.away_rank, l.home_rank,
        l.away_record, l.home_record,
        l.away_conf_record, l.home_conf_record,
@@ -274,26 +285,42 @@ ORDER BY g.start_time, a.school
 """
 
 
-# How each kind of pick did in the backtest. The tier rule must match predictions.html
+# How each kind of pick did in the backtest (2021+, the seasons with a Bovada opening line).
+# Play and Pass are graded at the Bovada OPEN, because that's when we bet: 3+ apart = play, else pass.
+# Caution needs a line that has already moved, so it can only be graded later: 3+ apart at the CLOSE
+# after Bovada's line moved 0.5+ away from us (the same test as cfb/picks.py make_pick()).
+# Totals are graded at the close. graded_at tells the page which line each rate used.
 PICK_RATES_SQL = """
-SELECT CASE WHEN abs(model_spread - close_spread) < 3 THEN 'pass'
-            WHEN abs(close_spread - open_spread) >= 0.5
-             AND sign(close_spread - open_spread) <> sign(model_spread - open_spread) THEN 'caution'
-            ELSE 'play'
-       END AS tier,
-       count(spread_win) AS games,
-       avg(spread_win::int) AS win_rate
+SELECT CASE WHEN abs(open_diff) >= 3 THEN 'play' ELSE 'pass' END AS tier,
+       'open' AS graded_at,
+       count(open_win) AS games,
+       avg(open_win::int) AS win_rate
 FROM backtest_games
 WHERE model_version = %(version)s
   AND is_backtest
   AND season >= 2021
   AND open_spread IS NOT NULL
-  AND close_spread IS NOT NULL
 GROUP BY 1
 
 UNION ALL
 
+SELECT 'caution',
+       'close',
+       count(spread_win),
+       avg(spread_win::int)
+FROM backtest_games
+WHERE model_version = %(version)s
+  AND is_backtest
+  AND season >= 2021
+  AND open_spread IS NOT NULL
+  AND abs(spread_diff) >= 3
+  AND abs(open_book_close - open_spread) >= 0.5
+  AND sign(open_book_close - open_spread) <> sign(model_spread - open_spread)
+
+UNION ALL
+
 SELECT CASE WHEN total_diff > 0 THEN 'over' ELSE 'under' END,
+       'close',
        count(total_win),
        avg(total_win::int)
 FROM backtest_games
@@ -302,6 +329,89 @@ WHERE model_version = %(version)s
   AND season <> 2020
   AND abs(total_diff) >= 3
 GROUP BY 1
+"""
+
+
+# Weeks the predictions page can show: every week with at least one pre-game (live) prediction.
+# Backtest predictions aren't included: they're walk-forward replays, not what the page showed at the time.
+PREDICTION_WEEKS_SQL = """
+SELECT g.season, g.week, g.season_type, min(g.start_time) AS first_kickoff
+FROM games g
+WHERE g.league = %(league)s
+  AND (g.league <> 'cfb' OR 'fbs' IN (g.home_classification, g.away_classification))
+  AND EXISTS (SELECT 1 FROM predictions p WHERE p.game_id = g.id AND NOT p.is_backtest)
+GROUP BY g.season, g.week, g.season_type
+ORDER BY first_kickoff
+"""
+
+
+# NFL predictions for one week: our line and total (nfl model), the projected or actual starting QBs,
+# and the nflverse line beside them. No picks: our NFL lines trail the close and are too flat
+# (model-tests.md section 9). Same week rule as PREDICTIONS_SQL (asked-for week, or the 12-hour rule).
+NFL_PREDICTIONS_SQL = """
+WITH current_week AS (
+    SELECT season, week, season_type
+    FROM games
+    WHERE league = 'nfl'
+      AND (
+            (%(week)s::int IS NULL AND start_time > now() - interval '12 hours')
+         OR (season = %(season)s::int AND week = %(week)s::int AND season_type = %(season_type)s::text)
+      )
+    ORDER BY start_time
+    LIMIT 1
+),
+model_miss AS (         -- typical miss in the NFL backtest, by weeks of data (2020 left out)
+    SELECT LEAST(p.weeks_played, 6) AS bucket,
+           avg(abs((g.away_points - g.home_points) - p.spread)) AS spread_miss,
+           avg(abs((g.home_points + g.away_points) - p.total)) AS total_miss
+    FROM predictions p
+    JOIN games g ON g.id = p.game_id
+    WHERE p.is_backtest AND p.model_version = %(version)s AND g.completed AND g.season <> 2020
+    GROUP BY 1
+)
+SELECT g.id AS game_id,
+       a.school AS away, h.school AS home,
+       a.espn_id AS away_espn_id, h.espn_id AS home_espn_id,
+       g.start_time, g.start_time_tbd,
+       g.start_time <= now() AS started,
+       w.season AS view_season, w.week AS view_week, w.season_type AS view_season_type,
+       p.spread, p.total, p.weeks_played, p.model_version,
+       mm.spread_miss, mm.total_miss,
+       ln.spread AS market_spread, ln.over_under AS market_total,
+       sa.qb_name AS away_qb, sh.qb_name AS home_qb,
+       COALESCE(l.state, CASE WHEN g.completed THEN 'post' END) AS state,
+       COALESCE(l.away_score, g.away_points) AS away_score,
+       COALESCE(l.home_score, g.home_points) AS home_score,
+       l.away_record, l.home_record
+FROM games g
+JOIN current_week w ON w.season = g.season
+                   AND w.week = g.week
+                   AND w.season_type = g.season_type
+JOIN teams h ON h.id = g.home_id
+JOIN teams a ON a.id = g.away_id
+LEFT JOIN LATERAL (     -- this version's pre-game prediction, or else the latest from an older version
+    SELECT *
+    FROM predictions pr
+    WHERE pr.game_id = g.id
+      AND NOT pr.is_backtest
+    ORDER BY pr.model_version = %(version)s DESC, pr.created_at DESC
+    LIMIT 1
+) p ON true
+LEFT JOIN model_miss mm ON mm.bucket = LEAST(p.weeks_played, 6)
+LEFT JOIN lines ln ON ln.game_id = g.id AND ln.provider = 'nflverse'
+LEFT JOIN nfl_starters sa ON sa.game_id = g.id AND sa.team_id = g.away_id
+LEFT JOIN nfl_starters sh ON sh.game_id = g.id AND sh.team_id = g.home_id
+LEFT JOIN live_scores l ON l.game_id = g.id
+WHERE g.league = 'nfl'
+ORDER BY g.start_time, a.school
+"""
+
+NFL_CURRENT_WEEK_SQL = """
+SELECT season, week, season_type
+FROM games
+WHERE league = 'nfl' AND start_time > now() - interval '12 hours'
+ORDER BY start_time
+LIMIT 1
 """
 
 
@@ -337,13 +447,13 @@ GROUP BY taken
 """
 
 
-# Our first saved line graded against CFBD's opening line (average of books) at an assumed -110.
+# Our first saved line graded against Bovada's opening line (from CFBD) at an assumed -110.
 # No line movement exists yet at the open, so 3+ apart = 'play', otherwise 'pass' (no 'caution').
 OPEN_RESULTS_SQL = """
 WITH opening AS (
     SELECT game_id,
-        avg(spread_open) AS open_spread,
-        avg(over_under_open) AS open_total
+        avg(spread_open) FILTER (WHERE provider = 'Bovada') AS open_spread,
+        avg(over_under_open) FILTER (WHERE provider = 'Bovada') AS open_total
     FROM lines
     GROUP BY game_id
 ),
@@ -502,14 +612,14 @@ ORDER BY 1
 
 GROUPINGS = {"all": "'all'", "season": "season", "weeks": "weeks_bucket"}
 
-# "This week" (same rule as the scores page), shared by the overrides queries
+# "This week" (same 12-hour rule as the predictions page), shared by the overrides queries
 CURRENT_WEEK_CTE = """
 current_week AS (
     SELECT season, week, season_type
     FROM games
     WHERE league = 'cfb'
       AND 'fbs' IN (home_classification, away_classification)
-      AND start_time > now() - interval '24 hours'
+      AND start_time > now() - interval '12 hours'
     ORDER BY start_time
     LIMIT 1
 )
@@ -700,13 +810,43 @@ def scores_rows(request: Request, league: str = "cfb"):
     )
 
 
+def make_week_nav(games, weeks, current, season, week, season_type):
+    """Which week is on screen, its neighbours in the list, and whether it's past, for the week picker."""
+    if games:
+        shown = (games[0]["view_season"], games[0]["view_week"], games[0]["view_season_type"])
+    else:
+        shown = (season, week, season_type)
+    keys = [(w["season"], w["week"], w["season_type"]) for w in weeks]
+    at = keys.index(shown) if shown in keys else None
+    now_key = (current["season"], current["week"], current["season_type"]) if current else None
+    now_at = keys.index(now_key) if now_key in keys else None
+    return {
+        "weeks": weeks,
+        "shown": shown,
+        "prev": keys[at - 1] if at is not None and at > 0 else None,
+        "next": keys[at + 1] if at is not None and at + 1 < len(keys) else None,
+        "is_current": season is None or shown == now_key,
+        # before this week in the list (a week with no predictions counts as past)
+        "is_past": shown != now_key and (at is None or now_at is None or at < now_at),
+    }
+
+
 @app.get("/predictions")
-def predictions_page(request: Request):
-    """Our model's lines for this week; market comparison is hidden until you ask for it."""
+def predictions_page(request: Request, season: int | None = None, week: int | None = None,
+                     season_type: str = "regular", league: str = "cfb"):
+    """Our model's lines for this week, or for a past week (?season=2026&week=11); &league=nfl for the NFL."""
+    if season is None or week is None or season_type not in ("regular", "postseason"):
+        season, week, season_type = None, None, "regular"      # anything incomplete: this week
+    if pick_league(league) == "nfl":
+        return nfl_predictions_page(request, season, week, season_type)
+    params = {"version": MODEL_VERSION, "season": season, "week": week, "season_type": season_type}
     with connect() as conn:
         conn.row_factory = dict_row
-        games = conn.execute(PREDICTIONS_SQL, {"version": MODEL_VERSION}).fetchall()
+        games = conn.execute(PREDICTIONS_SQL, params).fetchall()
         rates = conn.execute(PICK_RATES_SQL, {"version": MODEL_VERSION}).fetchall()
+        weeks = conn.execute(PREDICTION_WEEKS_SQL, {"league": "cfb"}).fetchall()
+        current = conn.execute(f"WITH {CURRENT_WEEK_CTE} SELECT season, week, season_type FROM current_week").fetchone()
+    week_nav = make_week_nav(games, weeks, current, season, week, season_type)
     pick_rates = {r["tier"]: r for r in rates}      # e.g. {"play": {...}, "pass": {...}}
     for g in games:
         g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
@@ -717,7 +857,26 @@ def predictions_page(request: Request):
     return templates.TemplateResponse(
         request,
         "predictions.html",
-        {"games": games, "pick_rates": pick_rates, "version": MODEL_VERSION, "active": "predictions"},
+        {"games": games, "pick_rates": pick_rates, "version": MODEL_VERSION, "active": "predictions",
+         "week_nav": week_nav, "league": "cfb"},
+    )
+
+
+def nfl_predictions_page(request, season, week, season_type):
+    """NFL tab of the predictions page: our line and total beside the nflverse line. No picks."""
+    params = {"version": NFL_MODEL_VERSION, "season": season, "week": week, "season_type": season_type}
+    with connect() as conn:
+        conn.row_factory = dict_row
+        games = conn.execute(NFL_PREDICTIONS_SQL, params).fetchall()
+        weeks = conn.execute(PREDICTION_WEEKS_SQL, {"league": "nfl"}).fetchall()
+        current = conn.execute(NFL_CURRENT_WEEK_SQL).fetchone()
+    for g in games:
+        g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
+    return templates.TemplateResponse(
+        request,
+        "nfl_predictions.html",
+        {"games": games, "version": NFL_MODEL_VERSION, "active": "predictions", "league": "nfl",
+         "week_nav": make_week_nav(games, weeks, current, season, week, season_type)},
     )
 
 

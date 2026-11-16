@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_cell, line_text %}
+{% block title %}NFL Predictions{% endblock %}
+{% block body_class %}full{% endblock %}
+
+{#- Link to one week of the NFL predictions page; key = (season, week, season_type) -#}
+{%- macro week_href(key) -%}/predictions?league=nfl&season={{ key[0] }}&week={{ key[1] }}{% if key[2] != 'regular' %}&season_type={{ key[2] }}{% endif %}{%- endmacro -%}
+{%- macro week_label(key) -%}{{ 'Playoffs, week ' ~ key[1] if key[2] == 'postseason' else 'Week ' ~ key[1] }}{%- endmacro -%}
+
+{% block content %}
+{%- set nav = week_nav if week_nav is defined else none %}
+<div class="page-head page-head-row">
+  <div>
+    <h1>Our NFL Lines{% if nav and nav.shown[1] is not none %} <span class="week-title">· {{ week_label(nav.shown) }}, {{ nav.shown[0] }}</span>{% endif %}</h1>
+    <p class="muted">Model {{ version }} · ± is our typical miss at this point in the season · times in Mountain</p>
+  </div>
+  <div class="head-actions">
+    <nav class="league-tabs" aria-label="League">
+      <a href="/predictions">College</a>
+      <a href="/predictions?league=nfl" class="active" aria-current="page">NFL</a>
+    </nav>
+    {%- if nav and nav.weeks %}
+    <nav class="week-nav" aria-label="Choose a week">
+      {%- if nav.prev %}<a class="toggle" href="{{ week_href(nav.prev) }}" aria-label="Previous week">‹</a>
+      {%- else %}<span class="toggle" aria-disabled="true">‹</span>{% endif %}
+      <select id="week-select" aria-label="Week">
+        {%- for w in nav.weeks|reverse %}
+        {%- set key = (w.season, w.week, w.season_type) %}
+        <option value="{{ week_href(key) }}" {{ 'selected' if key == nav.shown }}>{{ week_label(key) }}, {{ w.season }} · {{ w.first_kickoff.strftime('%b %-d') }}</option>
+        {%- endfor %}
+      </select>
+      {%- if nav.next %}<a class="toggle" href="{{ week_href(nav.next) }}" aria-label="Next week">›</a>
+      {%- else %}<span class="toggle" aria-disabled="true">›</span>{% endif %}
+      {%- if not nav.is_current %}<a class="toggle" href="/predictions?league=nfl">This week</a>{% endif %}
+    </nav>
+    {%- endif %}
+  </div>
+</div>
+
+<p class="muted small nfl-note">No NFL picks yet. Our NFL lines miss by more than the closing line (10.1 vs 9.8 points
+  in 2021–25) and are too flat: big favourites come out several points smaller than the market. Use them as a
+  second opinion, not a bet. Starting QBs are nflverse's projections until the game is played.</p>
+{%- if nav and nav.is_past %}
+<p class="muted small past-note">A past week: each game shows our last line before kickoff and the final score.
+  Live NFL predictions start Nov 16, 2026, so earlier weeks show no line.</p>
+{%- endif %}
+
+<div class="table-wrap sticky-wrap">
+  <table class="scores predictions" id="nfl-predictions">
+    <thead>
+      <tr>
+        <th>Visitor</th>
+        <th>Home</th>
+        <th>Kickoff</th>
+        <th>Starting QBs</th>
+        <th>Our line</th>
+        <th>Our O/U</th>
+        <th title="The nflverse line: the current line before kickoff, the closing line after">Market line</th>
+        <th>Market O/U</th>
+      </tr>
+    </thead>
+    <tbody>
+      {%- set ns = namespace(day=None) %}
+      {%- for g in games %}
+      {%- set day = g.local_start.strftime('%A, %B %-d') %}
+      {%- if day != ns.day %}{% set ns.day = day %}
+      <tr class="day-break"><th colspan="8" scope="colgroup">{{ day }}</th></tr>
+      {%- endif %}
+      {%- set state = g.state or 'pre' %}
+      {%- set has_ours = g.spread is not none %}
+      {%- set has_market = g.market_spread is not none %}
+      <tr class="game {{ 'started' if g.started }}">
+        {{ team_cell(g.away, g.away_espn_id, none, g.away_record, none, league='nfl') }}
+        {{ team_cell(g.home, g.home_espn_id, none, g.home_record, none, league='nfl') }}
+        <td class="kickoff" data-label="Kickoff">
+          {%- if state == 'post' and g.away_score is not none -%}
+            <span class="final">Final {{ g.away_score }}–{{ g.home_score }}</span>
+          {%- elif state == 'in' -%}
+            <span class="live-dot"></span>Live
+          {%- elif g.start_time_tbd -%}TBD
+          {%- else -%}{{ g.local_start.strftime('%-I:%M %p') }}
+          {%- endif -%}
+        </td>
+        <td class="qbs" data-label="Starting QBs">
+          {%- if g.away_qb or g.home_qb -%}
+            {{ g.away_qb or '?' }} <span class="at">@</span> {{ g.home_qb or '?' }}
+          {%- else -%}<span class="muted">not posted yet</span>{%- endif -%}
+        </td>
+        <td class="our-line" data-label="Our line">
+          {%- if has_ours -%}
+            <strong>{{ line_text(g.spread, g.home, g.away) }}</strong>
+            {%- if g.model_version != version %} <span class="adj-badge" title="Predicted before kickoff by {{ g.model_version }}">{{ g.model_version }}</span>{% endif -%}
+            {%- if g.spread_miss is not none %} <span class="band" title="Average miss of our NFL backtest predictions made with {{ g.weeks_played if g.weeks_played < 6 else '6+' }} weeks of data">±{{ '%.0f'|format(g.spread_miss|float) }}</span>{% endif -%}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+        <td class="our-total" data-label="Our O/U">
+          {%- if has_ours -%}
+            <strong>{{ '%.1f'|format(g.total|float) }}</strong>
+            {%- if g.total_miss is not none %} <span class="band">±{{ '%.0f'|format(g.total_miss|float) }}</span>{% endif -%}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+        <td class="line" data-label="Market line">
+          {%- if has_market -%}
+            {{ line_text(g.market_spread, g.home, g.away) }}
+            {%- if has_ours %}{% set d = g.spread|float - g.market_spread|float %}
+            <div class="diff">{% if d|abs >= 0.5 %}we're {{ '%.1f'|format(d|abs) }} more on {{ g.away if d > 0 else g.home }}{% else %}we agree{% endif %}</div>
+            {%- endif -%}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+        <td class="line" data-label="Market O/U">
+          {%- if g.market_total is not none -%}
+            {{ '%g'|format(g.market_total|float) }}
+            {%- if has_ours %}{% set t = g.total|float - g.market_total|float %}
+            <div class="diff">{% if t|abs >= 0.5 %}we're {{ '%.1f'|format(t|abs) }} {{ 'higher' if t > 0 else 'lower' }}{% else %}we agree{% endif %}</div>
+            {%- endif -%}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+      </tr>
+      {%- else %}
+      <tr><td colspan="8" class="empty">No NFL games for this week.</td></tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+  // Week picker: go to the chosen week
+  (function () {
+    var weekSelect = document.getElementById("week-select");
+    if (weekSelect) {
+      weekSelect.addEventListener("change", function () { window.location.href = weekSelect.value; });
+    }
+  })();
+</script>
+{% endblock %}

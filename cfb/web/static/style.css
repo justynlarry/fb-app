@@ -525,3 +525,29 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .league-tabs a { padding: 0.4rem 0.9rem; font-size: 0.85rem; color: var(--muted); text-decoration: none; background: var(--surface); }
 .league-tabs a + a { border-left: 1px solid var(--border); }
 .league-tabs a.active { background: var(--accent); color: #fff; }
+
+/* Predictions: week picker */
+.head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.week-nav { display: flex; align-items: center; gap: 0.35rem; }
+.week-nav a.toggle { text-decoration: none; }
+.week-nav .toggle[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+.week-nav select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  max-width: 100%;
+}
+.week-title { font-weight: 400; color: var(--muted); }
+.past-note { margin-top: -0.5rem; }
+
+/* Predictions: league tabs sit in the header row, so no bottom margin there */
+.head-actions .league-tabs { margin-bottom: 0; }
+/* NFL predictions */
+.qbs { font-size: 0.85rem; line-height: 1.35; }
+.qbs .at { color: var(--muted); }
+.nfl-note { margin: -0.25rem 0 1rem; }
+.diff { color: var(--muted); font-size: 0.8em; font-variant-numeric: tabular-nums; }

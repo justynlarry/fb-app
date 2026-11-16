@@ -25,18 +25,49 @@
 {%- endmacro -%}
 
 {%- macro rate_text(r) -%}
-  {%- if r -%}<span class="rate" title="How this kind of pick did in our backtest (2021–25, graded at the closing line)">{{ '%.0f'|format(100 * r.win_rate|float) }}% <span class="muted">· {{ '{:,}'.format(r.games) }} games</span></span>{%- endif -%}
+  {%- if r -%}<span class="rate" title="How this kind of pick did in our backtest (2021–25), graded at {{ "Bovada's opening line" if r.graded_at == 'open' else 'the closing line' }}">{{ '%.0f'|format(100 * r.win_rate|float) }}% <span class="muted">· {{ '{:,}'.format(r.games) }} games</span></span>{%- endif -%}
 {%- endmacro -%}
+
+{#- Link to one week of the predictions page; key = (season, week, season_type) -#}
+{%- macro week_href(key) -%}/predictions?season={{ key[0] }}&week={{ key[1] }}{% if key[2] != 'regular' %}&season_type={{ key[2] }}{% endif %}{%- endmacro -%}
+{%- macro week_label(key) -%}{{ 'Bowls' if key[2] == 'postseason' else 'Week ' ~ key[1] }}{%- endmacro -%}
 
 {% block content %}
 {%- set rates = pick_rates if pick_rates is defined else {} %}
+{%- set nav = week_nav if week_nav is defined else none %}
 <div class="page-head page-head-row">
   <div>
-    <h1>Our Lines</h1>
+    <h1>Our Lines{% if nav and nav.shown[1] is not none %} <span class="week-title">· {{ week_label(nav.shown) }}, {{ nav.shown[0] }}</span>{% endif %}</h1>
     <p class="muted">Model {{ version }} · ± is our typical miss at this point in the season · times in Mountain</p>
   </div>
-  <button type="button" class="toggle" id="market-toggle" aria-pressed="true">Hide market &amp; picks</button>
+  <div class="head-actions">
+    <nav class="league-tabs" aria-label="League">
+      <a href="/predictions" class="active" aria-current="page">College</a>
+      <a href="/predictions?league=nfl">NFL</a>
+    </nav>
+    {%- if nav and nav.weeks %}
+    <nav class="week-nav" aria-label="Choose a week">
+      {%- if nav.prev %}<a class="toggle" href="{{ week_href(nav.prev) }}" aria-label="Previous week">‹</a>
+      {%- else %}<span class="toggle" aria-disabled="true">‹</span>{% endif %}
+      <select id="week-select" aria-label="Week">
+        {%- for w in nav.weeks|reverse %}
+        {%- set key = (w.season, w.week, w.season_type) %}
+        <option value="{{ week_href(key) }}" {{ 'selected' if key == nav.shown }}>{{ week_label(key) }}, {{ w.season }} · {{ w.first_kickoff.strftime('%b %-d') }}</option>
+        {%- endfor %}
+      </select>
+      {%- if nav.next %}<a class="toggle" href="{{ week_href(nav.next) }}" aria-label="Next week">›</a>
+      {%- else %}<span class="toggle" aria-disabled="true">›</span>{% endif %}
+      {%- if not nav.is_current %}<a class="toggle" href="/predictions">This week</a>{% endif %}
+    </nav>
+    {%- endif %}
+    <button type="button" class="toggle" id="market-toggle" aria-pressed="true">Hide market &amp; picks</button>
+  </div>
 </div>
+{%- if nav and nav.is_past %}
+<p class="muted small past-note">A past week: each game shows our last line before kickoff and the pick recorded
+  then, graded against the final score. Picks were first recorded on Nov 12, 2026; weeks before 11 had no live
+  predictions, so they aren't listed.</p>
+{%- endif %}
 
 <div class="reminder" id="holdout-reminder" hidden>
   <strong>Reminder:</strong> the 2026 coach-career holdout is due (run once, after conference championship weekend).
@@ -76,8 +107,6 @@
       {%- set odiff = (g.spread|float - g.open_spread|float) if has_open else 0 %}
       {%- set move = (g.market_spread|float - g.open_spread|float) if (has_open and has_market) else 0 %}
       {%- set toward = (move < 0 and odiff < 0) or (move > 0 and odiff > 0) %}
-      {%- set has_range = has_open and g.open_hi is defined and g.open_hi is not none and g.open_hi != g.open_lo %}
-      {%- set best_open = (g.open_hi if odiff < 0 else g.open_lo) if has_range else none %}
 
       {#- ---- Pick: tier, side and best number from cfb/picks.py make_pick(), the one place for the rule
            (PICK_RATES_SQL repeats it for the backtest rates). The worker records the same pick. #}
@@ -154,7 +183,6 @@
               {%- endif -%}
             {%- elif has_open %} <span class="muted small">no move</span>
             {%- endif -%}
-            {%- if best_open is not none and odiff|abs >= 0.5 %}<div class="muted small" title="Best opening number across books for the side we like">best open: {{ line_text(best_open, g.home, g.away) }}</div>{% endif -%}
           {%- else -%}<span class="muted">–</span>{%- endif -%}
         </td>
 
@@ -247,7 +275,7 @@
         </td>
       </tr>
       {%- else %}
-      <tr><td colspan="9" class="empty">No predictions for this week yet.</td></tr>
+      <tr><td colspan="9" class="empty">No predictions for this week{{ '' if nav and nav.is_past else ' yet' }}.</td></tr>
       {%- endfor %}
     </tbody>
   </table>
@@ -269,10 +297,11 @@
     "Now" is the median of every sportsbook's current line (The Odds API, updated each morning, Sunday afternoon
     and evening, and Saturday before kickoff). Play and Caution show the <strong>best number available</strong> for
     our side, then the best price, and the book that has it.
-    The % is how that kind of pick has done in our backtest (2021–25, graded at the closing line), out of that many past games.
+    The % is how that kind of pick has done in our backtest (2021–25), out of that many past games: Play and Pass are
+    graded at Bovada's opening line (when we'd bet), Caution and totals at the closing line.
     Break-even at −110 is 52.4%. Line chips: <span class="chip chip-toward">▲ our way</span> the line has moved toward our
     number since it opened, <span class="chip chip-against">▼ against</span> away from it. Our edge has been biggest at the
-    opening line, so the earlier in the week, the better; "best open" is the best opening number across books.
+    opening line, so the earlier in the week, the better. The open is Bovada's opening line.
   </p>
 </div>
 <p class="muted small">Weather: forecast at kickoff (Open-Meteo, updated each morning). ⚠ = gusts 25+ mph or 0.1+ in.
@@ -299,6 +328,12 @@
       set(!table.classList.contains("show-market"));
     });
   })();
+
+  // Week picker: go to the chosen week
+  var weekSelect = document.getElementById("week-select");
+  if (weekSelect) {
+    weekSelect.addEventListener("change", function () { window.location.href = weekSelect.value; });
+  }
 
   // Holdout reminder: shows from Dec 7, 2026 (local time) until dismissed in this browser.
   (function () {
