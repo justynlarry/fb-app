@@ -669,3 +669,61 @@ Calibration = slope of the actual margin on our spread (1.0 = right; above 1 = t
   Fails 3 of 4 conditions. Better in 7 of 14 seasons. No variants.
 - Info: play-by-play and nflverse starters differ in 112 team-games since 1999. Rookie priors: round 1 about +0.08
   to +0.14 EPA/dropback above replacement, later picks about +0.03.
+
+### T-OPEN (free data): nfl-v3 at the Monday line (DRAFT 2026-11-17, NOT approved, NOT run)
+Replaces the paid version in `docs/nfl-audit-2026-11-16.md` section 6, test 1. Same question: does the NFL model know
+anything the Monday market doesn't? No NFL model has been graded at any line other than roughly the close, so these
+results are unseen. Seen so far: only how the Monday lines compare with the close (no model involved).
+
+**Lines (fixed now).**
+- *Bet time* = Monday 8:00 AM Eastern of game week (our 6:00 AM Mountain `odds_daily` snapshot, so live tracking can
+  copy the rule exactly).
+- *2018, 2019, 2021, 2022:* the last `line_history.csv` (TeamRankings consensus) spread quote at or before bet time. It must
+  be timestamped after 7:00 PM Eastern on the previous Sunday (week 1: no such check). Otherwise it's a stale lookahead
+  quote and the game is dropped.
+- *2023–2025:* `nfl_line_moves` source `picksfootball`, snapshot `mon`. Its time of day is unknown. If the Monday cell
+  is off the board or missing, the game is dropped (no Tuesday fallback; the fallback is reported as information).
+- *Close (for line movement):* from the same source as the Monday line, to avoid mixing sources: the last
+  `line_history` quote before kickoff, or picksfootball `gameday`. The nflverse close is reported beside it.
+- Regular season only. 2020 out. Playoffs and 2026 weeks 1–10 are reported, not judged.
+- Expected n: about 7 × 267, minus drops ≈ 1,800 games; about 450–550 3+ gaps.
+
+**Model (fixed now).**
+- nfl-v3 code and settings unchanged. Trained from 1999 in memory, as in T-HIST/T-MATCH clean; nothing is loaded into the DB.
+- Ratings rebuilt for each game with only games that kicked off before bet time. That leaves out last week's Monday
+  night game for the two teams that played in it.
+- *Starter (no lookahead):* the team's starter in its previous game. Exception: if he is on IR (`RES`) in a roster week
+  before this game, use the QB with the most dropbacks in that previous game other than him. Week 1 uses the previous
+  season's last starter, under the same IR rule. The actual-starter version is reported as information only.
+
+**Supported if both hold**, on 2018–25 without 2020. Paired bootstrap of games, 2,000 resamples.
+1. The mean line move toward us from the Monday line to the same-source close, on gaps of 3+ at the Monday line, is at
+   least 2.24 bootstrap SE above zero.
+2. The slope at the Monday line, (result − Monday line) on (our line − Monday line) over all games, is above zero.
+
+**Reported:**
+- slope ± SE at the Monday line and at the close
+- ATS 3+ and 5+ at the Monday line, at −110 since there are no prices; pushes excluded
+- share of picks on underdogs, and results by line on/off 3 and 7
+- everything split by era: line_history (2018–22) vs picksfootball (2023–25). If the two eras disagree in sign on
+  measure 1, the result is flagged and does not pass.
+- the actual-starter version, the nflverse close, playoffs, and 2026 weeks 1–10
+
+**Then:**
+- *Supported:* paper-track NFL picks at the live Monday 6:00 AM MT snapshot through 2027, under the college stopping rule
+  (section 5C). No real bets on the NFL until that record exists.
+- *Not supported:* the NFL tab drops tiers for good. The model stays a display and override tool.
+- No variants after the result, including other bet times, other starter rules, other gap sizes or other seasons.
+
+**Power (stated now).** About 1,800 games give a slope SE near 0.085, so the slope can't carry the test by itself.
+Measure 1 has the power: in college it was about 0.56 pts at about 8 SE.
+
+**Known weaknesses (accepted now):**
+- The two eras use different sources: a consensus with a known time, then one site without a known time of day.
+- The Monday line can't be bet at a known price.
+- picksfootball's Monday value may sometimes come from later in the day than 8:00 AM.
+- If supported, the 2027 paper record is the real test.
+
+**Count.** One judged run. NFL models judged so far: the grid plus T-QB, T-skill, T-CAL, T-MATCH, T-WEEK, T-MATCH
+clean, T-QB2. T-LOOK stays parked: its lookahead lines (sbro open 2016–21, picksfootball `open` 2023–26) have no
+posting time.
