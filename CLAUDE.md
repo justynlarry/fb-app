@@ -317,7 +317,7 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   **T-OPEN (free data, Monday 8 AM ET line, run 2026-11-17): supported by the rule, no betting value shown.** Line moved
   toward us +0.388 ± 0.073 pts on 3+ gaps (5.3 SE, all 7 seasons positive), but slope at Monday +0.04 ± 0.10 and ATS 3+
   50.0% ± 4.5 (n=466). Per the rule: paper-track NFL Monday picks through 2027, no real bets. Measure 1 may be inflated by
-  Monday-line noise; a no-skill benchmark test must be registered before reading it as edge (model-tests.md section 9).
+  Monday-line noise; **T-OPEN-B (same day) ruled that out**: with a market-implied benchmark (B1, ridge on earlier closes) in the regression, our gap still predicts the move (a = +0.087 ± 0.014, 6.1 SE; B1's own move +0.10) but not results (+0.03 ± 0.11). Agreed consequence: build NFL paper-tracking at the Monday 6 AM MT snapshot for 2027.
   T-LOOK still needs timed lookahead lines (The Odds API history, paid, ask first).
   T-QB2 rejected 2026-11-16 (QB value from full careers, faded, draft-slot prior): miss 10.268 → 10.268 on
   2011–25, n=3,827. The simple QB adjustment already captures it; don't retry without new information.

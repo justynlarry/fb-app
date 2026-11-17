@@ -816,3 +816,21 @@ and *a* will be small. If nfl-v3 adds information, *a* stays clearly positive wi
 - No variants afterwards: no other benchmarks, weights, seasons or gap sizes.
 
 **Count.** One judged run. NFL judged tests after this: nine.
+
+### T-OPEN-B result (run 2026-11-17, scratch `topen/t_open_b.py`, nothing written to the DB): **supported**
+- *Replication first:* the rebuilt game set and lines reproduce T-OPEN exactly (n = 1,750, measure 1 +0.388).
+- **Main test:** move = a·(ours − Monday) + b·(B1 − Monday) + c gives **a = +0.087 ± 0.014 (6.1 SE; bar 2.24)**,
+  b = −0.020 ± 0.012. Both eras are positive: line_history +0.112 ± 0.021 (5.4 SE), picksfootball +0.061 ± 0.020 (3.1 SE).
+- **B1's own measure 1:** +0.103 ± 0.061 (n = 588 3+ gaps), against nfl-v3's +0.388. By era: +0.055 and +0.160.
+  The expectation written for the noise explanation (B1 about 0.3–0.5, *a* small) did not happen.
+- **Results:** with result − Monday as the outcome, a = +0.032 ± 0.111 and b = +0.015 ± 0.104. Our gap still
+  doesn't predict results at the Monday line, but that SE is too large to rule out a modest effect.
+- **Other information:**
+  - B1 and nfl-v3 pick the same side of the Monday line in 63% of games (72% on our 3+ gaps), with gap correlation 0.45.
+  - Spread miss: ours 10.216, B1 10.224, Monday 9.897, close 9.819.
+
+**Reading.** The Monday-to-kickoff move toward nfl-v3 is not Monday-line noise. The market's own earlier view
+explains none of it (b ≈ 0), so nfl-v3 anticipates where the market goes during the week, at about 9% of its gap.
+What isn't shown is that this turns into wins at the Monday price (slope +0.04 ± 0.10, ATS 50.0%). Per the agreed
+consequence, NFL paper-tracking at the live Monday snapshot is built for 2027. The paper record, not these
+backtests, decides whether NFL picks are ever bet.
