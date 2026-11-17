@@ -83,6 +83,12 @@ more of 5 seasons.
 **Why one-sided 95%:** about 30 variants have been tried. Typical paired SEs are 0.008–0.009 for one added feature
 and 0.02–0.03 for a ratings change, so effects of about 0.015 and 0.04 respectively are detectable.
 
+### Rules added 2026-11-17 (new registrations only)
+- Live grading, tiers, ROI and 5C use the **bettable open** and bettable-book prices (CLAUDE.md, Backtest).
+  Historical tests stay at the Bovada "reference open" until timed bettable-book history exists.
+- Bar = one-sided Bonferroni at 5% for the plan's number of judged tests (1: 1.645, 3: 2.13, 5: 2.33, 10: 2.58).
+- Paid data purchases are pre-registered (what, rules, bars, pulls) before buying.
+
 ### Adoption policy (proposed): "for edge" vs "for accuracy"
 One rulebook, two ways in. Both need the rule written down first.
 - **Adopt for edge:** passes the acceptance rule in force (A now, B once approved).
@@ -261,6 +267,21 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 | T7 | 11-13 | Weather for totals: forecasts in the test season, observed weather in training; judged at the close | **Rejected** | Total slope at close Δ +0.014 ± 0.015 (0.97 SE). O/U 3+ at close 49.98 vs 50.02% (n≈2,110). Total miss 12.965 vs 12.971. Spread no-harm check also failed, by a trivial amount (−0.0006 ± 0.0003). Learned effects: rain −2.5 pts per team per inch; wind −0.14 per mph. |
 | C | 11-16 | Per-metric ridge shrinkage (alphas from 2017–19 next-game error: EPA 2, SR 2, explosiveness 8, pass/rush EPA 4, plays 4, points 2) | **Rejected** | Bovada open 2021–25 (n=4,169): Δslope −0.002 ± 0.007 (−0.36 SE; bar 2.24). ATS 3+ 52.41 → 52.42%. CLV pts 0.562 → 0.508 (−3.5 paired SE). Spread MAE 12.826 → 12.891, worse in all 5 seasons. Weeks-played 5+ Δslope −0.006. Ratings predict next-game metrics 1–9% better, but the points model gets worse. |
 | F | 11-16 | DraftKings lookahead: v5 with ratings one week staler, at the DK open 2023–25 | **Supported** (tag and track in 2027; no betting on this alone) | n=2,150. Slope +0.175 ± 0.063 (2.77 SE; bar 2.24); by season +0.15/+0.28/+0.09. Bovada Sunday open moved toward us by +0.73 ± 0.09 pts on 3+ gaps (n=1,124). Info: ATS 3+ at the DK open 53.5% (604–525, ±2.9) vs 55.4% for normal v5, whose slope +0.225 is inflated by lookahead. Caveat: some DK opens are older than one week, which flatters this. |
+| P1-T1 | 11-17 | Full matchup rows (college port of nfl-v3), Rule C at 1.96 | **Passed** → 2027 candidate | Δ line-move slope +0.0084 ± 0.0031 (2.72 SE), +all 5 seasons; result slope +0.009 ± 0.018; close slope +0.001; MAE 12.826 → 12.803; CLV 0.562 → 0.609; dogs 72 → 61% |
+| P1-T4 | 11-17 | 8 cached advanced stats (line yards, stuff rate, power, 2nd-level, open-field, down splits), Rule C at 1.96 | **Rejected** (2027 hypothesis H-T4) | Δ line-move −0.0031 ± 0.0021; slope left at close +0.038 ± 0.010 (fails guard); result slope +0.034 ± 0.010; ATS 52.41 → 53.22% |
+
+### H-T4: cached-stats batch as a 2027 hypothesis (pre-registered 2026-11-17, before any 2027 game)
+- **Why:** P1-T4 failed Rule C because its gain appeared at the close as much as at the open (result slope +0.034 ± 0.010,
+  slope left at the close +0.038 ± 0.010). Either the market never prices these stats, or it was a fit to 2021–25.
+  Only new seasons can tell.
+- **Models, frozen before 2027 week 0:** the frozen 2027 model (whatever is frozen: v5 + T1, plus coach career if 5A
+  is confirmed) and the same model + the P1-T4 batch (8 metrics, off_ and oppdef_, exactly as run on 2026-11-17).
+  Both trained on 2017–2026. Paper only; the T4 version never drives a pick.
+- **Games:** 2027 FBS-involved games with a Bovada open and close.
+- **Supported** if the paired Δ result slope at the **close** (median close of books) is ≥ 1.96 paired SE
+  (season-week bootstrap, 2,000). Reported beside it: Δ line-move slope, Δ result slope at the open, ATS 3+ at the open.
+- **Then:** supported → a candidate for 2028 under the accuracy rule plus this result; not supported → dropped for good.
+- One judged run, after the 2027 regular season.
 
 ### Slope metric (added 2026-11-13; information only for past decisions)
 **What it measures.** The slope is a continuous measure of edge that uses every game, not just the 3+ ones.
@@ -305,7 +326,7 @@ The reviewer's version (50.8% + 0.77 × 2.5% ≈ 52.7%) mixes three samples: 50.
 2018–25, and 0.77 is 2026's CLV. It still lands near the right answer.
 
 **Don't retry these without new information:** QB-change detection, recent-season weighting, bias
-correction, SP+ priors, portal, schedule spots, drive metrics (tested alone in Round 4 and in combination in Test 6:
+correction, SP+ priors, portal, schedule spots, the cached advanced-stats batch (P1-T4: no backtest variants; only H-T4 on 2027), drive metrics (tested alone in Round 4 and in combination in Test 6:
 no contribution either time), returning-production weighting, head-to-head, fumble luck, weather for totals (with
 forecasts, Test 7).
 **Still open:** coach career as a learned points-model feature. It passed Rule B in combination (T6-A) and

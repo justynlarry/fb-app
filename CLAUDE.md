@@ -92,6 +92,12 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    (non-backtest) predictions, i.e. from 2026 week 11. "This week" on predictions/overrides = week of the next game not
    over for 12+ h (scores page keeps 24 h). Past weeks show the last pre-game line and recorded pick, graded.
 3. Later: team ratings page, backtest report, overrides entry.
+4. **League toggles (2026-11-17):** Results, Backtest and Overrides take `?league=nfl` (shared `league_tabs` macro).
+   NFL Results/Backtest hide the opener-based columns (no NFL opener) and the Caution tier; NFL Overrides hides the
+   college-only "Starting QB out" helper. `NFL_PREDICTIONS_SQL` now applies overrides like the college page, so the
+   NFL page and the NFL pick logger (`picks.UPCOMING_SQL`) show the same line. Phones/tablets (≤1024 px) show NFL
+   nicknames only (`team_name` macro, `.team-city`). Claude typed the `main.py` part at the user's request (rule
+   unchanged).
 
 ## Model
 
@@ -284,7 +290,7 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   FEATURES = V1_FEATURES + QB_FEATURES (`choose_settings` keeps v1 inputs). Reproduces T-QB exactly (10.1405); backtest
   saved as `nfl-v2` (2,494 games; `nfl-v1` rows kept). nflverse lists projected starters for upcoming games.
   **Live NFL predictions (2026-11-16):** `nfl_model.predict_upcoming(season)` (first run: 123 games); worker job
-  `nfl_daily_update` at 6:30 AM MT = `nflverse.load_seasons([season])` + predict (skips when no NFL games within 3 days
+  `nfl_daily_update` at 5:30 AM MT (moved from 6:30 on 2026-11-17 so the 6 AM snapshot's picks include Sunday's games) = `nflverse.load_seasons([season])` + predict (skips when no NFL games within 3 days
   back / 10 ahead; `games_near(season, league)`). Watch-list item 3 done once the worker is restarted.
   **NFL tab on the predictions page (2026-11-16):** `/predictions?league=nfl` (`nfl_predictions.html`,
   `NFL_PREDICTIONS_SQL`, `make_week_nav` shared with college; `PREDICTION_WEEKS_SQL` takes `%(league)s`). Our line/total
@@ -318,6 +324,11 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   toward us +0.388 ± 0.073 pts on 3+ gaps (5.3 SE, all 7 seasons positive), but slope at Monday +0.04 ± 0.10 and ATS 3+
   50.0% ± 4.5 (n=466). Per the rule: paper-track NFL Monday picks through 2027, no real bets. Measure 1 may be inflated by
   Monday-line noise; **T-OPEN-B (same day) ruled that out**: with a market-implied benchmark (B1, ridge on earlier closes) in the regression, our gap still predicts the move (a = +0.087 ± 0.014, 6.1 SE; B1's own move +0.10) but not results (+0.03 ± 0.11). Agreed consequence: build NFL paper-tracking at the Monday 6 AM MT snapshot for 2027.
+  **NFL paper-tracking, step 1 done 2026-11-17:** `record_picks(league)` (`picks.VERSIONS`) logs NFL picks to `pick_log`
+  (model_version 'nfl-v3') after every NFL snapshot; tiers are play/pass only (no NFL opener in `lines`). Decisions (user,
+  2026-11-17): live picks use nflverse's projected starter and the live 2016+ training (T-OPEN used the previous-starter/IR
+  rule and 1999+); step 2 grades as "the" NFL bet the first snapshot at/after Monday 6:00 AM MT of game week with 4+ books
+  (not college's 8-hours-after-previous-kickoff rule).
   T-LOOK still needs timed lookahead lines (The Odds API history, paid, ask first).
   T-QB2 rejected 2026-11-16 (QB value from full careers, faded, draft-slot prior): miss 10.268 → 10.268 on
   2011–25, n=3,827. The simple QB adjustment already captures it; don't retry without new information.
@@ -351,7 +362,7 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
      overwrite the real pre-game record with replays. Planned guard: don't overwrite rows where `is_backtest` is false.
   2. `cfb/coaches.py load_coach_changes(last_season=2025)`: each August, once CFBD fills last season's `/coaches`,
      run it with the new `last_season` (replaces hand-entered 'manual' rows only where source is 'cfbd').
-  3. NFL daily refresh is done (`nfl_daily_update`, 6:30 AM MT). Still to do each August: check the first NFL
+  3. NFL daily refresh is done (`nfl_daily_update`, 5:30 AM MT). Still to do each August: check the first NFL
      snapshot and nflverse load for the new season.
 
 - **Remote access: LIVE since 2026-11-14** at `https://cfb.lokistoboggan.com` (Cloudflare Tunnel, `cloudflared` service
@@ -417,6 +428,18 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   ≈9,600 picks (≈22 seasons); 80% power to detect it needs ≈19,600 (≈45 seasons). Opening lines exist only
   2021+ (DraftKings 2023+, ESPN Bet 2023–25, Bovada); 2018–20 have close only, so every "at open" figure is
   2021–25. "Best open" = at most 3 books (1 in 2021–22), no prices.
+- **Bettable books (user, 2026-11-17):** MyBookie (main), DraftKings, FanDuel, BetMGM, Caesars, Fanatics (ex-PointsBet).
+  In our feed: mybookieag, draftkings, fanduel, betmgm. Caesars/Fanatics are in the Odds API us region but not returned.
+  Every other book (Bovada, LowVig, BetOnline, BetUS, BetRivers) is a reference line only.
+- **Bettable open** = best number among the bettable books in the first snapshot at bet time (019 rule: 8+ h after both
+  teams' previous kickoff, 4+ books). Live decisions, tiers, ROI and stopping rule 5C use it. History has no bettable
+  open (CFBD's DraftKings open is a lookahead), so 2021–25 research keeps the Bovada open, labelled "reference open".
+- **Prices, vig, ROI:** bettable books only (vig 4.3–4.8%; break-even at the median bettable price 52.4–52.6%).
+- **Pass bar per plan:** one-sided Bonferroni, 5% family: 1 test 1.645 SE, 3: 2.13, 5: 2.33, 10: 2.58; each plan states
+  its count and bar before running. Already-registered tests keep their bars.
+- **Paid data:** pre-registered before buying (tests, rules, bars, exact pulls and credits); nothing else run on it first.
+  These rules apply to tests registered after 2026-11-17; Holdout 5A, Test B, Holdout T, Test L are unchanged.
+  Odds API purchase decision (2026-11-17): not now; keep collecting free snapshots.
 - **CLV is direction only.** On 3+ picks the line moves +0.6 pts toward us vs a 6.3-pt average gap
   (~10% of the gap); that's how 2026 shows 64.8% CLV with 50% ATS at open. Report CLV in points too.
   Rule A's "CLV not down >1.0" means 1.0 percentage point of CLV %.
@@ -495,6 +518,13 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   2021–25 (947 requests incl. a gap refetch; 98% coverage), observed ERA5 for training, judged at the close.
   Total slope Δ +0.014 ± 0.015 (0.97 SE), O/U 3+ close 50.0%, total miss 12.965 vs 12.971. Weather stays a
   page flag only.
+- **Round 1 plan (docs/model-plan-2026-11-17.md), run 2026-11-17, Rule C at 1.96:** Step 1 sanity passed (v1→v5 slopes
+  rise together, rho +1.00) → Rule C is the main test. **T1 full matchup rows PASSED** (Δ line-move +0.0084 ± 0.0031,
+  2.7 SE, all 5 seasons; MAE 12.826 → 12.803; SD 13.65 → 14.52; weeks 0–4 calibration 0.943 → 0.912): candidate for
+  the frozen 2027 record (not live). **T4 cached-stats batch FAILED** (line-move −1.5 SE; slope left at the close
+  +4.0 SE); no more backtest variants, kept only as a pre-registered 2027 hypothesis (model-tests.md §4, H-T4).
+  Dropped: T2(a), T3 (= Test 3), T6 (= Test D). Round 2 candidates: T2(b) state-space, T5 (special teams;
+  WP garbage time), each under the accuracy rule.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.
