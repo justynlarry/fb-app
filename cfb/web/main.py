@@ -373,8 +373,9 @@ ORDER BY first_kickoff
 
 
 # NFL predictions for one week: our line and total (nfl model), the projected or actual starting QBs,
-# and the nflverse line beside them. No picks: our NFL lines trail the close and are too flat
-# (model-tests.md section 9). Same week rule as PREDICTIONS_SQL (asked-for week, or the 12-hour rule).
+# and the nflverse line beside them. Picks are paper only (not bets): our NFL lines trail the close and are too
+# flat (model-tests.md section 9). Started games carry the last pick saved before kickoff (pick_results 'last',
+# Odds API books) and its official result, like the college page. Same week rule as PREDICTIONS_SQL.
 NFL_PREDICTIONS_SQL = """
 WITH current_week AS (
     SELECT season, week, season_type
@@ -425,7 +426,15 @@ SELECT g.id AS game_id,
        COALESCE(l.state, CASE WHEN g.completed THEN 'post' END) AS state,
        COALESCE(l.away_score, g.away_points) AS away_score,
        COALESCE(l.home_score, g.home_points) AS home_score,
-       l.away_record, l.home_record
+       l.away_record, l.home_record,
+       r.tier AS rec_tier, r.side AS rec_side,
+       r.our_spread AS rec_our_spread, r.market_spread AS rec_market_spread,
+       r.bet_spread AS rec_bet_spread, r.bet_price AS rec_bet_price, r.bet_book AS rec_bet_book,
+       r.spread_outcome, r.spread_units,
+       r.our_total AS rec_our_total, r.market_total AS rec_market_total,
+       r.total_side AS rec_total_side, r.bet_total AS rec_bet_total,
+       r.total_price AS rec_total_price, r.total_book AS rec_total_book,
+       r.total_outcome, r.total_units
 FROM games g
 JOIN current_week w ON w.season = g.season
                    AND w.week = g.week
@@ -446,6 +455,9 @@ LEFT JOIN lines ln ON ln.game_id = g.id AND ln.provider = 'nflverse'
 LEFT JOIN nfl_starters sa ON sa.game_id = g.id AND sa.team_id = g.away_id
 LEFT JOIN nfl_starters sh ON sh.game_id = g.id AND sh.team_id = g.home_id
 LEFT JOIN live_scores l ON l.game_id = g.id
+LEFT JOIN pick_results r ON r.game_id = g.id
+                        AND r.model_version = p.model_version
+                        AND r.taken = 'last'
 WHERE g.league = 'nfl'
 ORDER BY g.start_time, a.school
 """
@@ -944,7 +956,7 @@ def predictions_page(request: Request, season: int | None = None, week: int | No
 
 
 def nfl_predictions_page(request, season, week, season_type):
-    """NFL tab of the predictions page: our line and total beside the nflverse line. No picks."""
+    """NFL tab of the predictions page: our line and total beside the nflverse line, paper picks only."""
     params = {"version": NFL_MODEL_VERSION, "season": season, "week": week, "season_type": season_type}
     with connect() as conn:
         conn.row_factory = dict_row
@@ -954,6 +966,9 @@ def nfl_predictions_page(request, season, week, season_type):
         rates = conn.execute(NFL_PICK_RATES_SQL, {"version": NFL_MODEL_VERSION}).fetchall()
     for g in games:
         g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
+        # Started games with a saved pick show that pick and its official result; the others work it
+        # out on the page from our line and the nflverse line.
+        g["recorded"] = recorded_pick(g) if g["started"] and g["rec_tier"] is not None else None
     return templates.TemplateResponse(
         request,
         "nfl_predictions.html",

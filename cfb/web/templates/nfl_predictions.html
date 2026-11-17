@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_cell, line_text, side_number %}
+{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text %}
 {% block title %}NFL Predictions{% endblock %}
 {% block body_class %}full{% endblock %}
 
@@ -21,6 +21,16 @@
     {%- elif (side == 'home' and v < n) or (side == 'away' and v > n) or (side == 'over' and v > n) or (side == 'under' and v < n) -%}<span class="outcome win">W</span>
     {%- else -%}<span class="outcome loss">L</span>
     {%- endif -%}
+  {%- endif -%}
+{%- endmacro -%}
+
+{#- Official W / L / P with units, from pick_results (the pick saved before kickoff, graded at its book's
+    number and price). Until the game is marked completed, fall back to the check from the score. -#}
+{%- macro official_badge(outcome, units, g, side, number, kind) -%}
+  {%- if outcome == 'win' -%}<span class="outcome win">W</span> <span class="units pos">{{ '%+.2f'|format(units|float) }}</span>
+  {%- elif outcome == 'loss' -%}<span class="outcome loss">L</span> <span class="units neg">−1.00</span>
+  {%- elif outcome == 'push' -%}<span class="outcome push">P</span>
+  {%- else -%}{{ result_badge(g, side, number, kind) }}
   {%- endif -%}
 {%- endmacro -%}
 
@@ -98,6 +108,10 @@
       {%- set side = none if (diff is none or diff == 0) else ('home' if diff < 0 else 'away') %}
       {%- set pick_team = g.home if side == 'home' else g.away %}
       {%- set tdiff = (g.total|float - g.market_total|float) if (has_ours and g.market_total is not none) else none %}
+      {#- Started games with a saved pick show that pick (Odds API books), not one worked out from the nflverse line #}
+      {%- set rec = g.recorded if g.recorded is defined else none %}
+      {%- set tier = rec.tier if rec else tier %}
+      {%- set gap = (rec.gap|float if rec.gap is not none else 0) if rec else gap %}
 
       <tr class="game {{ 'pick-' ~ tier if tier }} {{ 'big-gap' if tier == 'play' and gap >= 5 }} {{ 'started' if g.started }}">
         {{ team_cell(g.away, g.away_espn_id, none, g.away_record, none, league='nfl') }}
@@ -141,6 +155,33 @@
         </td>
 
         <td class="market pick" data-label="Pick">
+          {%- if rec %}
+          {%- set rec_home = rec.side == 'home' %}
+          {%- set rec_team = g.home if rec_home else g.away %}
+          {%- if rec.tier == 'play' and rec.bet_spread is not none -%}
+            <div class="pick-main">
+              <span class="tier tier-play" title="3+ points off the market line. Paper pick, not proven for the NFL.">Play</span>
+              <strong>{{ rec_team }} {{ side_number(rec.bet_spread, rec_home) }}</strong>
+              <span class="price">{{ price_text(rec.bet_price) }}</span>
+              <span class="book">{{ book_name(rec.bet_book) }}</span>
+              {{ official_badge(rec.outcome, rec.units, g, rec.side, rec.bet_spread, 'spread') }}
+            </div>
+            <div class="muted small">saved before kickoff · {{ '%.1f'|format(gap) }} pts off the line</div>
+          {%- else -%}
+            <div class="pick-main"><span class="tier tier-pass">Pass</span></div>
+            <div class="muted small">
+              {%- if rec.side and gap >= 0.5 -%}lean {{ rec_team }}, only {{ '%.1f'|format(gap) }} off{%- else -%}we agreed{%- endif %} · saved before kickoff
+            </div>
+          {%- endif %}
+          {%- if rec.total_side and rec.bet_total is not none %}
+            <div class="pick-total">
+              <span class="tier tier-info">Info</span>
+              {{ rec.total_side|capitalize }} {{ '%g'|format(rec.bet_total|float) }} {{ price_text(rec.total_price) }} {{ book_name(rec.total_book) }}
+              {%- if rec.total_gap is not none %} · {{ '%.1f'|format(rec.total_gap|float) }} off{% endif %}
+              {{ official_badge(rec.total_outcome, rec.total_units, g, rec.total_side, rec.bet_total, 'total') }}
+            </div>
+          {%- endif %}
+          {%- else %}
           {%- if tier == 'play' -%}
             <div class="pick-main">
               <span class="tier tier-play" title="3+ points off the market line. Not proven for the NFL.">Play</span>
@@ -179,6 +220,7 @@
             <div class="pick-total small">O/U lean {{ total_side|capitalize }} {{ '%g'|format(g.market_total|float) }} · {{ '%.1f'|format(tdiff|abs) }} off</div>
             {%- endif %}
           {%- endif %}
+          {%- endif %}
         </td>
       </tr>
       {%- else %}
@@ -200,6 +242,12 @@
   <p class="muted small">
     The % is how that kind of game went in our NFL backtest (2021–25), graded at the <strong>closing</strong> line, out of
     that many games. Break-even at −110 is 52.4%. The market line is nflverse's (one consensus number, no prices or books).
+  </p>
+  <p class="muted small">
+    Once a game starts, the Pick column shows the paper pick saved before kickoff instead: the best number and price
+    across the books in our odds feed, graded W/L with units (risking 1). These picks are a record for testing, not bets;
+    the full record is on the <a href="/results?league=nfl">Results</a> page. Games before the first save (Nov 18, 2026)
+    are checked against the nflverse line, without units.
   </p>
 </div>
 

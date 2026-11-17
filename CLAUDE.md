@@ -332,6 +332,13 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   2026-11-17): live picks use nflverse's projected starter and the live 2016+ training (T-OPEN used the previous-starter/IR
   rule and 1999+); step 2 grades as "the" NFL bet the first snapshot at/after Monday 6:00 AM MT of game week with 4+ books
   (not college's 8-hours-after-previous-kickoff rule).
+  **Step 2 done 2026-11-17 (`022_nfl_bet_time.sql`, applied live; Claude typed it and the `main.py` part at the user's
+  request, rule unchanged):** `pick_results` 'first' for NFL = first 4+-book save from Monday 6:00 AM MT of game week
+  (Monday on/before the week's first kickoff) to Tuesday 6:00 AM, **Monday only** (user): no Monday save = no Early
+  pick, no later stand-in. 2026 week 11 has none (NFL logging began with the Nov 18 6 AM snapshot: the worker was
+  restarted after that morning's run). College unchanged (verified 0 rows differ). NFL predictions page: started games
+  show the 'last' saved pick with official W/L + units, like college; older games keep the nflverse-line check.
+  Wild Card Monday-night winners' divisional games may have no Early pick (matchup not set by Monday 6 AM).
   T-LOOK still needs timed lookahead lines (The Odds API history, paid, ask first).
   T-QB2 rejected 2026-11-16 (QB value from full careers, faded, draft-slot prior): miss 10.268 → 10.268 on
   2011–25, n=3,827. The simple QB adjustment already captures it; don't retry without new information.
