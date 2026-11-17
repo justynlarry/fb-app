@@ -108,15 +108,20 @@ async def require_login(request: Request, call_next):
     return await call_next(request)
 
 
-# This week's games for one league (FBS only for college) with their latest live snapshot (if any).
-# "This week" = the week of the next game that hasn't been over for 24+ hours.
+# One week's games for one league (FBS only for college) with their latest live snapshot (if any).
+# Which week: the one asked for (season, week, season_type), or when week is NULL, "this week" =
+# the week of the next game that hasn't been over for 24+ hours (12+ for the NFL: Monday night rolls over Tuesday morning).
+# Live snapshots exist only since Nov 15, 2026; older games fall back to the final score in games.
 SCORES_SQL = """
 WITH current_week AS (
     SELECT season, week, season_type
     FROM games
     WHERE league = %(league)s
       AND (league <> 'cfb' OR 'fbs' IN (home_classification, away_classification))
-      AND start_time > now() - interval '24 hours'
+      AND (
+            (%(week)s::int IS NULL AND start_time > now() - (CASE WHEN league = 'nfl' THEN interval '12 hours' ELSE interval '24 hours' END))
+         OR (season = %(season)s::int AND week = %(week)s::int AND season_type = %(season_type)s::text)
+      )
     ORDER BY start_time
     LIMIT 1
 )
@@ -124,10 +129,11 @@ SELECT a.school AS away,
     h.school AS home,
     g.start_time,
     g.start_time_tbd,
-    l.state,
+    w.season AS view_season, w.week AS view_week, w.season_type AS view_season_type,
+    COALESCE(l.state, CASE WHEN g.completed THEN 'post' END) AS state,
     l.status_detail,
-    l.away_score,
-    l.home_score,
+    COALESCE(l.away_score, g.away_points) AS away_score,
+    COALESCE(l.home_score, g.home_points) AS home_score,
     l.possession_team_id = g.away_id AS away_has_ball,
     l.possession_team_id = g.home_id AS home_has_ball,
     l.away_timeouts,
@@ -150,6 +156,27 @@ LEFT JOIN live_scores l ON l.game_id = g.id
 WHERE g.league = %(league)s
   AND (g.league <> 'cfb' OR 'fbs' IN (g.home_classification, g.away_classification))
 ORDER BY g.start_time, a.school
+"""
+
+# Weeks the scores page can show: every week with at least one game (FBS only for college).
+SCORE_WEEKS_SQL = """
+SELECT season, week, season_type, min(start_time) AS first_kickoff
+FROM games
+WHERE league = %(league)s
+  AND (league <> 'cfb' OR 'fbs' IN (home_classification, away_classification))
+GROUP BY season, week, season_type
+ORDER BY first_kickoff
+"""
+
+# "This week" on the scores page (same 24-hour / NFL 12-hour rule as SCORES_SQL), so the picker knows which week is current.
+SCORES_CURRENT_WEEK_SQL = """
+SELECT season, week, season_type
+FROM games
+WHERE league = %(league)s
+  AND (league <> 'cfb' OR 'fbs' IN (home_classification, away_classification))
+  AND start_time > now() - CASE WHEN league = 'nfl' THEN interval '12 hours' ELSE interval '24 hours' END
+ORDER BY start_time
+LIMIT 1
 """
 
 # Our predictions for one week's games, with the typical miss for that point in
@@ -736,11 +763,12 @@ def pick_league(league):
     return league if league in LEAGUES else "cfb"
 
 
-def current_week_games(league):
-    """Run SCORES_SQL for one league and add each game's kickoff in local time."""
+def score_games(league, season=None, week=None, season_type="regular"):
+    """Run SCORES_SQL for one league and week (this week when week is None), with local kickoff times."""
+    params = {"league": league, "season": season, "week": week, "season_type": season_type}
     with connect() as conn:
         conn.row_factory = dict_row     # rows come back as dicts: g["away"]
-        games = conn.execute(SCORES_SQL, {"league": league}).fetchall()
+        games = conn.execute(SCORES_SQL, params).fetchall()
     for g in games:
         g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
     return games
@@ -835,12 +863,21 @@ def home():
 
 
 @app.get("/scores")
-def scores_page(request: Request, league: str = "cfb"):
-    """The full scores page for one league (?league=cfb or nfl)."""
+def scores_page(request: Request, league: str = "cfb", season: int | None = None,
+                week: int | None = None, season_type: str = "regular"):
+    """The scores page for one league (?league=cfb or nfl), this week or a chosen one (&season=2026&week=11)."""
     league = pick_league(league)
+    if season is None or week is None or season_type not in ("regular", "postseason"):
+        season, week, season_type = None, None, "regular"      # anything incomplete: this week
+    games = score_games(league, season, week, season_type)
+    with connect() as conn:
+        conn.row_factory = dict_row
+        weeks = conn.execute(SCORE_WEEKS_SQL, {"league": league}).fetchall()
+        current = conn.execute(SCORES_CURRENT_WEEK_SQL, {"league": league}).fetchone()
     return templates.TemplateResponse(
         request, "scores.html",
-        {"games": current_week_games(league), "league": league, "active": "scores"},
+        {"games": games, "league": league, "active": "scores",
+         "week_nav": make_week_nav(games, weeks, current, season, week, season_type)},
     )
 
 
@@ -849,7 +886,7 @@ def scores_rows(request: Request, league: str = "cfb"):
     """Just the table rows; HTMX swaps these in every 30 seconds."""
     league = pick_league(league)
     return templates.TemplateResponse(
-        request, "_score_rows.html", {"games": current_week_games(league), "league": league}
+        request, "_score_rows.html", {"games": score_games(league), "league": league}
     )
 
 

@@ -1,14 +1,48 @@
 {% extends "base.html" %}
 {% block title %}Scores{% endblock %}
 {% from "_macros.html" import league_tabs %}
+
+{#- Link to one week of the scores page; key = (season, week, season_type) -#}
+{%- macro week_href(key, league) -%}/scores?league={{ league }}&season={{ key[0] }}&week={{ key[1] }}{% if key[2] != 'regular' %}&season_type={{ key[2] }}{% endif %}{%- endmacro -%}
+{%- macro week_label(key, league) -%}
+  {%- if key[2] == 'postseason' and league == 'nfl' -%}
+    {{ {19: 'Wild Card', 20: 'Divisional', 21: 'Conf. Championships', 22: 'Super Bowl'}.get(key[1], 'Playoffs') }}
+  {%- elif key[2] == 'postseason' -%}Bowls
+  {%- else -%}Week {{ key[1] }}{%- endif -%}
+{%- endmacro -%}
+
 {% block content %}
 {%- set league = league | default('cfb') %}
+{%- set nav = week_nav if week_nav is defined else none %}
+{#- Poll only on this week; a past week's scores don't change -#}
+{%- set live = nav is none or nav.is_current %}
 <div class="page-head page-head-row">
   <div>
-    <h1>{{ 'NFL' if league == 'nfl' else 'FBS' }} Scores</h1>
-    <p class="muted">Updates every 30 seconds · times in Mountain</p>
+    <h1>{{ 'NFL' if league == 'nfl' else 'FBS' }} Scores{% if nav and nav.shown[1] is not none %} <span class="week-title">· {{ week_label(nav.shown, league) }}, {{ nav.shown[0] }}</span>{% endif %}</h1>
+    <p class="muted">{% if live %}Updates every 30 seconds{% else %}Final scores{% endif %} · times in Mountain</p>
   </div>
-  {{ league_tabs('/scores', league) }}
+  <div class="head-actions">
+    {{ league_tabs('/scores', league) }}
+    {%- if nav and nav.weeks %}
+    <nav class="week-nav" aria-label="Choose a week">
+      {%- if nav.prev %}<a class="toggle" href="{{ week_href(nav.prev, league) }}" aria-label="Previous week">‹</a>
+      {%- else %}<span class="toggle" aria-disabled="true">‹</span>{% endif %}
+      <select id="week-select" aria-label="Week">
+        {%- for season, season_weeks in nav.weeks|reverse|groupby('season')|reverse %}
+        <optgroup label="{{ season }}">
+          {%- for w in season_weeks %}
+          {%- set key = (w.season, w.week, w.season_type) %}
+          <option value="{{ week_href(key, league) }}" {{ 'selected' if key == nav.shown }}>{{ week_label(key, league) }}, {{ w.season }} · {{ w.first_kickoff.strftime('%b %-d') }}</option>
+          {%- endfor %}
+        </optgroup>
+        {%- endfor %}
+      </select>
+      {%- if nav.next %}<a class="toggle" href="{{ week_href(nav.next, league) }}" aria-label="Next week">›</a>
+      {%- else %}<span class="toggle" aria-disabled="true">›</span>{% endif %}
+      {%- if not nav.is_current %}<a class="toggle" href="/scores?league={{ league }}">This week</a>{% endif %}
+    </nav>
+    {%- endif %}
+  </div>
 </div>
 
 <div class="table-wrap">
@@ -25,9 +59,19 @@
         <th>Line</th>
       </tr>
     </thead>
-    <tbody hx-get="/scores/rows?league={{ league }}" hx-trigger="every 30s" hx-swap="innerHTML">
+    <tbody{% if live %} hx-get="/scores/rows?league={{ league }}" hx-trigger="every 30s" hx-swap="innerHTML"{% endif %}>
       {% include "_score_rows.html" %}
     </tbody>
   </table>
 </div>
+
+<script>
+  // Week picker: go to the chosen week
+  (function () {
+    var weekSelect = document.getElementById("week-select");
+    if (weekSelect) {
+      weekSelect.addEventListener("change", function () { window.location.href = weekSelect.value; });
+    }
+  })();
+</script>
 {% endblock %}

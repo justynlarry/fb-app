@@ -80,6 +80,9 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    score (visitor – home) | quarter + clock | possession | timeouts (visitor / home).
    Auto-refresh with HTMX polling (`hx-trigger="every 30s"`) of a fragment endpoint.
    Final games show "Final"; mark the team with the ball.
+   This week = 24 h after the last game, 12 h for the NFL (2026-11-17). Week picker (2026-11-17): `/scores?league=&season=&week=[&season_type=postseason]`, every week since 2016; past
+   weeks don't poll and fall back to `games` final scores (live_scores only since 2026-11-15). Claude typed the
+   `main.py` part at the user's request (rule unchanged).
 2. **Predictions.** visiting team | home team | day, date, kickoff |
    predicted line | predicted over/under, each with an uncertainty band from the backtest
    (e.g. "−6.5 ±11"; wider early season / vs FCS). Market spread/total and the difference
