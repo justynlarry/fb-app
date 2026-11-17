@@ -108,23 +108,20 @@ def nfl_daily_update():
 
 
 def odds_snapshot():
-    """Save every book's current lines (2 Odds API credits per league in season), then our college picks."""
+    """Save every book's current lines (2 Odds API credits per league in season), then our picks."""
     season = current_season()
-    saved_college = False
     for league in ("cfb", "nfl"):
         if not games_near(season, league):
             continue
         try:
             save_snapshot(league)
-            if league == "cfb":
-                saved_college = True
         except Exception as err:
             print(f"odds snapshot ({league}) FAILED: {err!r}")
-    if saved_college:
+            continue        # no fresh lines: don't record picks against old ones
         try:
-            record_picks()
+            record_picks(league)
         except Exception as err:
-            print(f"recording picks FAILED: {err!r}")
+            print(f"recording {league} picks FAILED: {err!r}")
 
 
 def main():
@@ -136,7 +133,7 @@ def main():
                       misfire_grace_time=3600, coalesce=True)
     scheduler.add_job(daily_retry, "cron", hour=RETRY_HOURS, minute=30, id="daily_retry",
                       misfire_grace_time=3600, coalesce=True)
-    scheduler.add_job(nfl_daily_update, "cron", hour=6, minute=30, id="nfl_daily_update",
+    scheduler.add_job(nfl_daily_update, "cron", hour=5, minute=30, id="nfl_daily_update",
                       misfire_grace_time=3600, coalesce=True)
     # Odds API snapshots: every morning, Sunday for the openers, Saturday before kickoffs
     # ~47 snapshots x 2 credits per league in season = ~94 (one league) to ~190 (both) of our 500 credits a month

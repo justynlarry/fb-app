@@ -10,10 +10,13 @@ from psycopg.rows import dict_row
 
 from cfb.db import connect
 from cfb.model import MODEL_VERSION
+from cfb.nfl_model import MODEL_VERSION as NFL_MODEL_VERSION
 
 PLAY_GAP = 3.0          # points off the market before a side is worth a bet
 TOTAL_GAP = 3.0         # same for totals (shown as info only)
 MOVE_MIN = 0.5      # a line "moved" if it changed by at least this much since the open
+# Which model's predictions to pick from, per league
+VERSIONS = {"cfb": MODEL_VERSION, "nfl": NFL_MODEL_VERSION}
 
 # Upcoming games:  our line (overrides included), the Bovada open (from CFBD), and the market right now
 UPCOMING_SQL = """
@@ -50,7 +53,7 @@ JOIN predictions p ON p.game_id = g.id
 JOIN market_now mn ON mn.game_id = g.id
 LEFT JOIN adjustments adj ON adj.game_id = g.id
 LEFT JOIN opening op ON op.game_id = g.id
-WHERE g.league = 'cfb'
+WHERE g.league = %(league)s
   AND g.start_time > now()
 """
 
@@ -138,13 +141,14 @@ def recorded_pick(g):
     }
 
 
-def record_picks():
-    """Save our current pick for every game that hasn't kicked off (run after each odds snapshot)."""
+def record_picks(league="cfb"):
+    """Save our current pick for every game in this league that hasn't kicked off (run after each odds snapshot)."""
     recorded_at = datetime.now(timezone.utc)
+    version = VERSIONS[league]
     saved = 0
     with connect() as conn:
         conn.row_factory = dict_row
-        games = conn.execute(UPCOMING_SQL, {"version": MODEL_VERSION}).fetchall()
+        games = conn.execute(UPCOMING_SQL, {"version": version, "league": league}).fetchall()
         for g in games:
             pick = make_pick(g)
             if pick["tier"] is None:
@@ -163,8 +167,8 @@ def record_picks():
                         %(total_side)s, %(bet_total)s, %(total_price)s, %(total_book)s)
                 ON CONFLICT (game_id, model_version, recorded_at) DO NOTHING
                 """,
-                {**g, **pick, "version": MODEL_VERSION, "recorded_at": recorded_at},
+                {**g, **pick, "version": version, "recorded_at": recorded_at},
             )
             saved += 1
-    print(f"picks recorded: {saved} games")
+    print(f"picks recorded ({league}): {saved} games")
     return saved
