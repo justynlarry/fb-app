@@ -32,3 +32,7 @@ cache/
 # --- Claude Code local settings (keep shared project settings) ---
 .claude/settings.local.json
 claude-resume.txt
+
+# --- Third-party data files (site terms forbid reuse; keep out of git) ---
+reference/*.csv
+reference/clean/

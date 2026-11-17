@@ -318,6 +318,20 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   plan, 10 credits × markets × regions per snapshot, data from June 2020; ~16,000 credits estimated; ask first).
   T-QB2 rejected 2026-11-16 (QB value from full careers, faded, draft-slot prior): miss 10.268 → 10.268 on
   2011–25, n=3,827. The simple QB adjustment already captures it; don't retry without new information.
+- **NFL line movement (loaded 2026-11-17; Claude typed `021_nfl_line_moves.sql` and `cfb/line_moves.py` at the user's
+  request, rule unchanged).** Table `nfl_line_moves` (game_id, source, snapshot, home_spread, total, moneylines, flags),
+  evaluation only. Load: `docker compose exec -T worker python -m cfb.line_moves picksfootball|sbro < reference/<file>.csv`
+  (files on stdin: containers mount only `cfb/`; re-runs upsert).
+  - `picksfootball`: picksfootball.com "point spread moves" tables the user copied by hand (site terms: personal use only, no
+    reuse without written permission; Claude does not scrape it). 2023–2026 incl. playoffs, 1,005 games; snapshots open, mon–sat,
+    gameday. **Monday = the usable opener** (0.91 from nflverse close; 'open' is a lookahead line, 2.64). Daily lines are flipped
+    back only when 7+ pts from the current line with the opposite sign (2 games); real flips are kept, flagged `favourite_flipped`.
+  - `sbro`: sportsbookreviewsonline archive 2007–2021 (same no-reuse terms; user's copy), open/close; only 2016–21 load (1,622
+    games, 2,403 earlier games skipped). Its open is mostly a lookahead line (best match ~7 days before kickoff); 2021 closes suspect.
+  - Other NFL line files in `reference/` (not loaded): `line_history.csv` (TeamRankings consensus, timestamped, 2018–22),
+    `sc_lines.csv` (SuperContest, fixed Wed/Thu, 2013–20), `bookmaker_odds.csv` + `games-selected-columns.csv` (per book, opens
+    2023–26 untimed), `nfl.csv` (aussportsbetting: Pinnacle 2014–Feb 2018, bet365 2018–Feb 2025, betr from Sep 2025 = unreliable),
+    `spreadspoke_scores.csv` (closes 1966–2025). Clean Monday-line window: 2018–22 (line_history) + 2023– (picksfootball).
 - **NFL situations, exploratory only (2026-11-16, scratch `nfl_situations.py`, nflverse closing lines 1999–2025):**
   division underdogs 52.0% ±1.9 (n=2,611) vs 50.5% non-division, not steady by era (50.1% in 2010–19); division unders
   51.7%. Late season, a team at ≤ .350 vs one at .500+ covers 47.6% ±4.6 (n=445, −1.5 pts); final week, a team not
