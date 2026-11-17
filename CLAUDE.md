@@ -314,8 +314,11 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   calibration 1.234 → 0.994 (3.6 SE), miss 10.737 → 10.730, slope at close +0.081 → +0.196 (info only; +0.003 on
   2021–25). App backtest 2021–25: miss 10.088, calibration 0.92, SD 6.01 (close 6.07), 3+ gaps 50.6% at the close.
   Too steep with 0–2 weeks of data (0.75). nfl-v1/v2 backtest rows kept.
-  **Open NFL tests (audit section 6, rules written):** T-OPEN and T-LOOK need The Odds API history (paid: $30/month
-  plan, 10 credits × markets × regions per snapshot, data from June 2020; ~16,000 credits estimated; ask first).
+  **T-OPEN (free data, Monday 8 AM ET line, run 2026-11-17): supported by the rule, no betting value shown.** Line moved
+  toward us +0.388 ± 0.073 pts on 3+ gaps (5.3 SE, all 7 seasons positive), but slope at Monday +0.04 ± 0.10 and ATS 3+
+  50.0% ± 4.5 (n=466). Per the rule: paper-track NFL Monday picks through 2027, no real bets. Measure 1 may be inflated by
+  Monday-line noise; a no-skill benchmark test must be registered before reading it as edge (model-tests.md section 9).
+  T-LOOK still needs timed lookahead lines (The Odds API history, paid, ask first).
   T-QB2 rejected 2026-11-16 (QB value from full careers, faded, draft-slot prior): miss 10.268 → 10.268 on
   2011–25, n=3,827. The simple QB adjustment already captures it; don't retry without new information.
 - **NFL line movement (loaded 2026-11-17; Claude typed `021_nfl_line_moves.sql` and `cfb/line_moves.py` at the user's
