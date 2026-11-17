@@ -1,4 +1,4 @@
-# CFB Betting Predictor — Claude instructions
+# Sports Predictor (college football + NFL) — Claude instructions
 
 Self-hosted app that predicts college football spreads and totals, compares them with
 market lines, and shows live Division I scores. Personal use only; reached over the
@@ -365,7 +365,7 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   3. NFL daily refresh is done (`nfl_daily_update`, 5:30 AM MT). Still to do each August: check the first NFL
      snapshot and nflverse load for the new season.
 
-- **Remote access: LIVE since 2026-11-14** at `https://cfb.lokistoboggan.com` (Cloudflare Tunnel, `cloudflared` service
+- **Remote access: LIVE since 2026-11-14** at `https://www.lokistoboggan.com` (moved from `cfb.` on 2026-11-17; site renamed "Sports Predictor") (Cloudflare Tunnel, `cloudflared` service
   in compose, pinned 2026.10.7, token `CLOUDFLARE_TUNNEL_TOKEN` in `.env`; Access app "CFB", team `sr-one`, email
   allow-list, one-time PIN). Lesson: the tunnel first went live with NO Access policy attached (pages and
   `POST /api/overrides` open for a few minutes; no writes happened). After any Cloudflare change, check unauthenticated

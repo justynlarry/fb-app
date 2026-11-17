@@ -42,9 +42,9 @@ services:
     command: python -m cfb.worker
 
   cloudflared:
-    # Cloudflare Tunnel: connects OUTBOUND to Cloudflare and forwards lokistoboggan.com
+    # Cloudflare Tunnel: connects OUTBOUND to Cloudflare and forwards the public hostname (www.lokistoboggan.com)
     # traffic to http://app:8000 on this Docker network. No ports published, nothing
-    # opened on the router. Cloudflare Access (login) sits in front of it.
+    # opened on the router. The app's own login is the only gate.
     image: cloudflare/cloudflared:2026.10.7
     command: tunnel --no-autoupdate run
     environment:
