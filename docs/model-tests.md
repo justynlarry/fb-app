@@ -774,3 +774,45 @@ Reported (information only):
   number sits nearer the true line than the noise does. It needs a benchmark before it's read as information the market
   lacked. Candidate follow-up, to be registered before running: the same measure for a no-skill benchmark (e.g. last
   week's close for the same matchup, adjusted for home field) on the same games.
+
+### T-OPEN-B: is the line move more than Monday-line noise? (DRAFT 2026-11-17, NOT approved, NOT run)
+**Question.** T-OPEN found the line moves +0.39 pts toward nfl-v3 between Monday and the close, but results at the
+Monday line show nothing. If the Monday number is noisy (a stale consensus quote, or a single site's value at an
+unknown hour), any sensible line built without that noise will appear to "see the line move toward it". This test
+asks whether nfl-v3 knows anything about the move beyond what the market itself said before Monday.
+
+**Benchmark (fixed now): B1, a market-implied line.** It has no football information beyond earlier closing lines.
+- *Fit:* least squares of earlier nflverse closing spreads on team ratings plus a home-field term:
+  close = R_away − R_home − H·(not neutral). Ridge α = 1, as in `cfb/ratings.py`.
+- *Games used:* only games that kicked off before bet time.
+- *Weights:* exactly as nfl-v3's ratings (`SETTINGS`: half-life 6 weeks, last season's games at weight 0.5^(age/6)
+  with age from `rating_args`, fading to 0 over 12 weeks played). Week 1 uses last season only.
+- *Prediction:* B1's spread for the game = R_away − R_home − H (H = 0 at neutral sites).
+- B1 never sees our model, the Monday line, results or anything after bet time.
+
+**Games and lines.** Exactly T-OPEN's judged set: the same 1,750 games, Monday lines and same-source closes, 2018–25
+regular season without 2020. No new data.
+
+**Main test.** One regression over all 1,750 games, with move = close − Monday line:
+
+  move = a · (ours − Monday) + b · (B1 − Monday) + c
+
+Supported if **a ≥ 2.24 bootstrap SE above zero**. Paired bootstrap of games, 2,000 resamples. That means nfl-v3's
+disagreement with Monday predicts the move even after allowing for the market's own earlier view.
+
+**Reported:**
+- B1's own measure 1 (move toward B1 on its 3+ gaps), beside nfl-v3's +0.388.
+- The same two-gap regression with result − Monday as the outcome (does our gap predict results once B1 is in?).
+- Both eras separately; how often B1 and nfl-v3 are on the same side.
+- B1's accuracy against the Monday line and the close.
+
+**Expectation, written now.** If Monday-line noise drives T-OPEN, B1's measure 1 will be similar to ours (0.3–0.5)
+and *a* will be small. If nfl-v3 adds information, *a* stays clearly positive with B1 in the regression.
+
+**Then (proposed; needs your agreement because it changes what T-OPEN's pass leads to):**
+- *Supported:* build NFL paper-tracking at the live Monday snapshot for 2027, as T-OPEN's rule says.
+- *Not supported:* don't build it. The NFL tab drops tiers for good, and the model stays a display and override tool.
+  T-OPEN's line-move result is recorded as explained by Monday-line noise.
+- No variants afterwards: no other benchmarks, weights, seasons or gap sizes.
+
+**Count.** One judged run. NFL judged tests after this: nine.
