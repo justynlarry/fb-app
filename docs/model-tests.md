@@ -727,3 +727,50 @@ Measure 1 has the power: in college it was about 0.56 pts at about 8 SE.
 **Count.** One judged run. NFL models judged so far: the grid plus T-QB, T-skill, T-CAL, T-MATCH, T-WEEK, T-MATCH
 clean, T-QB2. T-LOOK stays parked: its lookahead lines (sbro open 2016–21, picksfootball `open` 2023–26) have no
 posting time.
+
+### T-OPEN result (run 2026-11-17, scratch `topen/t_open.py`, 226 s, nothing written to the DB): **supported by the rule; no betting value shown**
+Details fixed before the run:
+- The points model is trained on the standard nfl-v3 rows (kickoff cutoff, actual starters) from 1999.
+- Only the predicted games use bet-time ratings, bet-time QB values and the starter rule.
+- IR check = status `RES` in the team's previous roster week.
+
+Judged, 2018–25 regular season without 2020 (n = 1,750 games; 132 line_history games dropped: 84 stale quotes,
+48 with no quote before bet time):
+
+| Measure | Result | Bar | Pass |
+|---|---|---|---|
+| 1. Line move toward us, Monday → same-source close, 3+ gaps (n = 477) | **+0.388 ± 0.073 pts (5.3 SE)** | ≥ 2.24 SE | yes |
+| 2. Slope at the Monday line | **+0.040 ± 0.101** | > 0 | yes (0.4 SE) |
+| Eras agree in sign on measure 1 | line_history +0.466 ± 0.112, picksfootball +0.314 ± 0.098 | same sign | yes |
+
+Reported (information only):
+- **At the Monday line, the results don't follow the line move:**
+  - ATS 3+ 50.0% ± 4.5 (n = 466); 5+ 47.2% ± 7.7 (n = 161); 66% of 3+ picks on underdogs.
+  - The line moved toward us on 48% of 3+ gaps and away on 30%.
+  - Slope by era: +0.086 ± 0.148 (line_history), −0.037 ± 0.142 (picksfootball).
+- **By season**, measure 1 was positive in all 7 seasons (+0.25 to +0.55). The slope was negative in 5 of 7.
+  ATS 3+ by season: 50.0 / 50.0 / 47.8 / 55.6 / 43.4 / 47.9 / 53.8%.
+- **Accuracy 2018–25:** spread miss ours 10.216, Monday line 9.897, close 9.819. Our line SD is 5.78 against 5.83
+  for the Monday line, so the line is no longer flat.
+- **Starter rule:** it differs from the actual starter in 619 of 4,754 team-games (13%).
+  - The actual-starter version (lookahead) gives move +0.673 (9.1 SE), slope +0.249 ± 0.113, ATS 3+ 53.0% ± 4.7.
+  - The kickoff-time model gives +0.716, slope +0.275, 53.7%.
+  - So most of the lookahead model's apparent value is QB news that becomes known during the week.
+- **Other cuts:**
+  - nflverse close instead of the same-source close: move +0.368 (4.6 SE).
+  - Slope at the same-source close: −0.059.
+  - Monday line on 3 or 7: move +0.256, ATS 42.3% (n = 78). Off 3 and 7: +0.416, 51.5% (n = 388).
+  - With the Tuesday fallback: move +0.386, slope +0.006.
+  - Playoffs 2018–25: n = 65, move +0.06.
+  - 2026 weeks 1–10: n = 150, move +0.511 ± 0.215, slope +0.515 ± 0.339, ATS 3+ 56.8% (n = 44).
+
+**Reading.**
+- The rule is met, so by the registration nfl-v3 goes to a paper record at the live Monday snapshot through 2027,
+  with no real NFL bets.
+- The pass rests entirely on measure 1. Results at the Monday line show no edge: slope +0.04 ± 0.10, ATS 50.0%.
+  That's the same pattern as college 2026 (CLV positive, ATS 50% at the open).
+- **Caveat (after the fact, so it can't change the verdict):** measure 1 can be inflated by noise in the Monday line
+  itself. A stale or one-off Monday number corrects toward the true line by the close, and any reasonable independent
+  number sits nearer the true line than the noise does. It needs a benchmark before it's read as information the market
+  lacked. Candidate follow-up, to be registered before running: the same measure for a no-skill benchmark (e.g. last
+  week's close for the same matchup, adjusted for home field) on the same games.
