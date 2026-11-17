@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Backtest{% endblock %}
 {% block body_class %}wide{% endblock %}
+{% from "_macros.html" import league_tabs %}
 
 {%- macro pct(w, l) -%}
   {%- if (w + l) > 0 -%}{{ '%.1f'|format(100.0 * w / (w + l)) }}%{%- else -%}–{%- endif -%}
@@ -12,7 +13,8 @@
 
 {%- macro miss(v) -%}{{ '%.2f'|format(v|float) if v is not none else '–' }}{%- endmacro -%}
 
-{%- macro stat_rows(rows, label_fn) -%}
+{#- show_open = False for the NFL: no opening line, so no line-moved and at-the-open columns -#}
+{%- macro stat_rows(rows, label_fn, show_open=true) -%}
   {%- for r in rows %}
   <tr>
     <td class="label">{{ label_fn(r.label) }}</td>
@@ -26,8 +28,10 @@
     <td class="num rec">{{ r.ats5_w }}–{{ r.ats5_l }}</td>
     <td class="num {{ pct_class(r.ats5_w, r.ats5_l) }}">{{ pct(r.ats5_w, r.ats5_l) }}</td>
     <td class="num {{ pct_class(r.ou3_w, r.ou3_l) }}">{{ pct(r.ou3_w, r.ou3_l) }}</td>
+    {%- if show_open %}
     <td class="num {{ pct_class(r.clv_w, r.clv_l) }}">{{ pct(r.clv_w, r.clv_l) }}</td>
-    {%- if r.open3_w is defined %}
+    {%- endif %}
+    {%- if show_open and r.open3_w is defined %}
     <td class="num rec">{{ r.open3_w }}–{{ r.open3_l }}</td>
     <td class="num {{ pct_class(r.open3_w, r.open3_l) }}">{{ pct(r.open3_w, r.open3_l) }}</td>
     {%- endif %}
@@ -38,7 +42,7 @@
 {%- macro season_label(v) -%}{{ v }}{% if v == 2020 %} <span class="muted small">COVID</span>{% endif %}{%- endmacro -%}
 {%- macro weeks_label(v) -%}{{ '6+' if v == 6 else v }}{%- endmacro -%}
 
-{%- macro table_head(first, with_open) -%}
+{%- macro table_head(first, with_open, show_clv=true) -%}
   <thead>
     <tr class="group-head">
       <th></th><th></th>
@@ -47,7 +51,7 @@
       <th colspan="2">At close, we differ 3+</th>
       <th colspan="2">At close, we differ 5+</th>
       <th>O/U 3+</th>
-      <th>Line moved to us</th>
+      {%- if show_clv %}<th>Line moved to us</th>{% endif %}
       {%- if with_open %}<th colspan="2" class="open-group" title="Bovada's opening line">At the open, we differ 3+</th>{% endif %}
     </tr>
     <tr>
@@ -57,7 +61,7 @@
       <th class="num">W–L</th><th class="num">%</th>
       <th class="num">W–L</th><th class="num">%</th>
       <th class="num">%</th>
-      <th class="num">%</th>
+      {%- if show_clv %}<th class="num">%</th>{% endif %}
       {%- if with_open %}
       <th class="num open-group">W–L</th><th class="num">%</th>
       {%- endif %}
@@ -66,13 +70,18 @@
 {%- endmacro -%}
 
 {% block content %}
-<div class="page-head">
-  <h1>Backtest</h1>
-  <p class="muted">
-    Model {{ version }} · every game predicted walk-forward, using only data from before kickoff ·
-    lines are the average across sportsbooks · <span class="good-text">green</span> = at or above the
-    52.4% needed to break even at −110
-  </p>
+{%- set league = league | default('cfb') %}
+{%- set is_nfl = league == 'nfl' %}
+<div class="page-head page-head-row">
+  <div>
+    <h1>{{ 'NFL ' if is_nfl }}Backtest</h1>
+    <p class="muted">
+      Model {{ version }} · every game predicted walk-forward, using only data from before kickoff ·
+      {{ 'market = nflverse closing line' if is_nfl else 'lines are the average across sportsbooks' }} ·
+      <span class="good-text">green</span> = at or above the 52.4% needed to break even at −110
+    </p>
+  </div>
+  {{ league_tabs('/backtest', league) }}
 </div>
 
 {%- set o = overall[0] if overall else none %}
@@ -103,12 +112,14 @@
     <div class="card-value {{ pct_class(o.ou3_w, o.ou3_l) }}">{{ pct(o.ou3_w, o.ou3_l) }}</div>
     <div class="card-sub">{{ o.ou3_w }}–{{ o.ou3_l }}</div>
   </div>
+  {%- if not is_nfl %}
   <div class="card highlight">
     <div class="card-label">Line moved toward us</div>
     <div class="card-value {{ pct_class(o.clv_w, o.clv_l) }}">{{ pct(o.clv_w, o.clv_l) }}</div>
     <div class="card-sub">{{ o.clv_w }}–{{ o.clv_l }} · we differed from the open by 3+</div>
   </div>
-  {%- if o.open3_w is defined %}
+  {%- endif %}
+  {%- if o.open3_w is defined and not is_nfl %}
   <div class="card highlight">
     <div class="card-label">ATS at the open, differ 3+</div>
     <div class="card-value {{ pct_class(o.open3_w, o.open3_l) }}">{{ pct(o.open3_w, o.open3_l) }}</div>
@@ -116,6 +127,12 @@
   </div>
   {%- endif %}
 </section>
+{%- if is_nfl %}
+<p class="muted small">Summary excludes 2020 (no crowds). The NFL "market" is nflverse's one line per game: roughly the
+  close, with no book or time, and its source changes in 2023 and 2025. There's no NFL opening line in this data, so
+  there are no line-moved or at-the-open columns, and these results measure accuracy at the close, not betting edge.
+  The Monday-line tests (T-OPEN, T-OPEN-B) used separate line files; see docs/model-tests.md section 9.</p>
+{%- else %}
 <p class="muted small">Summary excludes 2020 (COVID season). "Line moved toward us" = closing line value:
   when we disagreed with the <em>opening</em> line, how often the market moved our way by kickoff.
   "At the open" grades the side we'd have taken against Bovada's opening line, at that line, and line
@@ -123,12 +140,13 @@
   other books' "open" is often a lookahead line from before the previous week's games. Opening lines are
   only available from 2021.</p>
 {%- endif %}
+{%- endif %}
 
 <h2>By season</h2>
 <div class="table-wrap">
   <table class="stats">
-    {{ table_head("Season", seasons and seasons[0].open3_w is defined) }}
-    <tbody>{{ stat_rows(seasons, season_label) }}</tbody>
+    {{ table_head("Season", seasons and seasons[0].open3_w is defined and not is_nfl, not is_nfl) }}
+    <tbody>{{ stat_rows(seasons, season_label, not is_nfl) }}</tbody>
   </table>
 </div>
 
@@ -136,8 +154,8 @@
 <p class="muted small">Week 0 = the model only knew last season. Excludes 2020.</p>
 <div class="table-wrap">
   <table class="stats">
-    {{ table_head("Weeks", weeks and weeks[0].open3_w is defined) }}
-    <tbody>{{ stat_rows(weeks, weeks_label) }}</tbody>
+    {{ table_head("Weeks", weeks and weeks[0].open3_w is defined and not is_nfl, not is_nfl) }}
+    <tbody>{{ stat_rows(weeks, weeks_label, not is_nfl) }}</tbody>
   </table>
 </div>
 {% endblock %}

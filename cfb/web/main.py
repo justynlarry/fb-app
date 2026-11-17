@@ -368,6 +368,17 @@ model_miss AS (         -- typical miss in the NFL backtest, by weeks of data (2
     JOIN games g ON g.id = p.game_id
     WHERE p.is_backtest AND p.model_version = %(version)s AND g.completed AND g.season <> 2020
     GROUP BY 1
+),
+adjustments AS (        -- active overrides, same as the college page
+    SELECT o.game_id,
+           sum(o.points) FILTER (WHERE o.team_id = g.home_id) AS home_adj,
+           sum(o.points) FILTER (WHERE o.team_id = g.away_id) AS away_adj,
+           string_agg(t.school || ' ' || o.points || ': ' || o.reason, '; ') AS notes
+    FROM overrides o
+    JOIN games g ON g.id = o.game_id
+    JOIN teams t ON t.id = o.team_id
+    WHERE o.active
+    GROUP BY o.game_id
 )
 SELECT g.id AS game_id,
        a.school AS away, h.school AS home,
@@ -375,7 +386,12 @@ SELECT g.id AS game_id,
        g.start_time, g.start_time_tbd,
        g.start_time <= now() AS started,
        w.season AS view_season, w.week AS view_week, w.season_type AS view_season_type,
-       p.spread, p.total, p.weeks_played, p.model_version,
+       p.spread AS model_spread, p.total AS model_total,
+       (p.away_points + COALESCE(adj.away_adj, 0))
+         - (p.home_points + COALESCE(adj.home_adj, 0)) AS spread,
+       p.total + COALESCE(adj.home_adj, 0) + COALESCE(adj.away_adj, 0) AS total,
+       adj.notes AS adjustment_notes,
+       p.weeks_played, p.model_version,
        mm.spread_miss, mm.total_miss,
        ln.spread AS market_spread, ln.over_under AS market_total,
        sa.qb_name AS away_qb, sh.qb_name AS home_qb,
@@ -398,6 +414,7 @@ LEFT JOIN LATERAL (     -- this version's pre-game prediction, or else the lates
     LIMIT 1
 ) p ON true
 LEFT JOIN model_miss mm ON mm.bucket = LEAST(p.weeks_played, 6)
+LEFT JOIN adjustments adj ON adj.game_id = g.id
 LEFT JOIN lines ln ON ln.game_id = g.id AND ln.provider = 'nflverse'
 LEFT JOIN nfl_starters sa ON sa.game_id = g.id AND sa.team_id = g.away_id
 LEFT JOIN nfl_starters sh ON sh.game_id = g.id AND sh.team_id = g.home_id
@@ -642,8 +659,8 @@ CURRENT_WEEK_CTE = """
 current_week AS (
     SELECT season, week, season_type
     FROM games
-    WHERE league = 'cfb'
-      AND 'fbs' IN (home_classification, away_classification)
+    WHERE league = %(league)s
+      AND (league <> 'cfb' OR 'fbs' IN (home_classification, away_classification))
       AND start_time > now() - interval '12 hours'
     ORDER BY start_time
     LIMIT 1
@@ -665,8 +682,8 @@ JOIN current_week w ON w.season = g.season
                    AND w.season_type = g.season_type
 JOIN teams h ON h.id = g.home_id
 JOIN teams a ON a.id = g.away_id
-WHERE g.league = 'cfb'
-  AND 'fbs' IN (g.home_classification, g.away_classification)
+WHERE g.league = %(league)s
+  AND (g.league <> 'cfb' OR 'fbs' IN (g.home_classification, g.away_classification))
   AND g.start_time > now()
 ORDER BY g.start_time, a.school
 """
@@ -687,6 +704,7 @@ JOIN teams t ON t.id = o.team_id
 JOIN teams h ON h.id = g.home_id
 JOIN teams a ON a.id = g.away_id
 WHERE o.active
+  AND g.league = %(league)s
   AND g.start_time > now() - interval '7 days'
 ORDER BY g.start_time, a.school
 """
@@ -700,13 +718,13 @@ class OverrideIn(BaseModel):
     reason: str = Field(min_length=1, max_length=200)
 
 
-def backtest_summary(group, include_2020):
+def backtest_summary(group, include_2020, version=MODEL_VERSION):
     """Backtest results for one grouping: 'all' (one row), 'season', or 'weeks'."""
     sql = BACKTEST_SQL.format(group_by=GROUPINGS[group])
     with connect() as conn:
         conn.row_factory = dict_row
         return conn.execute(
-            sql, {"version": MODEL_VERSION, "include_2020": include_2020}
+            sql, {"version": version, "include_2020": include_2020}
         ).fetchall()
 
 
@@ -870,7 +888,8 @@ def predictions_page(request: Request, season: int | None = None, week: int | No
         games = conn.execute(PREDICTIONS_SQL, params).fetchall()
         rates = conn.execute(PICK_RATES_SQL, {"version": MODEL_VERSION}).fetchall()
         weeks = conn.execute(PREDICTION_WEEKS_SQL, {"league": "cfb"}).fetchall()
-        current = conn.execute(f"WITH {CURRENT_WEEK_CTE} SELECT season, week, season_type FROM current_week").fetchone()
+        current = conn.execute(f"WITH {CURRENT_WEEK_CTE} SELECT season, week, season_type FROM current_week",
+                               {"league": "cfb"}).fetchone()
     week_nav = make_week_nav(games, weeks, current, season, week, season_type)
     pick_rates = {r["tier"]: r for r in rates}      # e.g. {"play": {...}, "pass": {...}}
     for g in games:
@@ -908,52 +927,62 @@ def nfl_predictions_page(request, season, week, season_type):
 
 
 @app.get("/backtest")
-def backtest_page(request: Request):
-    """How the model would have done, walk-forward, vs. the market."""
+def backtest_page(request: Request, league: str = "cfb"):
+    """How the model would have done, walk-forward, vs. the market (?league=nfl for the NFL)."""
+    league = pick_league(league)
+    version = NFL_MODEL_VERSION if league == "nfl" else MODEL_VERSION
     return templates.TemplateResponse(
         request,
         "backtest.html",
         {
-            "overall": backtest_summary("all", include_2020=False),
-            "seasons": backtest_summary("season", include_2020=True),
-            "weeks": backtest_summary("weeks", include_2020=False),
-            "version": MODEL_VERSION,
+            "overall": backtest_summary("all", include_2020=False, version=version),
+            "seasons": backtest_summary("season", include_2020=True, version=version),
+            "weeks": backtest_summary("weeks", include_2020=False, version=version),
+            "version": version,
             "active": "backtest",
+            "league": league,
         },
     )
 
 
 @app.get("/results")
-def results_page(request: Request):
-    """Our real picks, saved before kickoff and graded at the best price we could get."""
+def results_page(request: Request, league: str = "cfb"):
+    """Our picks, saved before kickoff and graded at the best price we could get (?league=nfl for the NFL)."""
+    league = pick_league(league)
+    version = NFL_MODEL_VERSION if league == "nfl" else MODEL_VERSION
     with connect() as conn:
         conn.row_factory = dict_row
-        summary = conn.execute(RESULTS_SUMMARY_SQL, {"version": MODEL_VERSION}).fetchall()
-        summary += conn.execute(OPEN_RESULTS_SQL, {"version": MODEL_VERSION}).fetchall()
-        recent = conn.execute(RECENT_PICKS_SQL, {"version": MODEL_VERSION}).fetchall()
-        shopping = conn.execute(SHOPPING_SQL, {"version": MODEL_VERSION}).fetchall()
+        summary = conn.execute(RESULTS_SUMMARY_SQL, {"version": version}).fetchall()
+        if league == "cfb":
+            # Bovada's opening line exists only for college
+            summary += conn.execute(OPEN_RESULTS_SQL, {"version": version}).fetchall()
+        recent = conn.execute(RECENT_PICKS_SQL, {"version": version}).fetchall()
+        shopping = conn.execute(SHOPPING_SQL, {"version": version}).fetchall()
     for r in recent:
         r["local_start"] = r["start_time"].astimezone(LOCAL_TZ)
     return templates.TemplateResponse(
         request,
         "results.html",
-        {"summary": summary, "recent": recent, "shopping": shopping, "version": MODEL_VERSION, "active": "results"},
+        {"summary": summary, "recent": recent, "shopping": shopping, "version": version,
+         "active": "results", "league": league},
     )
 
 
 @app.get("/overrides")
-def overrides_page(request: Request, game_id: int | None = None):
-    """Add or remove manual adjustments for this week's games."""
+def overrides_page(request: Request, game_id: int | None = None, league: str = "cfb"):
+    """Add or remove manual adjustments for this week's games (?league=nfl for the NFL)."""
+    league = pick_league(league)
     with connect() as conn:
         conn.row_factory = dict_row
-        games = conn.execute(OVERRIDE_GAMES_SQL).fetchall()
-        overrides = conn.execute(ACTIVE_OVERRIDES_SQL).fetchall()
+        games = conn.execute(OVERRIDE_GAMES_SQL, {"league": league}).fetchall()
+        overrides = conn.execute(ACTIVE_OVERRIDES_SQL, {"league": league}).fetchall()
     for row in games + overrides:
         row["local_start"] = row["start_time"].astimezone(LOCAL_TZ)
     return templates.TemplateResponse(
         request,
         "overrides.html",
-        {"games": games, "overrides": overrides, "selected_game": game_id, "active": "overrides"},
+        {"games": games, "overrides": overrides, "selected_game": game_id,
+         "active": "overrides", "league": league},
     )
 
 

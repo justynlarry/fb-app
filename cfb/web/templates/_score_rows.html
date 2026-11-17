@@ -13,7 +13,7 @@
   {%- endif -%}
 {%- endmacro -%}
 
-{%- from "_macros.html" import team_cell -%}
+{%- from "_macros.html" import team_cell, team_name -%}
 
 {%- set ns = namespace(day=None) -%}
 {%- for g in games %}
@@ -48,7 +48,7 @@
   </td>
   <td class="possession">
     {%- if state == 'in' -%}
-      {%- if g.away_has_ball %}{{ g.away }}{% elif g.home_has_ball %}{{ g.home }}{% endif -%}
+      {%- if g.away_has_ball %}{{ team_name(g.away, league) }}{% elif g.home_has_ball %}{{ team_name(g.home, league) }}{% endif -%}
       {%- if g.down_distance %}<div class="muted small">{{ g.down_distance }}</div>{% endif -%}
     {%- endif -%}
   </td>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Scores{% endblock %}
+{% from "_macros.html" import league_tabs %}
 {% block content %}
 {%- set league = league | default('cfb') %}
 <div class="page-head page-head-row">
@@ -7,10 +8,7 @@
     <h1>{{ 'NFL' if league == 'nfl' else 'FBS' }} Scores</h1>
     <p class="muted">Updates every 30 seconds · times in Mountain</p>
   </div>
-  <nav class="league-tabs" aria-label="League">
-    <a href="/scores?league=cfb" class="{{ 'active' if league == 'cfb' }}" {{ 'aria-current="page"' if league == 'cfb' }}>College</a>
-    <a href="/scores?league=nfl" class="{{ 'active' if league == 'nfl' }}" {{ 'aria-current="page"' if league == 'nfl' }}>NFL</a>
-  </nav>
+  {{ league_tabs('/scores', league) }}
 </div>
 
 <div class="table-wrap">

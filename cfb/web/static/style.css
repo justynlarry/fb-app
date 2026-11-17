@@ -141,6 +141,9 @@ tbody tr:last-child td { border-bottom: none; }
   vertical-align: 0.1em;
 }
 .record { font-size: 0.78em; font-weight: 400; color: var(--muted); }
+/* NFL names are long ("Washington Commanders"): phones and tablets show the nickname only, so NFL
+   tables are as wide as college ones. The full name is in the cell's title. */
+@media (max-width: 1024px) { .team-city { display: none; } }
 .record span { opacity: 0.85; }
 .scores .line { font-variant-numeric: tabular-nums; }
 

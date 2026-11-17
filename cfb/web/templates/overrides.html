@@ -1,11 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Overrides{% endblock %}
+{% from "_macros.html" import league_tabs %}
 {% block content %}
-<div class="page-head">
-  <h1>Overrides</h1>
-  <p class="muted">Adjust a team's predicted points for news the model can't see: injuries, suspensions,
-    weather. The model's own numbers are never changed; the predictions page shows both.</p>
+{%- set league = league | default('cfb') %}
+{%- set is_nfl = league == 'nfl' %}
+<div class="page-head page-head-row">
+  <div>
+    <h1>{{ 'NFL ' if is_nfl }}Overrides</h1>
+    <p class="muted">Adjust a team's predicted points for news the model can't see: injuries, suspensions,
+      weather. The model's own numbers are never changed; the predictions page shows both.</p>
+  </div>
+  {{ league_tabs('/overrides', league) }}
 </div>
+{%- if is_nfl %}
+<p class="note">The NFL model already adjusts for each team's projected starting QB (from nflverse), so don't enter a
+  QB change here unless the listed starter is wrong. Use overrides for other news: key injuries late in the week,
+  weather. NFL overrides also change the paper picks recorded for the 2027 test.</p>
+{%- endif %}
 
 {%- set is_admin = request.state.user is defined and request.state.user.is_admin %}
 {%- if is_admin %}
@@ -32,7 +43,7 @@
         <label><input type="radio" name="team_id" id="team-away" required> <span id="team-away-name"></span></label>
         <label><input type="radio" name="team_id" id="team-home"> <span id="team-home-name"></span></label>
       </div>
-      <div class="quick-actions">
+      <div class="quick-actions"{% if is_nfl %} hidden{% endif %}>
         <button type="button" class="toggle" id="qb-out" disabled>Starting QB out</button>
         <span class="muted small" id="qb-hint">Pick a team first</span>
       </div>
@@ -56,7 +67,7 @@
     </div>
   </form>
   {%- else %}
-  <p class="muted">No games this week.</p>
+  <p class="muted">No {{ 'NFL' if is_nfl else 'college' }} games left to adjust this week.</p>
   {%- endif %}
 </section>
 {%- else %}

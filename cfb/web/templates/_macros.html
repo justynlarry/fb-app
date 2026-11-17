@@ -1,7 +1,24 @@
 {#- Shared pieces used by more than one page. -#}
 
+{#- College / NFL switch for a page, e.g. league_tabs('/results', league).  extra = more query string ('&week=3'). -#}
+{%- macro league_tabs(path, league, extra='') -%}
+  <nav class="league-tabs" aria-label="League">
+    <a href="{{ path }}?league=cfb{{ extra }}" class="{{ 'active' if league != 'nfl' }}" {{ 'aria-current="page"' if league != 'nfl' }}>College</a>
+    <a href="{{ path }}?league=nfl{{ extra }}" class="{{ 'active' if league == 'nfl' }}" {{ 'aria-current="page"' if league == 'nfl' }}>NFL</a>
+  </nav>
+{%- endmacro -%}
+
+{#- A team's name. NFL names ("Washington Commanders") are long, so on phones and tablets only the
+    nickname shows ("Commanders"); the city is hidden by CSS (.team-city). College names are unchanged. -#}
+{%- macro team_name(name, league='cfb') -%}
+  {%- if league == 'nfl' and name and ' ' in name -%}
+    {%- set parts = name.rsplit(' ', 1) -%}
+    <span class="team-city">{{ parts[0] }} </span>{{ parts[1] }}
+  {%- else -%}{{ name }}{%- endif -%}
+{%- endmacro -%}
+
 {%- macro team_cell(name, espn_id, rank, record, conf_record, has_ball=false, won=false, league='cfb') -%}
-  <td class="team {{ 'winner' if won }}">
+  <td class="team {{ 'winner' if won }}"{% if league == 'nfl' %} title="{{ name }}"{% endif %}>
     <div class="team-cell">
       {%- if espn_id %}
       <img class="logo" alt="" loading="lazy" width="24" height="24"
@@ -11,7 +28,7 @@
       <div>
         <div class="team-name">
           {%- if rank %}<span class="rank">{{ rank }}</span>{% endif -%}
-          {{ name }}
+          {{ team_name(name, league) }}
           {%- if has_ball %} <span class="ball" title="Has the ball">🏈</span>{% endif -%}
         </div>
         {%- if record %}
