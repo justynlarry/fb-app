@@ -125,8 +125,13 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
 - **Coaching & injuries (planned, 2026-11-11):**
   - Head coaches: automatic. `/coaches` (already cached) for season-to-season changes;
     `/coaches/tenures` for interim/mid-season changes. Use as a model-v2 input.
-  - Coordinators: no source in CFBD or ESPN. User enters OC/DC in a manual table each
-    offseason (step 6).
+  - Coordinators: no source in CFBD or ESPN (CFBD is head coaches only, checked 2026-11-18). **Table `coordinators`
+    (026, Claude typed it at the user's request, rule unchanged; applied and loaded 2026-11-18):** one row per team,
+    season, unit (`offense`/`defense`): `names` (everyone listed, incl. in-season replacements; empty = head coach calls
+    it), `is_new` (no name in common with last season; NULL = no previous season), `raw_field`, `source`
+    ('wikipedia' | 'manual'), `source_title`. History 2015–2025 from Wikipedia infoboxes: 2,874 rows, new OC 533 / DC 482
+    (= the T-OCDC flags). Each August add the new season (Wikipedia pull + hand check); mid-season changes by hand
+    ('manual', from FootballScoop / On3 / 247 / CBS trackers; Claude doesn't scrape those).
   - Injuries: no API (CFBD has none; ESPN college game summaries have none, checked). ESPN team endpoints
     also checked 2026-11-14, all 138 FBS teams: `site/.../teams/{id}` has no injury field (also with
     `?enable=injuries`), `.../teams/{id}/injuries` returns `{}`, roster `injuries` lists are all empty, and core
