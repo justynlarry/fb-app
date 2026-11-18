@@ -47,7 +47,7 @@
       <thead><tr><th>Job</th><th>Schedule</th><th>Last run</th><th>Result</th></tr></thead>
       <tbody>
         {%- set all_times = dict(st.settings.job_schedule, **st.settings.odds_schedule) %}
-        {%- for job in ['coach_watch', 'daily_update', 'nfl_daily_update', 'odds_snapshot'] %}
+        {%- for job in ['coach_watch', 'coordinator_watch', 'daily_update', 'nfl_daily_update', 'odds_snapshot'] %}
         {%- set r = st.jobs.get(job) %}
         <tr>
           <td class="label">{{ st.job_labels[job] }}</td>
@@ -111,6 +111,42 @@
     </table>
   </div>
   <p class="form-message" id="coach-message" role="status"></p>
+  {%- else %}
+  <p class="muted small">Nothing waiting.</p>
+  {%- endif %}
+</section>
+
+{%- set pending_c = pending_coordinators if pending_coordinators is defined else [] %}
+<section class="panel" aria-labelledby="coord-title">
+  <h2 id="coord-title">Coordinator changes to confirm{% if pending_c %} <span class="late-tag">{{ pending_c|length }} waiting</span>{% endif %}</h2>
+  <p class="muted small">The coordinator detector reads each team's Wikipedia season page every Monday at 04:45. It adds each
+    new season's coordinators by itself (with the "new this season" flag the 2027 model uses); a name that appears during
+    the season is listed here. Confirming adds it to that season's row, for the record and override suggestions; the model
+    only uses the preseason coordinator, so nothing in the predictions changes. Wikipedia can lag or be wrong: check the
+    page, or the school's staff page.</p>
+  {%- if pending_c %}
+  <div class="table-wrap">
+    <table class="stats pending-coaches">
+      <thead><tr><th>Team</th><th>Unit</th><th>Stored</th><th>Page now lists</th><th>Found</th><th></th></tr></thead>
+      <tbody>
+        {%- for c in pending_c %}
+        <tr data-id="{{ c.id }}">
+          <td class="label">{{ c.school }} <span class="muted small">{{ c.season }}</span></td>
+          <td>{{ 'OC' if c.unit == 'offense' else 'DC' }}</td>
+          <td class="muted">{{ c.old_names|join(', ') or 'none listed' }}</td>
+          <td><strong>{{ c.new_names|join(', ') or 'none listed' }}</strong>
+            {%- if c.source_title %} <a class="small" href="https://en.wikipedia.org/wiki/{{ c.source_title|replace(' ', '_')|urlencode }}" target="_blank" rel="noopener">page</a>{% endif %}</td>
+          <td class="muted small">{{ c.detected_at.strftime('%b %-d') }}</td>
+          <td class="actions">
+            <button type="button" class="primary coord-decide" data-action="confirm">Confirm</button>
+            <button type="button" class="link-button coord-decide" data-action="reject">Reject</button>
+          </td>
+        </tr>
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="form-message" id="coord-message" role="status"></p>
   {%- else %}
   <p class="muted small">Nothing waiting.</p>
   {%- endif %}
@@ -298,7 +334,7 @@
   if (!box) return;
   var DAYS = [["daily", "Daily"], ["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"],
               ["fri", "Fri"], ["sat", "Sat"], ["sun", "Sun"]];
-  var ORDER = ["odds_snapshot", "daily_update", "daily_retry", "nfl_daily_update", "coach_watch"];
+  var ORDER = ["odds_snapshot", "daily_update", "daily_retry", "nfl_daily_update", "coach_watch", "coordinator_watch"];
   var labels = JSON.parse(box.dataset.labels);
   var saved = { jobs: JSON.parse(box.dataset.jobs), odds: JSON.parse(box.dataset.odds) };
   var state;
@@ -433,6 +469,34 @@
       btn.disabled = true;
       fetch("/api/admin/coach-changes/" + row.dataset.id, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (b) { return { ok: r.ok, body: b }; });
+      }).then(function (res) {
+        if (!res.ok) {
+          btn.disabled = false;
+          message.textContent = (res.body && typeof res.body.detail === "string") ? res.body.detail : "That didn't work.";
+          message.classList.add("error");
+          return;
+        }
+        window.location.reload();
+      }).catch(function () { btn.disabled = false; message.textContent = "Couldn't reach the server."; message.classList.add("error"); });
+    });
+  });
+})();
+
+// Coordinator changes: confirm or reject (reject asks first)
+(function () {
+  var message = document.getElementById("coord-message");
+  document.querySelectorAll("button.coord-decide").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.dataset.action === "reject" && btn.dataset.confirm !== "1") {
+        btn.dataset.confirm = "1"; btn.textContent = "Confirm reject?"; btn.classList.add("danger");
+        setTimeout(function () { btn.dataset.confirm = ""; btn.textContent = "Reject"; btn.classList.remove("danger"); }, 4000);
+        return;
+      }
+      btn.disabled = true;
+      fetch("/api/admin/coordinator-changes/" + btn.closest("tr").dataset.id, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: btn.dataset.action })
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (b) { return { ok: r.ok, body: b }; });
       }).then(function (res) {

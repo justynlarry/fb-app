@@ -15,7 +15,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from cfb import coach_watch, espn, nfl_model, nflverse, schedule
+from cfb import coach_watch, coordinators, espn, nfl_model, nflverse, schedule
 from cfb import settings as app_settings
 from cfb.backfill import refresh_recent_qbs
 from cfb.db import connect
@@ -156,6 +156,17 @@ def coach_watch_job():
             run.fail(f"{counts['failed']} teams failed")
 
 
+def coordinator_watch_job():
+    """Keep coordinators current from Wikipedia: add the season's rows, queue mid-season changes for an admin."""
+    season = current_season()
+    with job_run("coordinator_watch") as run:
+        if not games_near(season):
+            run.message = "skipped: no games this week or next"
+            return
+        counts = coordinators.run(season)
+        run.message = ", ".join(f"{k} {v}" for k, v in counts.items() if v)
+
+
 # Job name (as in cfb/schedule.py) -> the function that runs it
 JOB_FUNCTIONS = {
     "daily_update": daily_update,
@@ -163,6 +174,7 @@ JOB_FUNCTIONS = {
     "nfl_daily_update": nfl_daily_update,
     "odds_snapshot": odds_snapshot,
     "coach_watch": coach_watch_job,
+    "coordinator_watch": coordinator_watch_job,
 }
 
 

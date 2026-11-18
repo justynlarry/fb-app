@@ -26,6 +26,7 @@ JOBS = {
     "nfl_daily_update": "NFL update: nflverse, predictions",
     "odds_snapshot": "Odds snapshot + picks",
     "coach_watch": "Head-coach detector (ESPN)",
+    "coordinator_watch": "Coordinator detector (Wikipedia)",
 }
 OPTIONAL_JOBS = {"daily_retry"}         # may have no times at all; every other job needs at least one
 
@@ -36,6 +37,7 @@ DEFAULT_JOB_SCHEDULE = {
     "daily_retry": [{"days": "daily", "time": "05:30"}, {"days": "daily", "time": "07:30"}],
     "nfl_daily_update": [{"days": "daily", "time": "05:30"}],
     "coach_watch": [{"days": "daily", "time": "04:30"}],
+    "coordinator_watch": [{"days": "mon", "time": "04:45"}],
 }
 DEFAULT_ODDS_SCHEDULE = {
     "odds_snapshot": [

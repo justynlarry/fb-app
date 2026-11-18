@@ -144,7 +144,15 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     wrong and the f-string that would have written the whole user dict into the note):** `PENDING_COACH_SQL`,
     `CoachChangeIn`, `POST /api/admin/coach-changes/{id}` (confirm with optional corrected `changed_at`, or reject;
     pending only, 404 otherwise; note gets "confirmed/rejected by <user>"); "Coach changes to confirm" panel on /admin.
-    Rejected rows stay, so the same team-season is never flagged twice. Next: the coordinator detector (Wikipedia).
+    Rejected rows stay, so the same team-season is never flagged twice.
+  - **Coordinator detector (built 2026-11-18, Claude typed all of it at the user's request, rule unchanged):** no
+    better source than Wikipedia (ESPN core API and roster list head coaches only; CFBD none; school staff pages are
+    138 different sites; Sports-Reference and media trackers forbid scraping). `028_coordinator_changes.sql` (team,
+    season, unit, old_names, new_names, source_title, status pending/confirmed/rejected, note). `cfb/coordinators.py`
+    (the T-OCDC parser moved into the app: reads all 2,874 stored rows identically; title map; 50 pages per request):
+    no row for the season → **adds it with `is_new`** (this is the automatic August load); a name not in the stored
+    row → pending change (a dropped name is not a change; an identical pending change isn't repeated). Worker job
+    `coordinator_watch` Mondays 04:45. Confirm on /admin adds the new names to the season row (is_new unchanged).
   - Injuries: no API (CFBD has none; ESPN college game summaries have none, checked). ESPN team endpoints
     also checked 2026-11-14, all 138 FBS teams: `site/.../teams/{id}` has no injury field (also with
     `?enable=injuries`), `.../teams/{id}/injuries` returns `{}`, roster `injuries` lists are all empty, and core

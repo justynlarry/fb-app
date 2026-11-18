@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
-from cfb import schedule
+from cfb import coordinators, schedule
 from cfb import settings as app_settings
 from cfb.auth import (
     SESSION_DAYS,
@@ -752,6 +752,15 @@ WHERE c.status = 'pending'
 ORDER BY c.detected_at DESC
 """
 
+# Coordinator changes the coordinator detector found, waiting for an admin, newest first
+PENDING_COORD_SQL = """
+SELECT c.id, t.school, c.season, c.unit, c.old_names, c.new_names, c.source_title, c.detected_at
+FROM coordinator_changes c
+JOIN teams t ON t.id = c.team_id
+WHERE c.status = 'pending'
+ORDER BY c.detected_at DESC, t.school, c.unit
+"""
+
 # Latest run of each scheduled worker job
 JOB_RUNS_SQL = """
 SELECT DISTINCT ON (job) job, started_at, finished_at, ok, message
@@ -926,6 +935,11 @@ class CoachChangeIn(BaseModel):
     changed_at: datetime | None = None
 
 
+class CoordinatorChangeIn(BaseModel):
+    """Confirm or reject one detected coordinator change."""
+    action: Literal["confirm", "reject"]
+
+
 class BooksIn(BaseModel):
     """The bettable-books list from the admin page."""
     books: list[str] = Field(min_length=1, max_length=20)
@@ -957,10 +971,12 @@ def admin_page(request: Request):
     with connect() as conn:
         conn.row_factory = dict_row
         pending = conn.execute(PENDING_COACH_SQL).fetchall()
+        pending_coords = conn.execute(PENDING_COORD_SQL).fetchall()
     return templates.TemplateResponse(
         request,
         "admin.html",
-        {"users": all_users(), "status": admin_status(), "pending_coaches": pending, "active": "admin"},
+        {"users": all_users(), "status": admin_status(), "pending_coaches": pending,
+         "pending_coordinators": pending_coords, "active": "admin"},
     )
 
 
@@ -1081,6 +1097,41 @@ def admin_coach_change(request: Request, change_id: int, form: CoachChangeIn):
         ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="No pending coach change with that id.")
+    return {"done": status}
+
+
+@app.post("/api/admin/coordinator-changes/{change_id}")
+def admin_coordinator_change(request: Request, change_id: int, form: CoordinatorChangeIn):
+    """Confirm a pending coordinator change (its new names are added to that season's row) or reject it."""
+    require_admin(request)
+    status = "confirmed" if form.action == "confirm" else "rejected"
+    who = f"{status} by {request.state.user['username']}"
+    with connect() as conn:
+        change = conn.execute(
+            """
+            UPDATE coordinator_changes
+            SET status = %s, note = concat_ws('; ', note, %s::text)
+            WHERE id = %s AND status = 'pending'
+            RETURNING team_id, season, unit, new_names
+            """,
+            (status, who, change_id),
+        ).fetchone()
+        if change is None:
+            raise HTTPException(status_code=404, detail="No pending coordinator change with that id.")
+        if status == "confirmed":
+            team_id, season, unit, new_names = change
+            row = conn.execute(
+                "SELECT names FROM coordinators WHERE team_id = %s AND season = %s AND unit = %s",
+                (team_id, season, unit),
+            ).fetchone()
+            names = list(row[0]) if row else []
+            known = {coordinators.name_key(n) for n in names}
+            names += [n for n in new_names if coordinators.name_key(n) not in known]
+            # The season row keeps everyone listed during the season, like the infobox; is_new stays as it was
+            conn.execute(
+                "UPDATE coordinators SET names = %s WHERE team_id = %s AND season = %s AND unit = %s",
+                (names, team_id, season, unit),
+            )
     return {"done": status}
 
 
