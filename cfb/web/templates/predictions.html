@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text %}
+{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, lean_badge %}
 {% block title %}Predictions{% endblock %}
 {% block body_class %}full{% endblock %}
 
@@ -25,7 +25,8 @@
 {%- endmacro -%}
 
 {%- macro rate_text(r) -%}
-  {%- if r -%}<span class="rate" title="How this kind of pick did in our backtest (2021–25), graded at {{ "Bovada's opening line" if r.graded_at == 'open' else 'the closing line' }}">{{ '%.0f'|format(100 * r.win_rate|float) }}% <span class="muted">· {{ '{:,}'.format(r.games) }} games</span></span>{%- endif -%}
+  {%- if r -%}<span class="rate" title="How this kind of pick did in our backtest (2021–25), graded at {{ "Bovada's opening line" if r.graded_at == 'open' else 'the closing line' }}">{%- set w = (r.win_rate|float * r.games)|round|int -%}
+  {{ '%.0f'|format(100 * r.win_rate|float) }}% <span class="muted">in backtest ({{ '{:,}'.format(w) }}–{{ '{:,}'.format(r.games - w) }})</span></span>{%- endif -%}
 {%- endmacro -%}
 
 {#- Link to one week of the predictions page; key = (season, week, season_type) -#}
@@ -60,6 +61,15 @@
       {%- if not nav.is_current %}<a class="toggle" href="/predictions">This week</a>{% endif %}
     </nav>
     {%- endif %}
+    <label class="sort-control">Sort
+      <select id="sort-select">
+        <option value="kickoff">Kickoff</option>
+        <option value="spread">Spread pick: tier, then gap</option>
+        <option value="total">O/U: biggest gap first</option>
+        <option value="away">Visitor A–Z</option>
+        <option value="home">Home A–Z</option>
+      </select>
+    </label>
     <button type="button" class="toggle" id="market-toggle" aria-pressed="true">Hide market &amp; picks</button>
   </div>
 </div>
@@ -68,6 +78,10 @@
   then, graded against the final score. Picks were first recorded on Nov 12, 2026; weeks before 11 had no live
   predictions, so they aren't listed.</p>
 {%- endif %}
+
+<p class="muted small sort-note" id="sort-note" hidden>Sorted Play, Caution, Pass, then by how far we are from the
+  line. Every pick in a tier has the same backtest record, and a bigger gap is not a safer pick: our 5+ point gaps
+  went 41% at the close in 2026.</p>
 
 <div class="reminder" id="holdout-reminder" hidden>
   <strong>Reminder:</strong> the 2026 coach-career holdout is due (run once, after conference championship weekend).
@@ -123,10 +137,15 @@
       {%- set tdiff = (g.total|float - g.market_total|float) if has_mtotal else 0 %}
       {%- set has_otot = g.open_total is defined and g.open_total is not none %}
 
-      <tr class="game {{ 'pick-' ~ tier if tier }} {{ 'big-gap' if tier == 'play' and g.pick.gap is not none and g.pick.gap|float >= 5 }} {{ 'started' if g.started is defined and g.started }}">
+      <tr class="game {{ 'pick-' ~ tier if tier }} {{ 'big-gap' if tier == 'play' and g.pick.gap is not none and g.pick.gap|float >= 5 }} {{ 'started' if g.started is defined and g.started }}"
+          data-order="{{ loop.index }}" data-away="{{ g.away }}" data-home="{{ g.home }}"
+          data-tier="{{ {'play': 0, 'caution': 1, 'pass': 2}.get(tier, '') }}"
+          data-gap="{{ g.pick.gap if g.pick.gap is not none else '' }}"
+          data-tgap="{{ g.pick.total_gap if g.pick.total_gap is not none else (tdiff|abs if has_mtotal else '') }}">
         {{ team_cell(g.away, g.away_espn_id, g.away_rank, g.away_record, g.away_conf_record) }}
         {{ team_cell(g.home, g.home_espn_id, g.home_rank, g.home_record, g.home_conf_record) }}
         <td class="kickoff" data-label="Kickoff">
+          <span class="sort-day">{{ g.local_start.strftime('%a %-m/%-d') }} · </span>
           {%- if state == 'post' and g.away_score is not none -%}
             <span class="final">Final {{ g.away_score }}–{{ g.home_score }}</span>
           {%- elif state == 'in' -%}
@@ -215,6 +234,8 @@
                 {{ result_badge(pk.outcome, pk.units, provisional_outcome(is_final, g, pk.side, best_spread, 'spread')) }}
               {%- elif not started %}
                 {{ rate_text(rates.get(tier)) }}
+              {%- else %}
+                {{ lean_badge(provisional_outcome(is_final, g, pk.side, g.market_spread, 'spread')) }}
               {%- endif %}
             </div>
             {%- if not started and pk.gap is not none and pk.gap|float >= 5 %}
@@ -237,7 +258,9 @@
           {%- elif tier == 'pass' -%}
             <div class="pick-main">
               <span class="tier tier-pass">Pass</span>
-              {%- if not started %} {{ rate_text(rates.get('pass')) }}{% endif %}
+              {%- if not started %} {{ rate_text(rates.get('pass')) }}
+              {%- elif pk.gap is not none and pk.gap|float >= 0.5 %} {{ lean_badge(provisional_outcome(is_final, g, pk.side, g.market_spread, 'spread')) }}
+              {%- endif %}
             </div>
             <div class="muted small">
               {%- if not started and has_open and odiff|abs >= 3 -%}
@@ -260,6 +283,8 @@
                 {{ result_badge(pk.total_outcome, pk.total_units, provisional_outcome(is_final, g, pk.total_side, pk.bet_total, 'total')) }}
               {%- elif not started %}
                 {{ rate_text(rates.get(pk.total_side)) }}
+              {%- else %}
+                {{ lean_badge(provisional_outcome(is_final, g, pk.total_side, g.market_total, 'total')) }}
               {%- endif %}
             </div>
           {%- elif has_mtotal and pk.total_gap is not none %}
@@ -267,6 +292,7 @@
             <div class="pick-total small muted">
               {%- if pk.total_gap|float >= 0.5 -%}
                 O/U lean {{ 'Over' if tdiff > 0 else 'Under' }} {{ '%g'|format(g.market_total|float) }} · {{ '%.1f'|format((pk.total_gap|float * 10)|round(0, 'floor') / 10) }} off
+                {{- lean_badge(provisional_outcome(is_final, g, 'over' if tdiff > 0 else 'under', g.market_total, 'total')) }}
               {%- else -%}
                 O/U {{ '%g'|format(g.market_total|float) }}: we agree
               {%- endif -%}
@@ -297,8 +323,11 @@
     "Now" is the median of every sportsbook's current line (The Odds API, updated each morning, Sunday afternoon
     and evening, and Saturday before kickoff). Play and Caution show the <strong>best number available</strong> for
     our side, then the best price, and the book that has it.
-    The % is how that kind of pick has done in our backtest (2021–25), out of that many past games: Play and Pass are
-    graded at Bovada's opening line (when we'd bet), Caution and totals at the closing line.
+    "52% in backtest (1,115–1,017)" is how that kind of pick has done in our backtest (2021–25), with its win–loss
+    record (pushes left out): Play and Pass are graded at Bovada's opening line (when we'd bet), Caution and totals at
+    the closing line. On finished games, <span class="lean-badge win">✓ right side</span> /
+    <span class="lean-badge loss">✗ wrong side</span> grades a side we didn't record as a pick (a Pass lean, or a game
+    before Nov 12) against the closing line; recorded picks keep their W / L with units.
     Break-even at −110 is 52.4%. Line chips: <span class="chip chip-toward">▲ our way</span> the line has moved toward our
     number since it opened, <span class="chip chip-against">▼ against</span> away from it. Our edge has been biggest at the
     opening line, so the earlier in the week, the better. The open is Bovada's opening line.
@@ -308,6 +337,7 @@
   of rain. Our model doesn't use weather and has tended to over-predict totals in games like these; the market
   usually prices it in. Worth a look on the Overrides page.</p>
 
+<script src="/static/predictions-sort.js?v=2026-11-18" defer></script>
 <script>
   // Market columns and picks are shown by default; "Hide" is remembered in this browser.
   (function () {

@@ -66,3 +66,14 @@
 
 {#- American odds: -110, +105 -#}
 {%- macro price_text(p) -%}{%- if p is not none -%}{{ '%+d'|format(p|int) }}{%- endif -%}{%- endmacro -%}
+
+{#- Grade of a side we did NOT bet (a Pass lean, or a game before picks were recorded): did the side our line
+    favored beat the closing line? Styled apart from real W/L picks so it isn't read as the bet record.
+    outcome = 'win' / 'loss' / 'push' / '' (not final yet). -#}
+{%- macro lean_badge(outcome) -%}
+  {%- if outcome -%}
+  <span class="lean-badge {{ outcome }}" title="Not a recorded pick: whether the side our line leaned to beat the closing line">
+    {{- '✓ right side' if outcome == 'win' else ('✗ wrong side' if outcome == 'loss' else 'push') -}}
+  </span>
+  {%- endif -%}
+{%- endmacro -%}

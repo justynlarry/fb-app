@@ -416,7 +416,23 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
 - **Coach-change adjustment:** adopted as v5, see the Model section. The live season needs hand entries in
   `coach_changes` (an entry form on the overrides page would help). (`weeks_played` was fixed in v3, commit
   70f6be1: a week counts once its last game kicks off.)
-- **Bet log:** actual bets, prices and books taken (real ROI vs pick_log's hypothetical best price).
+- **Bet log / "Bets taken" (user idea 5, 2026-11-18):** each logged-in user records bets they actually placed
+  (game, spread/total/moneyline, side, line, price, book, stake), graded from `games`, with a "My bets" page (record,
+  units, ROI) vs pick_log's hypothetical best price. Largest of the 2026-11-18 ideas: new table (user_id, game_id, ...),
+  POST endpoint (login + Origin check, a user edits only their own rows), grading view, page. Button on the predictions
+  page (it already has the line, price and book to prefill). Open question: can users see each other's bets?
+- **UI ideas (user, 2026-11-18; 2–4 done the same day on both predictions pages: sort in
+  `static/predictions-sort.js`, `lean_badge` macro, rate label "52% in backtest (W–L)"):**
+  1. *Results page updates more often.* `pick_results` is a plain view, but college final scores reach `games` only
+     at the 5 AM CFBD refresh. Fix at 0 CFBD calls: the ESPN poller writes college finals into `games` when
+     `status.type.completed` is true (as it already does for NFL); CFBD's 5 AM load still overwrites them.
+  2. *Sort options on predictions:* kickoff (default), spread pick, O/U pick, by team. Client-side JS on the
+     table, no backend. "Confidence" = tier (Play > Caution > Pass), then gap; label it honestly: bigger gaps are not
+     more reliable (5+ gaps went 41% at the close in 2026).
+  3. *Clearer rate label* than "50% · 1,032 games", e.g. "Backtest 516–516 (50%)". Template only.
+  4. *W/L on every finished game,* incl. Pass games and games before pick tracking: grade our lean (side of the
+     market we were on) and show it apart from real picks (e.g. "lean ✓"), so it isn't read as the bet record.
+     Template only (`provisional_outcome` macro exists).
 - **sportsdataverse play-by-play (verified 2026-11-12):** free ESPN-derived parquet files per season
   (2016–26, ~50 MB each; `EPA`, `wp_before`, `fumble_lost`; `game_id` = ESPN id = games.espn_id). Needs
   `pyarrow`. Would allow fumble-luck and win-probability garbage-time adjustments, or replacing

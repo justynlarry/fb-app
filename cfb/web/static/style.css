@@ -554,3 +554,32 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .qbs .at { color: var(--muted); }
 .nfl-note { margin: -0.25rem 0 1rem; }
 .diff { color: var(--muted); font-size: 0.8em; font-variant-numeric: tabular-nums; }
+
+/* Predictions: lean grade (not a recorded pick), sort control */
+.lean-badge {
+  display: inline-block;
+  margin-left: 0.25rem;
+  padding: 0 0.35em;
+  border: 1px dashed currentColor;
+  border-radius: 4px;
+  font-size: 0.75em;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.lean-badge.win { color: var(--toward); }
+.lean-badge.loss { color: var(--against); }
+.sort-control { display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--muted); }
+.sort-control select {
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  max-width: 100%;
+}
+.sort-day { display: none; }
+.predictions.sorted .sort-day { display: inline; }
+.predictions.sorted tr.day-break { display: none; }
+.sort-note { margin-top: -0.5rem; }
