@@ -132,6 +132,19 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     ('wikipedia' | 'manual'), `source_title`. History 2015–2025 from Wikipedia infoboxes: 2,874 rows, new OC 533 / DC 482
     (= the T-OCDC flags). Each August add the new season (Wikipedia pull + hand check); mid-season changes by hand
     ('manual', from FootballScoop / On3 / 247 / CBS trackers; Claude doesn't scrape those).
+  - **Head-coach detector (built 2026-11-18; user typed 027, the model line and coach_watch.py part C1; Claude typed C2 and
+    part D at the user's request, rule unchanged):** `027_coach_watch.sql` (`coach_changes.status` pending/confirmed/
+    rejected, default confirmed; `detected_at`; table `head_coach_watch`). The model reads `status = 'confirmed'` only.
+    `cfb/coach_watch.py`: ESPN core API `seasons/{s}/teams/{espn_id}/coaches` (2 free requests per FBS team); first
+    sighting = baseline; a new coach id → pending row (`source 'espn'`, changed_at = last game before seen + 1 day),
+    skipped if the team already has a change that season. Worker job `coach_watch` daily 04:30 (schedule setting;
+    `schedule.check` fills jobs missing from a saved schedule with their defaults). Dry run 2026-11-18: 138 teams; ESPN
+    showed interims for the 5 firings a week+ old, but still Butch Jones (Arkansas State) and no coach (UTEP) 2 days
+    after those firings: ESPN lags a few days. **Part E done (user-typed; Claude fixed a `::text` cast it had given
+    wrong and the f-string that would have written the whole user dict into the note):** `PENDING_COACH_SQL`,
+    `CoachChangeIn`, `POST /api/admin/coach-changes/{id}` (confirm with optional corrected `changed_at`, or reject;
+    pending only, 404 otherwise; note gets "confirmed/rejected by <user>"); "Coach changes to confirm" panel on /admin.
+    Rejected rows stay, so the same team-season is never flagged twice. Next: the coordinator detector (Wikipedia).
   - Injuries: no API (CFBD has none; ESPN college game summaries have none, checked). ESPN team endpoints
     also checked 2026-11-14, all 138 FBS teams: `site/.../teams/{id}` has no injury field (also with
     `?enable=injuries`), `.../teams/{id}/injuries` returns `{}`, roster `injuries` lists are all empty, and core

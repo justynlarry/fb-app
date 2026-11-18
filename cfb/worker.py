@@ -15,7 +15,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from cfb import espn, nfl_model, nflverse, schedule
+from cfb import coach_watch, espn, nfl_model, nflverse, schedule
 from cfb import settings as app_settings
 from cfb.backfill import refresh_recent_qbs
 from cfb.db import connect
@@ -143,12 +143,26 @@ def odds_snapshot():
             run.message = "saved " + (", ".join(saved) if saved else "nothing (no games near)")
 
 
+def coach_watch_job():
+    """Look for mid-season head-coach changes on ESPN; they stay pending until an admin confirms them."""
+    season = current_season()
+    with job_run("coach_watch") as run:
+        if not games_near(season):
+            run.message = "skipped: no games this week or next"
+            return
+        counts = coach_watch.run(season)
+        run.message = ", ".join(f"{k} {v}" for k, v in counts.items() if v)
+        if counts["failed"]:
+            run.fail(f"{counts['failed']} teams failed")
+
+
 # Job name (as in cfb/schedule.py) -> the function that runs it
 JOB_FUNCTIONS = {
     "daily_update": daily_update,
     "daily_retry": daily_retry,
     "nfl_daily_update": nfl_daily_update,
     "odds_snapshot": odds_snapshot,
+    "coach_watch": coach_watch_job,
 }
 
 

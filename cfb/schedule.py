@@ -25,6 +25,7 @@ JOBS = {
     "daily_retry": "Retry the college update if it hasn't finished",
     "nfl_daily_update": "NFL update: nflverse, predictions",
     "odds_snapshot": "Odds snapshot + picks",
+    "coach_watch": "Head-coach detector (ESPN)",
 }
 OPTIONAL_JOBS = {"daily_retry"}         # may have no times at all; every other job needs at least one
 
@@ -34,6 +35,7 @@ DEFAULT_JOB_SCHEDULE = {
     "daily_update": [{"days": "daily", "time": "05:00"}],
     "daily_retry": [{"days": "daily", "time": "05:30"}, {"days": "daily", "time": "07:30"}],
     "nfl_daily_update": [{"days": "daily", "time": "05:30"}],
+    "coach_watch": [{"days": "daily", "time": "04:30"}],
 }
 DEFAULT_ODDS_SCHEDULE = {
     "odds_snapshot": [
@@ -63,7 +65,11 @@ def check(schedule, required):
 
     required: the default schedule for this setting; its job names are the ones that must be present.
     """
-    if not isinstance(schedule, dict) or set(schedule) != set(required):
+    if not isinstance(schedule, dict):
+        raise ValueError("The schedule must be a list of times per job.")
+    # A job added to the code after a schedule was saved starts with its default times
+    schedule = {**{job: required[job] for job in required if job not in schedule}, **schedule}
+    if set(schedule) != set(required):
         raise ValueError("The schedule must list exactly these jobs: " + ", ".join(required) + ".")
     clean = {}
     for job in required:

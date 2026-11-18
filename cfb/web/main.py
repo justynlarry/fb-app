@@ -1,6 +1,7 @@
 """Web UI. Pages only read from Postgres; the worker does all the fetching."""
 import ipaddress
 import os
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal
@@ -742,6 +743,15 @@ WHERE l.key = ANY(%(keys)s)
 ORDER BY l.changed_at DESC, l.id DESC
 """
 
+# Coach changes the detector found, waiting for an admin, newest first
+PENDING_COACH_SQL = """
+SELECT c.id, t.school, c.season, c.changed_at, c.outgoing, c.incoming, c.detected_at
+FROM coach_changes c
+JOIN teams t ON t.id = c.team_id
+WHERE c.status = 'pending'
+ORDER BY c.detected_at DESC
+"""
+
 # Latest run of each scheduled worker job
 JOB_RUNS_SQL = """
 SELECT DISTINCT ON (job) job, started_at, finished_at, ok, message
@@ -910,6 +920,12 @@ class ScheduleIn(BaseModel):
     check_only: bool = False
 
 
+class CoachChangeIn(BaseModel):
+    """Confirm or reject one detected coach change; the date can be corrected when confirming."""
+    action: Literal["confirm", "reject"]
+    changed_at: datetime | None = None
+
+
 class BooksIn(BaseModel):
     """The bettable-books list from the admin page."""
     books: list[str] = Field(min_length=1, max_length=20)
@@ -938,10 +954,13 @@ def admin_status():
 def admin_page(request: Request):
     """The admin page: accounts for now; status, books, pick rules and schedules as they're built."""
     require_admin(request)
+    with connect() as conn:
+        conn.row_factory = dict_row
+        pending = conn.execute(PENDING_COACH_SQL).fetchall()
     return templates.TemplateResponse(
         request,
         "admin.html",
-        {"users": all_users(), "status": admin_status(), "active": "admin"},
+        {"users": all_users(), "status": admin_status(), "pending_coaches": pending, "active": "admin"},
     )
 
 
@@ -1039,6 +1058,30 @@ def admin_save_schedule(request: Request, form: ScheduleIn):
             changed.append(key)
     result["changed"] = changed
     return result
+
+
+@app.post("/api/admin/coach-changes/{change_id}")
+def admin_coach_change(request: Request, change_id: int, form: CoachChangeIn):
+    """Confirm a pending coach change (the model uses it from the next update) or reject it."""
+    require_admin(request)
+    status = "confirmed" if form.action == "confirm" else "rejected"
+    with connect() as conn:
+        row = conn.execute(
+            """
+            UPDATE coach_changes
+            SET status     = %(status)s,
+                changed_at = COALESCE(%(changed_at)s, changed_at),
+                note       = concat_ws('; ', note, %(who)s::text)
+            WHERE id = %(id)s
+              AND status = 'pending'
+            RETURNING id
+            """,
+            {"status": status, "changed_at": form.changed_at, "id": change_id,
+             "who": f"{status} by {request.state.user['username']}"},
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="No pending coach change with that id.")
+    return {"done": status}
 
 
 def backtest_summary(group, include_2020, version=MODEL_VERSION):

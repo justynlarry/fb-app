@@ -24,6 +24,7 @@ COACH_CHANGES_SQL = """
 SELECT team_id, changed_at
 FROM coach_changes
 WHERE season = %(season)s
+  AND status = 'confirmed'
 """
 
 FEATURES = (

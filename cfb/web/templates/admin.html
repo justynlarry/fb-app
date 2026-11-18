@@ -47,7 +47,7 @@
       <thead><tr><th>Job</th><th>Schedule</th><th>Last run</th><th>Result</th></tr></thead>
       <tbody>
         {%- set all_times = dict(st.settings.job_schedule, **st.settings.odds_schedule) %}
-        {%- for job in ['daily_update', 'nfl_daily_update', 'odds_snapshot'] %}
+        {%- for job in ['coach_watch', 'daily_update', 'nfl_daily_update', 'odds_snapshot'] %}
         {%- set r = st.jobs.get(job) %}
         <tr>
           <td class="label">{{ st.job_labels[job] }}</td>
@@ -80,6 +80,40 @@
     </table>
   </div>
 
+</section>
+
+{%- set pending = pending_coaches if pending_coaches is defined else [] %}
+<section class="panel" aria-labelledby="coach-title">
+  <h2 id="coach-title">Coach changes to confirm{% if pending %} <span class="late-tag">{{ pending|length }} waiting</span>{% endif %}</h2>
+  <p class="muted small">The head-coach detector checks ESPN every morning at 04:30. A new head coach is listed here and
+    does nothing until you confirm it; the model then uses it from the next update (games after the date count as the new
+    coach's). ESPN can lag a few days, so check the date: it's set to the day after the team's last game before the change
+    was seen.</p>
+  {%- if pending %}
+  <div class="table-wrap">
+    <table class="stats pending-coaches">
+      <thead><tr><th>Team</th><th>Change</th><th>New coach from</th><th>Found</th><th></th></tr></thead>
+      <tbody>
+        {%- for c in pending %}
+        <tr data-id="{{ c.id }}">
+          <td class="label">{{ c.school }} <span class="muted small">{{ c.season }}</span></td>
+          <td>{{ c.outgoing or '?' }} → <strong>{{ c.incoming or '?' }}</strong></td>
+          <td><input type="datetime-local" class="coach-date" value="{{ c.changed_at.strftime('%Y-%m-%dT%H:%M') }}"
+                     data-original="{{ c.changed_at.strftime('%Y-%m-%dT%H:%M') }}" aria-label="New coach from (Mountain time)"></td>
+          <td class="muted small">{{ c.detected_at.strftime('%b %-d, %-I:%M %p') if c.detected_at else '' }}</td>
+          <td class="actions">
+            <button type="button" class="primary coach-decide" data-action="confirm">Confirm</button>
+            <button type="button" class="link-button coach-decide" data-action="reject">Reject</button>
+          </td>
+        </tr>
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="form-message" id="coach-message" role="status"></p>
+  {%- else %}
+  <p class="muted small">Nothing waiting.</p>
+  {%- endif %}
 </section>
 
 <section class="panel" aria-labelledby="rules-title">
@@ -264,7 +298,7 @@
   if (!box) return;
   var DAYS = [["daily", "Daily"], ["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"],
               ["fri", "Fri"], ["sat", "Sat"], ["sun", "Sun"]];
-  var ORDER = ["odds_snapshot", "daily_update", "daily_retry", "nfl_daily_update"];
+  var ORDER = ["odds_snapshot", "daily_update", "daily_retry", "nfl_daily_update", "coach_watch"];
   var labels = JSON.parse(box.dataset.labels);
   var saved = { jobs: JSON.parse(box.dataset.jobs), odds: JSON.parse(box.dataset.odds) };
   var state;
@@ -378,6 +412,40 @@
   });
 
   load(); render(); changed();
+})();
+
+// Coach changes: confirm (optionally with a corrected date) or reject; reject asks to confirm first
+(function () {
+  var message = document.getElementById("coach-message");
+  document.querySelectorAll("button.coach-decide").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var row = btn.closest("tr");
+      if (btn.dataset.action === "reject" && btn.dataset.confirm !== "1") {
+        btn.dataset.confirm = "1"; btn.textContent = "Confirm reject?"; btn.classList.add("danger");
+        setTimeout(function () { btn.dataset.confirm = ""; btn.textContent = "Reject"; btn.classList.remove("danger"); }, 4000);
+        return;
+      }
+      var body = { action: btn.dataset.action };
+      var date = row.querySelector(".coach-date");
+      if (btn.dataset.action === "confirm" && date.value && date.value !== date.dataset.original) {
+        body.changed_at = new Date(date.value).toISOString();    // the browser's local time (Mountain) -> UTC
+      }
+      btn.disabled = true;
+      fetch("/api/admin/coach-changes/" + row.dataset.id, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (b) { return { ok: r.ok, body: b }; });
+      }).then(function (res) {
+        if (!res.ok) {
+          btn.disabled = false;
+          message.textContent = (res.body && typeof res.body.detail === "string") ? res.body.detail : "That didn't work.";
+          message.classList.add("error");
+          return;
+        }
+        window.location.reload();
+      }).catch(function () { btn.disabled = false; message.textContent = "Couldn't reach the server."; message.classList.add("error"); });
+    });
+  });
 })();
 
 // Pick rules: a reason is required; the server logs each value that changed
