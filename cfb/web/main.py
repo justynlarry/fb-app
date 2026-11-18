@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
+from cfb import schedule
 from cfb import settings as app_settings
 from cfb.auth import (
     SESSION_DAYS,
@@ -865,6 +866,16 @@ class RulesIn(BaseModel):
     reason: str = Field(max_length=300)
 
 
+class ScheduleIn(BaseModel):
+    """The schedule editor on the admin page.  check_only = just return the warnings and credits."""
+    job_schedule: dict
+    odds_schedule: dict
+    poll_fast_seconds: int = Field(ge=10, le=300)
+    poll_slow_seconds: int = Field(ge=60, le=3600)
+    reason: str = Field(default="", max_length=300)
+    check_only: bool = False
+
+
 class BooksIn(BaseModel):
     """The bettable-books list from the admin page."""
     books: list[str] = Field(min_length=1, max_length=20)
@@ -885,6 +896,7 @@ def admin_status():
         "freshness": freshness,
         "versions": {"College": MODEL_VERSION, "NFL": NFL_MODEL_VERSION},
         "settings": app_settings.get_all(),
+        "job_labels": schedule.JOBS,
     }
 
 
@@ -961,6 +973,38 @@ def admin_save_rules(request: Request, form: RulesIn):
         if app_settings.set_value(key, value, request.state.user["id"], reason):
             changed.append(key)
     return {"changed": changed}
+
+
+@app.post("/api/admin/settings/schedule")
+def admin_save_schedule(request: Request, form: ScheduleIn):
+    """Check (and unless check_only, save) the worker's schedule.  The worker picks it up within 5 minutes.
+    Changing the odds snapshot times needs a reason, like the pick rules: they decide which lines picks use."""
+    require_admin(request)
+    if form.poll_fast_seconds > form.poll_slow_seconds:
+        raise HTTPException(status_code=400, detail="The game-time poll can't be slower than the quiet-time poll.")
+    try:
+        jobs = schedule.check(form.job_schedule, schedule.DEFAULT_JOB_SCHEDULE)
+        odds = schedule.check(form.odds_schedule, schedule.DEFAULT_ODDS_SCHEDULE)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from None
+    result = {"warnings": schedule.warnings(odds, jobs), "monthly_credits": schedule.monthly_credits(odds),
+              "snapshots_per_week": schedule.snapshots_per_week(odds)}
+    if form.check_only:
+        return result
+
+    reason = form.reason.strip()
+    current_odds = schedule.check(app_settings.get("odds_schedule"), schedule.DEFAULT_ODDS_SCHEDULE)
+    if odds != current_odds and len(reason) < 5:
+        raise HTTPException(status_code=400, detail="Changing the odds snapshot times needs a reason: "
+                                                    "it goes in the change log on the Results page.")
+    user_id = request.state.user["id"]
+    changed = []
+    for key, value in (("job_schedule", jobs), ("odds_schedule", odds),
+                       ("poll_fast_seconds", form.poll_fast_seconds), ("poll_slow_seconds", form.poll_slow_seconds)):
+        if app_settings.set_value(key, value, user_id, reason or None):
+            changed.append(key)
+    result["changed"] = changed
+    return result
 
 
 def backtest_summary(group, include_2020, version=MODEL_VERSION):

@@ -1,9 +1,12 @@
 """Background worker.
 
-- Every 30 s (game time) or 10 min (otherwise): live scores from ESPN, college and NFL.
-- Every day at 5 AM: refresh this season from CFBD (games, stats, lines, latest week's QBs:
-  4 calls), re-predict upcoming games, and save kickoff weather forecasts (Open-Meteo).
-  If it didn't finish, it's retried at 5:30 and 7:30.
+- Live scores from ESPN, college and NFL: every 30 s while games are on, every 10 min otherwise.
+- Every morning: refresh this season from CFBD (games, stats, lines, latest week's QBs: 4 calls),
+  re-predict upcoming games, save kickoff weather forecasts (Open-Meteo); retried if it didn't finish.
+  Then the NFL update (nflverse) and the odds snapshots, each followed by our picks.
+
+The times and poll speeds are settings (cfb/schedule.py has the format and the defaults), editable on
+the admin page.  The worker re-reads them every 5 minutes and rebuilds its jobs if they changed.
 """
 
 import os
@@ -12,7 +15,8 @@ from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from cfb import espn, nfl_model, nflverse
+from cfb import espn, nfl_model, nflverse, schedule
+from cfb import settings as app_settings
 from cfb.backfill import refresh_recent_qbs
 from cfb.db import connect
 from cfb.load import refresh_season
@@ -22,10 +26,12 @@ from cfb.picks import record_picks
 from cfb.status import job_run, ran_ok_today
 from cfb.weather import update_forecasts
 
-FAST = 30           # seconds between polls while games are on
-SLOW = 600          # seconds between polls otherwise (10 minutes)
-DAILY_HOUR = 5      # local time for the daily CFBD refresh + predictions
-RETRY_HOURS = "5,7"     # retry at 5:30 and 7:30 if the 5 AM update didn't finish
+FAST = 30           # fallback poll speeds (seconds), used only if the settings can't be read
+SLOW = 600
+TIMEZONE = os.environ.get("TZ", "America/Denver")
+RELOAD_MINUTES = 5  # how often the worker re-reads its schedule from the settings
+
+loaded_schedule = {}    # the schedule the scheduler is running now (job name -> times)
 
 
 def games_window_open():
@@ -137,27 +143,65 @@ def odds_snapshot():
             run.message = "saved " + (", ".join(saved) if saved else "nothing (no games near)")
 
 
+# Job name (as in cfb/schedule.py) -> the function that runs it
+JOB_FUNCTIONS = {
+    "daily_update": daily_update,
+    "daily_retry": daily_retry,
+    "nfl_daily_update": nfl_daily_update,
+    "odds_snapshot": odds_snapshot,
+}
+
+
+def wanted_schedule():
+    """The schedule in the settings, checked the same way the admin page checks it."""
+    jobs = schedule.check(app_settings.get("job_schedule"), schedule.DEFAULT_JOB_SCHEDULE)
+    odds = schedule.check(app_settings.get("odds_schedule"), schedule.DEFAULT_ODDS_SCHEDULE)
+    return {**jobs, **odds}
+
+
+def apply_schedule(scheduler):
+    """(Re)build the scheduled jobs from the settings, if they changed.  A bad or unreadable
+    schedule is reported and the jobs already running are kept."""
+    try:
+        wanted = wanted_schedule()
+    except Exception as err:
+        print(f"schedule NOT reloaded, keeping the current one: {err!r}")
+        return
+    if wanted == loaded_schedule:
+        return
+    for job in scheduler.get_jobs():
+        if job.id != "reload_schedule":
+            scheduler.remove_job(job.id)
+    for name, entries in wanted.items():
+        for i, entry in enumerate(entries):
+            scheduler.add_job(JOB_FUNCTIONS[name], schedule.trigger(entry, TIMEZONE), id=f"{name}_{i}",
+                              misfire_grace_time=3600, coalesce=True)
+    loaded_schedule.clear()
+    loaded_schedule.update(wanted)
+    for name, entries in wanted.items():
+        print(f"schedule: {name}: {schedule.describe(entries)}")
+
+
+def poll_speeds():
+    """Seconds between ESPN polls (while games are on, otherwise), from the settings."""
+    try:
+        return app_settings.get("poll_fast_seconds"), app_settings.get("poll_slow_seconds")
+    except Exception as err:
+        print(f"poll speeds not readable, using {FAST}/{SLOW} s: {err!r}")
+        return FAST, SLOW
+
+
 def main():
     print("worker started")
 
-    # Daily job runs in the background; the live-score loop below keeps going
-    scheduler = BackgroundScheduler(timezone=os.environ.get("TZ", "America/Denver"))
-    scheduler.add_job(daily_update, "cron", hour=DAILY_HOUR, minute=0, id="daily_update",
-                      misfire_grace_time=3600, coalesce=True)
-    scheduler.add_job(daily_retry, "cron", hour=RETRY_HOURS, minute=30, id="daily_retry",
-                      misfire_grace_time=3600, coalesce=True)
-    scheduler.add_job(nfl_daily_update, "cron", hour=5, minute=30, id="nfl_daily_update",
-                      misfire_grace_time=3600, coalesce=True)
-    # Odds API snapshots: every morning, Sunday for the openers, Saturday before kickoffs
-    # ~47 snapshots x 2 credits per league in season = ~94 (one league) to ~190 (both) of our 500 credits a month
-    scheduler.add_job(odds_snapshot, "cron", hour=6, minute=0, id="odds_daily",
-                      misfire_grace_time=3600, coalesce=True)
-    scheduler.add_job(odds_snapshot, "cron", day_of_week="sun", hour="16,20", minute=0, id="odds_openers",
-                      misfire_grace_time=3600, coalesce=True)
-    scheduler.add_job(odds_snapshot, "cron", day_of_week="sat", hour="9,12", minute=0, id="odds_gameday",
-                      misfire_grace_time=3600, coalesce=True)
+    # Scheduled jobs run in the background; the live-score loop below keeps going
+    scheduler = BackgroundScheduler(timezone=TIMEZONE)
+    apply_schedule(scheduler)
+    scheduler.add_job(apply_schedule, "interval", minutes=RELOAD_MINUTES, args=[scheduler],
+                      id="reload_schedule", coalesce=True)
     scheduler.start()
-    print(f"next daily update: {scheduler.get_job('daily_update').next_run_time}")
+    first = min((j for j in scheduler.get_jobs() if j.id != "reload_schedule"), key=lambda j: j.next_run_time)
+    print(f"next scheduled job: {first.id} at {first.next_run_time}")
 
     while True:
         live = 0
@@ -167,10 +211,11 @@ def main():
             # A network blip or a strange ESPN response shouldn't kill the worker
             print(f"ESPN poll failed: {err!r}")
 
+        fast, slow = poll_speeds()
         if live > 0 or games_window_open():
-            time.sleep(FAST)
+            time.sleep(fast)
         else:
-            time.sleep(SLOW)
+            time.sleep(slow)
 
 
 if __name__ == "__main__":

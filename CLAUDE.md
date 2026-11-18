@@ -468,7 +468,15 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `/admin`; predictions legends and the NFL page's own tier check follow `rules`. The 5+ "Check news"/dark-row cut
   is display only, not a setting. Step 5c done the same day (Claude-typed at the user's request): `RULE_CHANGES_SQL`
   (settings_log for `RULE_KEYS`, newest first) → "Pick rules" section on Results (rules now + every change: when,
-  from → to, reason, by). Step 5 complete; step 6 (schedules) left.
+  from → to, reason, by). Step 5 complete.
+  **Step 6 done 2026-11-18 (Claude typed it at the user's request, rule unchanged):** `cfb/schedule.py` (format
+  `{"days": "daily"|"mon".."sun", "time": "HH:MM"}` per job, defaults = the old six schedules in check() order,
+  `check`, `trigger`, `describe`, `warnings` (no Mon 6:00–Tue 6:00 snapshot = no NFL Early pick; no Sunday-afternoon
+  snapshot; a snapshot within 3 h before / 30 min after a morning update), `monthly_credits` (defaults ≈ 189/500).
+  Settings `odds_schedule` (in `RULE_KEYS`: reason, Results log), `job_schedule`, `poll_fast_seconds`,
+  `poll_slow_seconds`; `get`/`get_all` return deep copies; `set_value` asks for a reason only on a real change.
+  Worker builds jobs `<name>_<i>` from the settings and re-reads them every 5 min (`reload_schedule`); a bad setting
+  keeps the running jobs. Old vs new triggers: identical run times over 4 weeks (156). League on/off: not now (user).
 - **UI ideas (user, 2026-11-18; 2–4 done the same day on both predictions pages: sort in
   `static/predictions-sort.js`, `lean_badge` macro, rate label "52% in backtest (W–L)"):**
   1. *Results page updates more often.* `pick_results` is a plain view, but college final scores reach `games` only
@@ -633,7 +641,7 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
 
 - Backfill: seasons 2016–2025 plus current 2026 (~14 calls/season, ~155 total). Flag 2020
   (COVID) so the backtest can exclude it. Test each endpoint on one season first.
-- Scheduling: the worker runs `daily_update()` at 5 AM Mountain (refresh current season's
+- Scheduling (times editable on /admin since 2026-11-18; these are the defaults): the worker runs `daily_update()` at 5 AM Mountain (refresh current season's
   `/games`, `/stats/game/advanced`, `/lines` = 3 calls, then the latest week's passing box scores
   via `refresh_recent_qbs` = 1 call, then `predict_upcoming`; ~4 calls/day), skipped when no
   games are within 3 days back / 10 days ahead. **Each August, backfill the new season once by

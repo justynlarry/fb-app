@@ -146,3 +146,14 @@
   </form>
 </dialog>
 {%- endmacro -%}
+
+{#- A job's times as text, the same as cfb/schedule.py describe(): "Daily 06:00 · Sat 09:00, 12:00 · Sun 16:00" -#}
+{%- macro schedule_text(entries) -%}
+  {%- set names = {'daily': 'Daily', 'mon': 'Mon', 'tue': 'Tue', 'wed': 'Wed', 'thu': 'Thu', 'fri': 'Fri', 'sat': 'Sat', 'sun': 'Sun'} -%}
+  {%- set ns = namespace(parts=[]) -%}
+  {%- for day in ['daily', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] -%}
+    {%- set times = entries | selectattr('days', 'equalto', day) | map(attribute='time') | sort | list -%}
+    {%- if times %}{% set ns.parts = ns.parts + [names[day] ~ ' ' ~ times | join(', ')] %}{% endif -%}
+  {%- endfor -%}
+  {{- ns.parts | join(' · ') if ns.parts else 'none' -}}
+{%- endmacro -%}

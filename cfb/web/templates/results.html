@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, league_tabs %}
+{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, league_tabs, schedule_text %}
 {% block title %}Results{% endblock %}
 {% block body_class %}wide{% endblock %}
 
@@ -155,7 +155,7 @@
 {#- Pick rules now in force, and every change to them (settings_log), so each pick can be matched to its rule -#}
 {%- set rules = rules if rules is defined else {'play_gap': 3.0, 'total_gap': 3.0, 'move_min': 0.5} %}
 {%- set rule_names = {'play_gap': 'Play: points off the market', 'total_gap': 'Totals (info): points off',
-                      'move_min': 'Line "moved" (Caution) at'} %}
+                      'move_min': 'Line "moved" (Caution) at', 'odds_schedule': 'Odds snapshot times'} %}
 <h2 class="section-title">Pick rules</h2>
 <p class="muted small">Now: Play at <strong>{{ '%g'|format(rules.play_gap) }}+</strong> points off the market
   {%- if not is_nfl %}, Caution when the line has moved <strong>{{ '%g'|format(rules.move_min) }}+</strong> against us{% endif %},
@@ -170,7 +170,12 @@
       <tr>
         <td class="small">{{ c.changed_at.strftime('%b %-d, %Y %-I:%M %p') }}</td>
         <td>{{ rule_names.get(c.key, c.key) }}</td>
+        {%- if c.key == 'odds_schedule' %}
+        <td class="small">{{ 'default' if c.old_value is none else schedule_text(c.old_value.odds_snapshot) }}
+          → <strong>{{ schedule_text(c.new_value.odds_snapshot) }}</strong></td>
+        {%- else %}
         <td class="num">{{ 'default' if c.old_value is none else '%g'|format(c.old_value) }} → <strong>{{ '%g'|format(c.new_value) }}</strong></td>
+        {%- endif %}
         <td class="reason">{{ c.reason or '' }}</td>
         <td class="muted small">{{ c.username or '?' }}</td>
       </tr>

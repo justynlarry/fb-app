@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Admin{% endblock %}
+{% from "_macros.html" import schedule_text %}
 {% block body_class %}wide{% endblock %}
 
 {#- Mon Nov 18, 6:00 AM, plus "(2 h ago)" filled in by the script below; "never" if missing -#}
@@ -12,7 +13,7 @@
 {%- set me = request.state.user %}
 <div class="page-head">
   <h1>Admin</h1>
-  <p class="muted">Worker status, settings and accounts. Schedules become editable here once they're built.</p>
+  <p class="muted">Worker status, settings and accounts.</p>
 </div>
 
 {%- set st = status %}
@@ -45,14 +46,13 @@
     <table class="stats status-jobs">
       <thead><tr><th>Job</th><th>Schedule</th><th>Last run</th><th>Result</th></tr></thead>
       <tbody>
-        {%- for job, label, schedule in [
-              ('daily_update', 'College update: CFBD, predictions, weather', '5:00 AM (retries 5:30, 7:30)'),
-              ('nfl_daily_update', 'NFL update: nflverse, predictions', '5:30 AM'),
-              ('odds_snapshot', 'Odds snapshot + picks', '6 AM daily; Sun 4 & 8 PM; Sat 9 AM & noon')] %}
+        {%- set all_times = dict(st.settings.job_schedule, **st.settings.odds_schedule) %}
+        {%- for job in ['daily_update', 'nfl_daily_update', 'odds_snapshot'] %}
         {%- set r = st.jobs.get(job) %}
         <tr>
-          <td class="label">{{ label }}</td>
-          <td class="muted small">{{ schedule }}</td>
+          <td class="label">{{ st.job_labels[job] }}</td>
+          <td class="muted small">{{ schedule_text(all_times[job]) }}
+            {%- if job == 'daily_update' %}<br>retries: {{ schedule_text(all_times['daily_retry']) }}{% endif %}</td>
           <td>{{ when(r.started_at if r else none) }}</td>
           <td class="job-result">
             {%- if not r -%}<span class="muted">not recorded yet</span>
@@ -113,6 +113,44 @@
     </div>
   </form>
   <p class="muted small">Defaults: Play 3, totals 3, moved 0.5 (the rules every backtest so far was judged under).</p>
+</section>
+
+<section class="panel" aria-labelledby="schedule-title">
+  <h2 id="schedule-title">Schedule</h2>
+  <p class="muted small">When the worker runs each job (Mountain time, 24-hour clock). It re-reads this every 5 minutes,
+    so a saved change takes effect within 5 minutes, with no restart. Changing the <strong>odds snapshot</strong> times
+    needs a reason and is listed on the Results page, because they decide which lines picks are recorded at.</p>
+  <div id="schedule-editor" class="schedule-editor"
+       data-jobs="{{ st.settings.job_schedule|tojson|forceescape }}"
+       data-odds="{{ st.settings.odds_schedule|tojson|forceescape }}"
+       data-labels="{{ st.job_labels|tojson|forceescape }}"></div>
+
+  <div class="schedule-polls">
+    <label class="field">
+      <span>Live-score poll during games (seconds)</span>
+      <input type="number" id="poll-fast" min="10" max="300" step="5" value="{{ st.settings.poll_fast_seconds }}">
+    </label>
+    <label class="field">
+      <span>… and otherwise (seconds)</span>
+      <input type="number" id="poll-slow" min="60" max="3600" step="30" value="{{ st.settings.poll_slow_seconds }}">
+    </label>
+  </div>
+
+  <div class="schedule-check" id="schedule-check" role="status" aria-live="polite"></div>
+
+  <form id="schedule-form" class="rules-form" novalidate>
+    <label class="field rules-reason">
+      <span>Reason <small class="muted">(required when the odds snapshot times change)</small></span>
+      <input type="text" id="schedule-reason" maxlength="300" autocomplete="off">
+    </label>
+    <div class="form-actions rules-reason">
+      <button type="submit" class="primary">Save schedule</button>
+      <button type="button" class="link-button" id="schedule-reset">Undo unsaved changes</button>
+      <span class="form-message" id="schedule-message" role="status"></span>
+    </div>
+  </form>
+  <p class="muted small">Defaults: college update 05:00 (retries 05:30, 07:30), NFL update 05:30, odds snapshots daily
+    06:00 · Sat 09:00, 12:00 · Sun 16:00, 20:00 (about 189 Odds API credits a month in season); polls 30 s / 600 s.</p>
 </section>
 
 <section class="panel" aria-labelledby="books-title">
@@ -218,6 +256,128 @@
     span.textContent = " (" + ago + " ago)";
     el.appendChild(span);
   });
+})();
+
+// Schedule editor: one row per time; the server checks it, warns, and estimates Odds API credits
+(function () {
+  var box = document.getElementById("schedule-editor");
+  if (!box) return;
+  var DAYS = [["daily", "Daily"], ["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"],
+              ["fri", "Fri"], ["sat", "Sat"], ["sun", "Sun"]];
+  var ORDER = ["odds_snapshot", "daily_update", "daily_retry", "nfl_daily_update"];
+  var labels = JSON.parse(box.dataset.labels);
+  var saved = { jobs: JSON.parse(box.dataset.jobs), odds: JSON.parse(box.dataset.odds) };
+  var state;
+  var checkBox = document.getElementById("schedule-check");
+  var message = document.getElementById("schedule-message");
+  var timer = null;
+
+  function clone(x) { return JSON.parse(JSON.stringify(x)); }
+  function load() {
+    state = clone(saved.jobs);
+    Object.keys(saved.odds).forEach(function (k) { state[k] = clone(saved.odds[k]); });
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  }
+
+  function render() {
+    box.innerHTML = "";
+    ORDER.forEach(function (job) {
+      var group = el("div", "schedule-job" + (job === "odds_snapshot" ? " odds" : ""));
+      var head = el("div", "schedule-job-head");
+      head.appendChild(el("strong", null, labels[job]));
+      if (job === "odds_snapshot") head.appendChild(el("span", "late-tag", "reason needed"));
+      group.appendChild(head);
+      state[job].forEach(function (entry, i) {
+        var row = el("div", "schedule-row");
+        var day = el("select");
+        day.setAttribute("aria-label", labels[job] + ": day");
+        DAYS.forEach(function (d) {
+          var o = el("option", null, d[1]); o.value = d[0]; if (d[0] === entry.days) o.selected = true; day.appendChild(o);
+        });
+        day.addEventListener("change", function () { entry.days = day.value; changed(); });
+        var time = el("input");
+        time.type = "time"; time.value = entry.time; time.required = true;
+        time.setAttribute("aria-label", labels[job] + ": time");
+        time.addEventListener("change", function () { entry.time = time.value; changed(); });
+        var remove = el("button", "link-button", "Remove");
+        remove.type = "button";
+        remove.addEventListener("click", function () { state[job].splice(i, 1); render(); changed(); });
+        row.appendChild(day); row.appendChild(time); row.appendChild(remove);
+        group.appendChild(row);
+      });
+      var add = el("button", "toggle add-time", "+ Add a time");
+      add.type = "button";
+      add.addEventListener("click", function () { state[job].push({ days: "daily", time: "06:00" }); render(); changed(); });
+      group.appendChild(add);
+      box.appendChild(group);
+    });
+  }
+
+  function payload(checkOnly) {
+    var jobs = {}, odds = {};
+    Object.keys(state).forEach(function (k) { (k === "odds_snapshot" ? odds : jobs)[k] = state[k]; });
+    return { job_schedule: jobs, odds_schedule: odds,
+             poll_fast_seconds: parseInt(document.getElementById("poll-fast").value, 10),
+             poll_slow_seconds: parseInt(document.getElementById("poll-slow").value, 10),
+             reason: document.getElementById("schedule-reason").value.trim(), check_only: checkOnly };
+  }
+  function post(data) {
+    return fetch("/api/admin/settings/schedule", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (body) { return { ok: r.ok, body: body }; });
+    });
+  }
+  function detail(body, fallback) {
+    var d = body && body.detail;
+    if (typeof d === "string") return d;
+    if (Array.isArray(d) && d[0]) return (d[0].loc ? d[0].loc[d[0].loc.length - 1] + ": " : "") + d[0].msg;
+    return fallback;
+  }
+  function showCheck(res) {
+    checkBox.innerHTML = "";
+    if (!res.ok) { checkBox.appendChild(el("p", "form-message error", detail(res.body, "That schedule isn't valid."))); return; }
+    var b = res.body;
+    checkBox.appendChild(el("p", "small", b.snapshots_per_week + " odds snapshots a week ≈ " + b.monthly_credits +
+                                          " of 500 Odds API credits a month in season (both leagues)."));
+    if (b.warnings.length) {
+      var list = el("ul", "schedule-warnings small");
+      b.warnings.forEach(function (w) { list.appendChild(el("li", null, w)); });
+      checkBox.appendChild(list);
+    } else {
+      checkBox.appendChild(el("p", "muted small", "No warnings."));
+    }
+  }
+  function changed() {
+    message.textContent = "";
+    clearTimeout(timer);
+    timer = setTimeout(function () { post(payload(true)).then(showCheck).catch(function () {}); }, 300);
+  }
+
+  ["poll-fast", "poll-slow"].forEach(function (id) { document.getElementById(id).addEventListener("change", changed); });
+  document.getElementById("schedule-reset").addEventListener("click", function () { load(); render(); changed(); });
+  document.getElementById("schedule-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    message.classList.remove("error");
+    message.textContent = "Saving…";
+    post(payload(false)).then(function (res) {
+      showCheck(res);
+      if (!res.ok) { message.textContent = detail(res.body, "Couldn't save the schedule."); message.classList.add("error"); return; }
+      var jobs = payload(false);
+      saved = { jobs: jobs.job_schedule, odds: jobs.odds_schedule };
+      document.getElementById("schedule-reason").value = "";
+      message.textContent = res.body.changed.length
+        ? "Saved. The worker picks it up within 5 minutes."
+        : "Nothing changed.";
+    }).catch(function () { message.textContent = "Couldn't reach the server."; message.classList.add("error"); });
+  });
+
+  load(); render(); changed();
 })();
 
 // Pick rules: a reason is required; the server logs each value that changed
