@@ -599,6 +599,8 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     feature (model-tests.md section 5A). Rule B was approved after T4's slope was known, and the candidates were
     picked from the same data, so A is biased upward.
   - **NEXT ACTION: run holdout 5A once, on or after 2026-12-07** (after conference championship weekend).
+    **2027 season plan: `docs/plan-2027.md`** (DRAFT 2026-11-18): frozen `v6` = v5 + T1 + T-OCDC (+ coach career if 5A
+    Confirmed), one no-harm check in August, paper models v6-ht4 / v6-ht2b / v5, betting rules, judged items, open decisions.
     Amended 2026-11-16, before any 2026 result: graded at the **Bovada open**, mixed open reported beside it.
   - **Audit 2026-11-16 (`docs/audit-2026-11-16.md`):** CFBD `spreadOpen` differs by book. Bovada = true Sunday-evening
     opener; DraftKings (and partly ESPN Bet) = lookahead line from before the previous week's games (v5 "wins" 55.4%
@@ -613,6 +615,9 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     seasons, CLV −3.5 SE); **F DraftKings lookahead supported** (slope +0.175 ± 0.063 at the DK open 2023–25, Bovada open
     moved +0.73 pts toward us): track lookahead picks in 2027, don't bet on it alone. A and B wait for Dec 6–7.
     Reminders: this line, a project memory, and a notice on the predictions page from Dec 7.
+    **Test L run 2026-11-18 (edge plan Step 2): supported.** The open overreacts to last week's luck (actual − deserved
+    margin): line-move slope −0.0112 ± 0.0032 (−3.5 SE), all 5 seasons; result slope −0.020 ± 0.026; not inside v5.
+    Small (~0.4 pts top vs bottom third). Tracked in 2027 as a bet-selection input, no betting on it alone.
   - Live use of the drive metrics would also cost 1 CFBD call/day (`/drives`); coach career needs none.
   - Script: scratch `t6.py`, plan `combined_test_plan.md`.
 - **Test 7 (pre-registered, 2026-11-13), rejected: weather for totals.** Open-Meteo historical-forecast archive
