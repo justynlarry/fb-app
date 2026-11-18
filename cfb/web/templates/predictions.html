@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, lean_badge %}
+{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, lean_badge, bet_button, bet_dialog %}
 {% block title %}Predictions{% endblock %}
 {% block body_class %}full{% endblock %}
 
@@ -137,6 +137,7 @@
       {%- set tdiff = (g.total|float - g.market_total|float) if has_mtotal else 0 %}
       {%- set has_otot = g.open_total is defined and g.open_total is not none %}
 
+      {%- set is_final_row = state == 'post' and g.away_score is not none %}
       <tr class="game {{ 'pick-' ~ tier if tier }} {{ 'big-gap' if tier == 'play' and g.pick.gap is not none and g.pick.gap|float >= 5 }} {{ 'started' if g.started is defined and g.started }}"
           data-order="{{ loop.index }}" data-away="{{ g.away }}" data-home="{{ g.home }}"
           data-tier="{{ {'play': 0, 'caution': 1, 'pass': 2}.get(tier, '') }}"
@@ -154,6 +155,16 @@
           {%- else -%}{{ g.local_start.strftime('%-I:%M %p') }}
           {%- endif -%}
           {%- if g.game_id and state == 'pre' %} <a class="adjust-link" href="/overrides?game_id={{ g.game_id }}">Adjust</a>{% endif -%}
+          {%- if g.game_id and not is_final_row %}
+            {%- set bp = g.pick %}
+            {%- set is_bet = tier in ('play', 'caution') %}
+            {{ bet_button(g.game_id, 'cfb', g.away, g.home, bp.side,
+                          bp.bet_spread if (is_bet and bp.bet_spread is not none) else g.market_spread,
+                          bp.bet_price if is_bet else none, bp.bet_book if is_bet else none,
+                          bp.total_side or (('over' if tdiff > 0 else 'under') if has_mtotal else none),
+                          bp.bet_total if bp.bet_total is not none else g.market_total,
+                          bp.total_price, bp.total_book, g.started is defined and g.started) }}
+          {%- endif %}
         </td>
         <td class="our-line" data-label="Our line">
           <strong>{{ line_text(g.spread, g.home, g.away) }}</strong>
@@ -337,7 +348,9 @@
   of rain. Our model doesn't use weather and has tended to over-predict totals in games like these; the market
   usually prices it in. Worth a look on the Overrides page.</p>
 
+{{ bet_dialog() }}
 <script src="/static/predictions-sort.js?v=2026-11-18" defer></script>
+<script src="/static/bet-form.js?v=2026-11-18" defer></script>
 <script>
   // Market columns and picks are shown by default; "Hide" is remembered in this browser.
   (function () {

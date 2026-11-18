@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_name %}
+{% block title %}{{ 'My bets' if is_me else owner.username ~ "'s bets" }}{% endblock %}
+{% block body_class %}wide{% endblock %}
+
+{#- $1,234.50, with a sign when signed=true (+$90.91 / −$100.00) -#}
+{%- macro money(v, signed=false) -%}
+  {%- set x = v|float -%}
+  {{- ('+' if x > 0 else ('−' if x < 0 else '')) if signed else ('−' if x < 0 else '') -}}${{ '{:,.2f}'.format(x|abs) }}
+{%- endmacro -%}
+
+{#- Same amount in units, when the owner has set a unit size -#}
+{%- macro units(v, signed=false) -%}
+  {%- if owner.unit_size -%}
+    {%- set u = v|float / owner.unit_size|float -%}
+    {{ ('%+.2f' if signed else '%.2f')|format(u) }}u
+  {%- endif -%}
+{%- endmacro -%}
+
+{#- "Michigan +3.5", "Over 52.5", "Michigan ML".  line is the HOME team's number. -#}
+{%- macro bet_text(b) -%}
+  {%- if b.bet_type == 'total' -%}
+    {{ b.side|capitalize }} {{ '%g'|format(b.line|float) }}
+  {%- else -%}
+    {%- set team = b.home if b.side == 'home' else b.away -%}
+    {{ team_name(team, b.league) }}
+    {%- if b.bet_type == 'moneyline' %} ML
+    {%- else -%}
+      {%- set n = b.line|float if b.side == 'home' else -(b.line|float) -%}
+      {{ ' PK' if n|abs < 0.05 else ' %+g'|format(n) }}
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro -%}
+
+{% block content %}
+{%- set by = {} %}
+{%- for r in summary %}{% set _ = by.update({r.bet_type or 'all': r}) %}{% endfor %}
+
+<div class="page-head page-head-row">
+  <div>
+    <h1>{{ 'My bets' if is_me else owner.username ~ "'s bets" }}</h1>
+    <p class="muted">Bets {{ 'you' if is_me else 'they' }} actually placed, graded from the final score
+      {%- if owner.unit_size %} · 1 unit = {{ money(owner.unit_size) }}{% endif %} · times in Mountain</p>
+  </div>
+  {%- if not is_me or sharing %}
+  <nav class="shared-list small" aria-label="Shared records">
+    {%- if not is_me %}<a href="/bets">← My bets</a>{% endif %}
+    {%- if sharing %}<span class="muted">Shared records:</span>
+      {%- for s in sharing %} <a href="/bets?user={{ s.username|urlencode }}" {{ 'aria-current="page"' if s.username == owner.username }}>{{ s.username }}</a>{% endfor %}
+    {%- endif %}
+  </nav>
+  {%- endif %}
+</div>
+
+<section class="cards" aria-label="Record">
+  {%- for key, label in [('all', 'All bets'), ('spread', 'Spread'), ('total', 'Totals'), ('moneyline', 'Moneyline')] %}
+  {%- set r = by.get(key) %}
+  {%- if key == 'all' or r %}
+  <div class="card {{ 'highlight' if key == 'all' and r and r.profit|float > 0 }}">
+    <div class="card-label">{{ label }}</div>
+    {%- if r and (r.wins + r.losses + r.pushes) > 0 %}
+      <div class="card-value">{{ r.wins }}–{{ r.losses }}{% if r.pushes %}–{{ r.pushes }}{% endif %}</div>
+      <div class="card-sub">
+        <span class="money {{ 'pos' if r.profit|float > 0 else ('neg' if r.profit|float < 0) }}">{{ money(r.profit, true) }}</span>
+        {%- if owner.unit_size %} ({{ units(r.profit, true) }}){% endif %}
+        {%- if r.risked|float > 0 %} · ROI {{ '%+.1f'|format(100 * r.profit|float / r.risked|float) }}%{% endif %}
+        {%- if r.pending %} · {{ r.pending }} pending{% endif %}
+      </div>
+    {%- else %}
+      <div class="card-value muted">–</div>
+      <div class="card-sub">{% if r and r.pending %}{{ r.pending }} pending{% else %}no graded bets yet{% endif %}</div>
+    {%- endif %}
+  </div>
+  {%- endif %}
+  {%- endfor %}
+</section>
+<p class="muted small">ROI = profit ÷ amount risked on graded bets. Pushes return the stake and don't count as wins or losses.</p>
+
+<h2>Bets</h2>
+<div class="table-wrap">
+  <table class="stats bets">
+    <thead>
+      <tr>
+        <th>Game</th><th>Bet</th><th>Book</th><th class="num">Stake</th><th>Result</th>
+        {%- if is_me %}<th>Note</th><th></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {%- for b in bets %}
+      <tr>
+        <td>
+          {{ team_name(b.away, b.league) }} at {{ team_name(b.home, b.league) }}
+          <div class="muted small">{{ 'NFL · ' if b.league == 'nfl' }}{{ b.local_start.strftime('%a %b %-d, %-I:%M %p') }}</div>
+        </td>
+        <td class="bet-what">
+          {{ bet_text(b) }} <span class="price">{{ '%+d'|format(b.price) }}</span>
+          {%- if b.logged_after_kickoff %} <span class="late-tag" title="Saved after the game had started">logged after kickoff</span>{% endif %}
+        </td>
+        <td>{{ b.book }}</td>
+        <td class="num">{{ money(b.stake) }}{% if owner.unit_size %}<div class="muted small">{{ units(b.stake) }}</div>{% endif %}</td>
+        <td>
+          {%- if b.outcome %}
+            <span class="outcome {{ b.outcome }}">{{ b.outcome[0]|upper }}</span>
+            <span class="money {{ 'pos' if b.profit|float > 0 else ('neg' if b.profit|float < 0) }}">{{ money(b.profit, true) }}</span>
+            <div class="muted small">Final {{ b.away_points }}–{{ b.home_points }}</div>
+          {%- else %}
+            <span class="muted">pending</span>
+          {%- endif %}
+        </td>
+        {%- if is_me %}
+        <td class="muted small">{{ b.note or '' }}</td>
+        <td>
+          <button type="button" class="link-button remove-bet" data-id="{{ b.id }}"
+                  data-kickoff="{{ b.start_time.isoformat() }}" hidden>Remove</button>
+        </td>
+        {%- endif %}
+      </tr>
+      {%- else %}
+      <tr><td colspan="{{ 7 if is_me else 5 }}" class="empty">
+        {%- if is_me %}No bets yet. Use the <strong>Bet</strong> button next to a game on the
+          <a href="/predictions">Predictions</a> page.{% else %}No bets yet.{% endif -%}
+      </td></tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+{%- if is_me %}
+<p class="muted small">A bet can be removed until its game kicks off. Bets saved after kickoff are tagged
+  "logged after kickoff" so a shared record shows which ones were entered once the game was under way.</p>
+
+<section class="panel" aria-labelledby="settings-title">
+  <h2 id="settings-title">Settings</h2>
+  <form id="bet-settings" class="bet-settings" novalidate>
+    <label class="field">
+      <span>Unit size ($) <small class="muted">optional</small></span>
+      <input type="number" id="unit-size" min="0.01" step="0.01" inputmode="decimal"
+             value="{{ '%.2f'|format(settings.unit_size|float) if settings.unit_size else '' }}" placeholder="25">
+    </label>
+    <label class="check">
+      <input type="checkbox" id="share-bets" {{ 'checked' if settings.share_bets }}>
+      Let other users see my record (notes stay private)
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="primary">Save settings</button>
+      <span id="settings-message" class="form-message" role="status"></span>
+    </div>
+  </form>
+</section>
+
+<script>
+(function () {
+  // Remove: only before kickoff (the server checks too); first click asks to confirm
+  var now = Date.now();
+  document.querySelectorAll("button.remove-bet").forEach(function (btn) {
+    if (new Date(btn.dataset.kickoff).getTime() <= now) return;
+    btn.hidden = false;
+    btn.addEventListener("click", function () {
+      if (btn.dataset.confirm !== "1") {
+        btn.dataset.confirm = "1";
+        btn.textContent = "Confirm remove?";
+        btn.classList.add("danger");
+        setTimeout(function () {
+          btn.dataset.confirm = ""; btn.textContent = "Remove"; btn.classList.remove("danger");
+        }, 4000);
+        return;
+      }
+      btn.disabled = true;
+      fetch("/api/bets/" + btn.dataset.id + "/remove", { method: "POST" })
+        .then(function (r) { if (r.ok) window.location.reload(); else btn.textContent = "Can't remove"; })
+        .catch(function () { btn.textContent = "Failed"; });
+    });
+  });
+
+  // Settings
+  var form = document.getElementById("bet-settings");
+  var message = document.getElementById("settings-message");
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var raw = document.getElementById("unit-size").value.trim();
+    var unit = raw === "" ? null : parseFloat(raw);
+    if (unit !== null && (isNaN(unit) || unit <= 0)) {
+      message.textContent = "Unit size must be more than $0, or blank.";
+      message.classList.add("error");
+      return;
+    }
+    message.textContent = "Saving…";
+    message.classList.remove("error");
+    fetch("/api/bets/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ unit_size: unit === null ? null : unit.toFixed(2),
+                             share_bets: document.getElementById("share-bets").checked })
+    }).then(function (r) {
+      if (r.ok) window.location.reload();
+      else { message.textContent = "Couldn't save the settings."; message.classList.add("error"); }
+    }).catch(function () { message.textContent = "Couldn't reach the server."; message.classList.add("error"); });
+  });
+})();
+</script>
+{%- endif %}
+{% endblock %}

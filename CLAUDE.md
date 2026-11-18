@@ -420,12 +420,27 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   (game, spread/total/moneyline, side, line, price, book, stake), graded from `games`, with a "My bets" page (record,
   units, ROI) vs pick_log's hypothetical best price. Largest of the 2026-11-18 ideas: new table (user_id, game_id, ...),
   POST endpoint (login + Origin check, a user edits only their own rows), grading view, page. Button on the predictions
-  page (it already has the line, price and book to prefill). Open question: can users see each other's bets?
+  page (it already has the line, price and book to prefill). **Decisions (user, 2026-11-18):** built before the admin
+  page; private by default with a per-user opt-in to share the record; stakes in dollars plus a per-user unit size
+  (shows $ and units); spread, total and moneyline (no parlays/props). Bets can be logged after kickoff (flagged as
+  such on the page); removing a bet is soft (`removed_at`) and only before kickoff. Migration `023_bets.sql`.
+  **Built 2026-11-18:** `023_bets.sql` (applied live; `bets`, `users.unit_size/share_bets`, view `bet_results`),
+  `main.py` `BetIn`/`add_bet`/`remove_bet`/`bets_page` (`/bets?user=`)/`save_bet_settings` (user-typed), `bets.html`,
+  `bet_button`/`bet_dialog` macros + `static/bet-form.js` on both predictions pages (no button on final games; book
+  prefilled only if bettable). Not yet tested in a real browser at the time of writing.
+- **Admin settings page (user idea, 2026-11-18):** admin-only page (`require_admin` + Origin check) to change
+  settings without editing code. Likely a `settings` table (key, value, updated_by, updated_at) read by the app and
+  the worker at each run, plus a change log. Candidates: odds snapshot times, poll interval, leagues on/off, the
+  bettable-book list, reminder dates, and user management (add / reset / disable, now the `cfb.users` CLI; a
+  temporary password shown once to the admin on screen is fine). Keep pre-registered rules (tier thresholds,
+  bet-time rule, model version) read-only or logged loudly: changing them mid-season changes what `pick_log`
+  records, and the 2027 record must be frozen.
 - **UI ideas (user, 2026-11-18; 2–4 done the same day on both predictions pages: sort in
   `static/predictions-sort.js`, `lean_badge` macro, rate label "52% in backtest (W–L)"):**
   1. *Results page updates more often.* `pick_results` is a plain view, but college final scores reach `games` only
      at the 5 AM CFBD refresh. Fix at 0 CFBD calls: the ESPN poller writes college finals into `games` when
      `status.type.completed` is true (as it already does for NFL); CFBD's 5 AM load still overwrites them.
+     **Built 2026-11-18** (`espn.save_final_scores`, worker restarted ~8:30 AM); first live check = that night's games.
   2. *Sort options on predictions:* kickoff (default), spread pick, O/U pick, by team. Client-side JS on the
      table, no backend. "Confidence" = tier (Play > Caution > Pass), then gap; label it honestly: bigger gaps are not
      more reliable (5+ gaps went 41% at the close in 2026).

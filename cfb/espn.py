@@ -310,6 +310,37 @@ def update_start_times(league, games):
     return moved
 
 
+def save_final_scores(league, games):
+    """Copy ESPN's final scores into games as soon as a game ends.  Returns how many were new.
+
+    College games come from CFBD, which fills in final scores only at the 5 AM refresh.
+    Saving ESPN's final right away lets the Results page grade picks that night.
+    The 5 AM refresh still overwrites these with CFBD's numbers.
+    (NFL finals are already saved by sync_schedule.)
+    """
+    saved = 0
+    with connect() as conn:
+        for g in games:
+            # Only real finals (not postponed games) with both scores
+            if not g["completed"] or g["home_score"] is None or g["away_score"] is None:
+                continue
+            row = conn.execute(
+                """
+                UPDATE games
+                SET home_points = %s, away_points = %s, completed = true
+                WHERE league = %s
+                  AND espn_id = %s
+                  AND (NOT completed OR home_points IS NULL OR away_points IS NULL)
+                RETURNING id
+                """,
+                (g["home_score"], g["away_score"], league, g["espn_id"]),
+            ).fetchone()
+            if row:
+                print(f"ESPN: {league} game {row[0]} final {g['away_score']}-{g['home_score']} saved")
+                saved += 1
+    return saved
+
+
 def poll():
     """One poll of every league: fetch, parse, save.  Returns how many games are live right now."""
     live = 0
@@ -318,6 +349,8 @@ def poll():
             games = parse_scoreboard(fetch_scoreboard(league))
             if league in SCHEDULE_FROM_ESPN:
                 sync_schedule(league, games)
+            else:
+                save_final_scores(league, games)
             saved = save_live_scores(league, games)
             update_start_times(league, games)
         except Exception as err:

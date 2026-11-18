@@ -1,7 +1,9 @@
 """Web UI. Pages only read from Postgres; the worker does all the fetching."""
 import ipaddress
 import os
+from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 from urllib.parse import quote, urlsplit
 from zoneinfo import ZoneInfo
 
@@ -663,6 +665,37 @@ GROUP BY kind
 """
 
 
+# One user's bets, newest game first, with team names for the page
+BETS_SQL = """
+SELECT r.id, r.bet_type, r.side, r.line, r.price, r.book, r.stake, r.note,
+       r.created_at, r.logged_after_kickoff, r.outcome, r.profit,
+       r.league, r.start_time, r.home_points, r.away_points,
+       h.school AS home, a.school AS away,
+       h.espn_id AS home_espn_id, a.espn_id AS away_espn_id
+FROM bet_results r
+JOIN games g ON g.id = r.game_id
+JOIN teams h ON h.id = g.home_id
+JOIN teams a ON a.id = g.away_id
+WHERE r.user_id = %(user_id)s
+ORDER BY r.start_time DESC, r.id DESC
+"""
+
+# One user's record by bet type, plus an "all bets" row (bet_type NULL) from ROLLUP
+BET_SUMMARY_SQL = """
+SELECT bet_type,
+       count(*) FILTER (WHERE outcome = 'win')  AS wins,
+       count(*) FILTER (WHERE outcome = 'loss') AS losses,
+       count(*) FILTER (WHERE outcome = 'push') AS pushes,
+       count(*) FILTER (WHERE outcome IS NULL)  AS pending,
+       coalesce(sum(stake) FILTER (WHERE outcome IS NOT NULL), 0) AS risked,
+       coalesce(sum(profit), 0) AS profit
+FROM bet_results
+WHERE user_id = %(user_id)s
+GROUP BY ROLLUP (bet_type)
+ORDER BY bet_type NULLS LAST
+"""
+
+
 # Backtest results, grouped by {group_by} (filled in from GROUPINGS below, never from user input)
 BACKTEST_SQL = """
 SELECT {group_by} AS label,
@@ -755,6 +788,33 @@ class OverrideIn(BaseModel):
     team_id: int
     points: float = Field(ge=-30, le=30)
     reason: str = Field(min_length=1, max_length=200)
+
+
+class BetIn(BaseModel):
+    """What the bet form sends.  For a spread, line is the HOME team's number (the form converts it)."""
+    game_id: int
+    bet_type: Literal["spread", "total", "moneyline"]
+    side: Literal["home", "away", "over", "under"]
+    line: float | None = Field(default=None, ge=-100, le=200)
+    price: int = Field(ge=-10000, le=10000)
+    book: str = Field(min_length=1, max_length=40)
+    stake: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+    note: str = Field(default="", max_length=200)
+
+
+# Which sides go with which bet type
+BET_SIDES = {
+    "spread": ("home", "away"),
+    "total": ("over", "under"),
+    "moneyline": ("home", "away"),
+}
+
+
+class BetSettingsIn(BaseModel):
+    """What the settings form on the bets page sends."""
+    unit_size: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
+    share_bets: bool
+
 
 
 def backtest_summary(group, include_2020, version=MODEL_VERSION):
@@ -1020,6 +1080,51 @@ def results_page(request: Request, league: str = "cfb"):
     )
 
 
+@app.get("/bets")
+def bets_page(request: Request, user: str | None = None):
+    """Your bets and record.  ?user=name shows another user's record, if they share it."""
+    me = request.state.user
+    with connect() as conn:
+        conn.row_factory = dict_row
+        settings = conn.execute(
+            "SELECT unit_size, share_bets FROM users WHERE id = %s", (me["id"],)
+        ).fetchone()
+        # Other users who share their record, for the "view" links
+        sharing = conn.execute(
+            """
+            SELECT username FROM users
+            WHERE share_bets AND active AND id <> %s
+            ORDER BY lower(username)
+            """,
+            (me["id"],),
+        ).fetchall()
+
+        if user is None or user.lower() == me["username"].lower():
+            owner = {"id": me["id"], "username": me["username"], "unit_size": settings["unit_size"]}
+        else:
+            owner = conn.execute(
+                """
+                SELECT id, username, unit_size FROM users
+                WHERE lower(username) = lower(%s) AND share_bets AND active
+                """,
+                (user,),
+            ).fetchone()
+            if owner is None:
+                raise HTTPException(status_code=404, detail="No shared record for that user.")
+
+        summary = conn.execute(BET_SUMMARY_SQL, {"user_id": owner["id"]}).fetchall()
+        bets = conn.execute(BETS_SQL, {"user_id": owner["id"]}).fetchall()
+
+    for b in bets:
+        b["local_start"] = b["start_time"].astimezone(LOCAL_TZ)
+    return templates.TemplateResponse(
+        request,
+        "bets.html",
+        {"owner": owner, "is_me": owner["id"] == me["id"], "settings": settings,
+         "sharing": sharing, "summary": summary, "bets": bets, "active": "bets"},
+    )
+
+
 @app.get("/overrides")
 def overrides_page(request: Request, game_id: int | None = None, league: str = "cfb"):
     """Add or remove manual adjustments for this week's games (?league=nfl for the NFL)."""
@@ -1036,6 +1141,75 @@ def overrides_page(request: Request, game_id: int | None = None, league: str = "
         {"games": games, "overrides": overrides, "selected_game": game_id,
          "active": "overrides", "league": league},
     )
+
+
+@app.post("/api/bets")
+def add_bet(request: Request, bet: BetIn):
+    """Save one bet for the logged-in user."""
+    if bet.side not in BET_SIDES[bet.bet_type]:
+        raise HTTPException(status_code=400, detail="That side doesn't go with that bet type.")
+    if (bet.line is None) != (bet.bet_type == "moneyline"):
+        raise HTTPException(status_code=400, detail="Spreads and totals need a line; moneylines don't.")
+    if -100 < bet.price < 100:
+        raise HTTPException(status_code=400, detail="Price must be American odds, like -110 or +150.")
+
+    params = bet.model_dump()
+    params["user_id"] = request.state.user["id"]
+    params["book"] = params["book"].strip()
+    params["note"] = params["note"].strip() or None
+    with connect() as conn:
+        added = conn.execute(
+            """
+            INSERT INTO bets (user_id, game_id, bet_type, side, line, price, book, stake, note)
+            SELECT %(user_id)s, %(game_id)s, %(bet_type)s, %(side)s, %(line)s, %(price)s,
+                   %(book)s, %(stake)s, %(note)s
+            WHERE EXISTS (SELECT 1 FROM games WHERE id = %(game_id)s)
+            RETURNING id
+            """,
+            params,
+        ).fetchone()
+    if added is None:
+        raise HTTPException(status_code=404, detail="No such game.")
+    return {"id": added[0]}
+
+
+@app.post("/api/bets/{bet_id}/remove")
+def remove_bet(request: Request, bet_id: int):
+    """Remove one of your own bets before its game kicks off (the row is kept for history)."""
+    with connect() as conn:
+        removed = conn.execute(
+            """
+            UPDATE bets b
+            SET removed_at = now()
+            FROM games g
+            WHERE b.id = %(bet_id)s
+              AND b.user_id = %(user_id)s
+              AND b.removed_at IS NULL
+              AND g.id = b.game_id
+              AND g.start_time > now()
+            """,
+            {"bet_id": bet_id, "user_id": request.state.user["id"]},
+        ).rowcount
+    if removed == 0:
+        raise HTTPException(status_code=404, detail="No bet of yours that can still be removed.")
+    return {"removed": bet_id}
+
+
+@app.post("/api/bets/settings")
+def save_bet_settings(request: Request, form: BetSettingsIn):
+    """Save your unit size and whether other users can see your record."""
+    params = form.model_dump()
+    params["user_id"] = request.state.user["id"]
+    with connect() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET unit_size = %(unit_size)s, share_bets = %(share_bets)s
+            WHERE id = %(user_id)s
+            """,
+            params,
+        )
+    return {"saved": True}
 
 
 @app.post("/api/overrides")

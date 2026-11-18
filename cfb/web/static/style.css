@@ -583,3 +583,53 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .predictions.sorted .sort-day { display: inline; }
 .predictions.sorted tr.day-break { display: none; }
 .sort-note { margin-top: -0.5rem; }
+
+/* ---------- Bets: button on prediction rows, the bet dialog, My bets page ---------- */
+.bet-link {
+  font: inherit;
+  font-size: 0.75em;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.bet-link:hover { color: var(--text); border-color: var(--muted); }
+.bet-link.bet-saved { color: var(--toward); border-color: currentColor; }
+.bet-dialog {
+  width: min(32rem, calc(100% - 2rem));
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+.bet-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.bet-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem 1rem; }
+.bet-form .bet-wide, .bet-head { grid-column: 1 / -1; }
+.bet-head h2 { margin: 0; }
+.bet-head p { margin: 0.2rem 0 0; }
+.bet-form [hidden] { display: none; }
+.field input[type="number"]#bet-stake { width: 100%; }
+@media (max-width: 480px) { .bet-form { grid-template-columns: 1fr; } }
+.late-tag {
+  display: inline-block;
+  padding: 0 0.35em;
+  border-radius: 4px;
+  background: var(--neutral-bg);
+  color: var(--muted);
+  font-size: 0.72em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bets td { white-space: normal; }
+.bets td.bet-what { font-weight: 600; }
+.bets .units.pos, .bets .money.pos { color: var(--toward); }
+.bets .money.neg { color: var(--against); }
+.money { font-variant-numeric: tabular-nums; font-weight: 600; }
+.bet-settings { display: flex; flex-wrap: wrap; align-items: end; gap: 0.9rem 1.25rem; }
+.bet-settings .field { max-width: 12rem; }
+.check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
+.shared-list a { margin-right: 0.6rem; }

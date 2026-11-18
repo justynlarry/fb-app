@@ -77,3 +77,72 @@
   </span>
   {%- endif -%}
 {%- endmacro -%}
+
+{#- "Bet" button for one game row.  It opens the shared bet form (bet_dialog below), prefilled from these values.
+    spread is the HOME team's number (our convention); price/book are the best ones we saw for `side`, if any. -#}
+{%- macro bet_button(game_id, league, away, home, side, spread, price, book, total_side, total, total_price, total_book, started) -%}
+  <button type="button" class="bet-link" data-game="{{ game_id }}" data-league="{{ league }}"
+          data-away="{{ away }}" data-home="{{ home }}" data-side="{{ side or '' }}"
+          data-spread="{{ spread if spread is not none else '' }}" data-price="{{ price if price is not none else '' }}"
+          data-book="{{ book_name(book) if book else '' }}" data-total-side="{{ total_side or '' }}"
+          data-total="{{ total if total is not none else '' }}" data-total-price="{{ total_price if total_price is not none else '' }}"
+          data-total-book="{{ book_name(total_book) if total_book else '' }}"
+          title="Log a bet you placed on this game">{{ 'Log bet' if started else 'Bet' }}</button>
+{%- endmacro -%}
+
+{#- The bet form, once per page (static/bet-form.js runs it).  The line is typed for the side bet on
+    ("+3.5"); the script converts spreads to the home team's number before saving. -#}
+{%- macro bet_dialog() -%}
+<dialog id="bet-dialog" class="bet-dialog" aria-labelledby="bet-title">
+  <form id="bet-form" class="bet-form" novalidate>
+    <div class="bet-head">
+      <h2 id="bet-title">Log a bet</h2>
+      <p class="muted small" id="bet-game"></p>
+    </div>
+    <fieldset class="field bet-wide">
+      <legend>Bet type</legend>
+      <div class="team-choice">
+        <label><input type="radio" name="bet_type" value="spread" checked> Spread</label>
+        <label><input type="radio" name="bet_type" value="total"> Total</label>
+        <label><input type="radio" name="bet_type" value="moneyline"> Moneyline</label>
+      </div>
+    </fieldset>
+    <fieldset class="field bet-wide">
+      <legend>Side</legend>
+      <div class="team-choice">
+        <label><input type="radio" name="side" id="bet-side-a"> <span id="bet-side-a-name"></span></label>
+        <label><input type="radio" name="side" id="bet-side-b"> <span id="bet-side-b-name"></span></label>
+      </div>
+    </fieldset>
+    <label class="field" id="bet-line-field">
+      <span id="bet-line-label">Line</span>
+      <input type="text" id="bet-line" autocomplete="off" placeholder="+3.5">
+    </label>
+    <label class="field">
+      <span>Price</span>
+      <input type="text" id="bet-price" autocomplete="off" placeholder="-110">
+    </label>
+    <label class="field">
+      <span>Book</span>
+      <input type="text" id="bet-book" list="bet-books" maxlength="40" autocomplete="off" placeholder="MyBookie">
+      <datalist id="bet-books">
+        <option value="MyBookie"></option><option value="DraftKings"></option><option value="FanDuel"></option>
+        <option value="BetMGM"></option><option value="Caesars"></option><option value="Fanatics"></option>
+      </datalist>
+    </label>
+    <label class="field">
+      <span>Stake ($)</span>
+      <input type="number" id="bet-stake" min="0.01" step="0.01" inputmode="decimal" placeholder="25">
+    </label>
+    <label class="field bet-wide">
+      <span>Note <small class="muted">(optional, only you see it)</small></span>
+      <input type="text" id="bet-note" maxlength="200" autocomplete="off">
+    </label>
+    <div class="form-actions bet-wide">
+      <button type="submit" class="primary">Save bet</button>
+      <button type="button" class="toggle" id="bet-cancel">Cancel</button>
+      <span id="bet-message" class="form-message" role="status"></span>
+    </div>
+  </form>
+</dialog>
+{%- endmacro -%}

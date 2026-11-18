@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, lean_badge %}
+{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, lean_badge, bet_button, bet_dialog %}
 {% block title %}NFL Predictions{% endblock %}
 {% block body_class %}full{% endblock %}
 
@@ -154,6 +154,15 @@
           {%- else -%}{{ g.local_start.strftime('%-I:%M %p') }}
           {%- endif -%}
           {%- if g.game_id and state == 'pre' and not g.started %} <a class="adjust-link" href="/overrides?league=nfl&game_id={{ g.game_id }}">Adjust</a>{% endif -%}
+          {%- if g.game_id and not is_final %}
+            {%- set rec_play = rec and rec.tier == 'play' and rec.bet_spread is not none %}
+            {{ bet_button(g.game_id, 'nfl', g.away, g.home, rec.side if rec else side,
+                          rec.bet_spread if rec_play else g.market_spread,
+                          rec.bet_price if rec_play else none, rec.bet_book if rec_play else none,
+                          (rec.total_side if (rec and rec.total_side) else none) or ((('over' if tdiff > 0 else 'under')) if tdiff is not none else none),
+                          rec.bet_total if (rec and rec.bet_total is not none) else g.market_total,
+                          rec.total_price if rec else none, rec.total_book if rec else none, g.started) }}
+          {%- endif %}
         </td>
         <td class="qbs" data-label="Starting QBs">
           {%- if g.away_qb or g.home_qb -%}
@@ -286,7 +295,9 @@
   </p>
 </div>
 
+{{ bet_dialog() }}
 <script src="/static/predictions-sort.js?v=2026-11-18" defer></script>
+<script src="/static/bet-form.js?v=2026-11-18" defer></script>
 <script>
   // Market columns and picks are shown by default; "Hide" is remembered in this browser (shared with the college page).
   (function () {
