@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
+from cfb import settings as app_settings
 from cfb.auth import (
     SESSION_DAYS,
     authenticate,
@@ -27,6 +28,7 @@ from cfb.model import MODEL_VERSION
 from cfb.nfl_model import MODEL_VERSION as NFL_MODEL_VERSION
 from cfb.picks import make_pick, recorded_pick
 from cfb.qbs import qb_out_suggestion
+from cfb.users import UserError, add_user, all_users, reset_password, set_active, set_admin
 
 WEB_DIR = Path(__file__).parent
 LOCAL_TZ = ZoneInfo(os.environ.get("TZ", "America/Denver"))
@@ -77,7 +79,7 @@ def set_session_cookie(request, response, token):
 def require_admin(request):
     """Stop non-admins from changing data."""
     if not request.state.user["is_admin"]:
-        raise HTTPException(status_code=403, detail="Only admins can change overrides.")
+        raise HTTPException(status_code=403, detail="Only admins can do that.")
 
 
 @app.middleware("http")
@@ -695,6 +697,23 @@ GROUP BY ROLLUP (bet_type)
 ORDER BY bet_type NULLS LAST
 """
 
+# Latest run of each scheduled worker job
+JOB_RUNS_SQL = """
+SELECT DISTINCT ON (job) job, started_at, finished_at, ok, message
+FROM job_runs
+ORDER BY job, started_at DESC
+"""
+
+# When each kind of data last arrived
+FRESHNESS_SQL = """
+SELECT (SELECT max(updated_at)  FROM live_scores)                         AS live_scores,
+       (SELECT max(fetched_at)  FROM odds_snapshots)                      AS odds_snapshot,
+       (SELECT max(recorded_at) FROM pick_log)                            AS picks,
+       (SELECT max(created_at)  FROM predictions WHERE NOT is_backtest)   AS predictions,
+       (SELECT max(fetched_at)  FROM api_responses WHERE source = 'cfbd') AS cfbd_fetch,
+       (SELECT max(fetched_at)  FROM weather_forecasts)                   AS weather
+"""
+
 
 # Backtest results, grouped by {group_by} (filled in from GROUPINGS below, never from user input)
 BACKTEST_SQL = """
@@ -815,6 +834,80 @@ class BetSettingsIn(BaseModel):
     unit_size: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
     share_bets: bool
 
+
+class NewUserIn(BaseModel):
+    """What the add-account form on the admin page sends."""
+    username: str = Field(min_length=2, max_length=40)
+    is_admin: bool = False
+
+
+class UserChangeIn(BaseModel):
+    """One change to an existing account; the actions match the cfb.users commands."""
+    username: str = Field(min_length=1, max_length=40)
+    action: Literal["reset", "disable", "enable", "make-admin", "remove-admin"]
+
+
+def admin_status():
+    """Everything the admin status panel shows (read-only)."""
+    with connect() as conn:
+        conn.row_factory = dict_row
+        jobs = conn.execute(JOB_RUNS_SQL).fetchall()
+        quota = conn.execute(
+            "SELECT source, remaining, used_last, checked_at FROM api_quota ORDER BY source"
+        ).fetchall()
+        freshness = conn.execute(FRESHNESS_SQL).fetchone()
+    return {
+        "jobs": {j["job"]: j for j in jobs},
+        "quota": {q["source"]: q for q in quota},
+        "freshness": freshness,
+        "versions": {"College": MODEL_VERSION, "NFL": NFL_MODEL_VERSION},
+        "settings": app_settings.get_all(),
+    }
+
+
+@app.get("/admin")
+def admin_page(request: Request):
+    """The admin page: accounts for now; status, books, pick rules and schedules as they're built."""
+    require_admin(request)
+    return templates.TemplateResponse(
+        request,
+        "admin.html",
+        {"users": all_users(), "status": admin_status(), "active": "admin"},
+    )
+
+
+@app.post("/api/admin/users")
+def admin_add_user(request: Request, form: NewUserIn):
+    """Create an account.  The temporary password goes back to the admin once, to pass on."""
+    require_admin(request)
+    try:
+        password = add_user(form.username, form.is_admin)
+    except UserError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from None
+    return {"username": form.username.strip(), "password": password}
+
+
+@app.post("/api/admin/users/change")
+def admin_change_user(request: Request, form: UserChangeIn):
+    """Reset a password, disable or enable, or give or take admin rights."""
+    require_admin(request)
+    is_me = form.username.lower() == request.state.user["username"].lower()
+    if is_me and form.action in ("reset", "disable", "remove-admin"):
+        raise HTTPException(status_code=400, detail="Not on your own account (use Change password instead).")
+    try:
+        if form.action == "reset":
+            return {"password": reset_password(form.username)}
+        if form.action == "disable":
+            set_active(form.username, False)
+        elif form.action == "enable":
+            set_active(form.username, True)
+        elif form.action == "make-admin":
+            set_admin(form.username, True)
+        elif form.action == "remove-admin":
+            set_admin(form.username, False)
+    except UserError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from None
+    return {"done": form.action}
 
 
 def backtest_summary(group, include_2020, version=MODEL_VERSION):

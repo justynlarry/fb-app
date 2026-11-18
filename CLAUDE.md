@@ -435,6 +435,21 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   temporary password shown once to the admin on screen is fine). Keep pre-registered rules (tier thresholds,
   bet-time rule, model version) read-only or logged loudly: changing them mid-season changes what `pick_log`
   records, and the 2027 record must be frozen.
+  **Decisions (user, 2026-11-18):** first version has all four parts: user management, a read-only status panel,
+  editable schedules (worker re-reads settings and reschedules), the bettable-books list. Pick rules (PLAY_GAP,
+  TOTAL_GAP, MOVE_MIN) are **editable with a change log** (user's choice over read-only); every change is logged
+  (who, when, old → new, reason) and shown on the Results page. Model version stays code (it names the code that
+  made a prediction, not a setting). Build order: 1 `024_settings.sql` (`settings`, `settings_log`) + `cfb/settings.py`
+  (defaults, get, set with log) → 2 users → 3 status → 4 books → 5 pick rules → 6 schedules.
+  Done 2026-11-18: step 1 (024 applied live; `cfb/settings.py`), step 2a–c (`cfb/users.py` returns/raises `UserError`,
+  last-active-admin rule, `make-admin`/`remove-admin` commands; Claude typed 2c at the user's request, rule unchanged).
+  Step 2d (`/admin`, `/api/admin/users`, `/api/admin/users/change`; not on your own account) and step 3 (025 applied:
+  `job_runs`, `api_quota`; `cfb/status.py` `job_run()` / `record_quota()`; worker jobs and cfbd/odds record into them;
+  `admin_status()` + status panel) done 2026-11-18, worker restarted 11:58 AM.
+  **Found 2026-11-18:** `last_daily_ok` lives in memory, so a worker restart before 7:30 AM makes `daily_retry` re-run
+  the whole update (4 CFBD calls wasted that morning, 626 → 622). **Fixed the same day** (Claude typed it at the
+  user's request, rule unchanged): `status.ran_ok_today(job)` reads `job_runs` (today in `TZ`), `daily_retry` uses it,
+  `last_daily_ok` removed. A skipped (off-season) run counts as OK, so it isn't retried.
 - **UI ideas (user, 2026-11-18; 2–4 done the same day on both predictions pages: sort in
   `static/predictions-sort.js`, `lean_badge` macro, rate label "52% in backtest (W–L)"):**
   1. *Results page updates more often.* `pick_results` is a plain view, but college final scores reach `games` only

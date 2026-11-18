@@ -13,6 +13,7 @@ import httpx
 from psycopg.types.json import Jsonb
 
 from cfb.db import connect
+from cfb.status import record_quota
 
 BASE_URL = "https://api.the-odds-api.com/v4/sports"
 SPORTS = {"cfb": "americanfootball_ncaaf", "nfl": "americanfootball_nfl"}   # their name for each league
@@ -73,6 +74,7 @@ def fetch_odds(league="cfb"):
         raise RuntimeError(f"Odds API error {resp.status_code}: {resp.text[:200]}")
     print(f"Odds API: {resp.headers.get('x-requests-last')} credits used, "
           f"{resp.headers.get('x-requests-remaining')} left this month")
+    record_quota("odds_api", resp.headers.get("x-requests-remaining"), resp.headers.get("x-requests-last"))
     return resp.json()
 
 

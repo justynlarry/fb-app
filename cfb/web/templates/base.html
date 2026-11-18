@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Home{% endblock %} · Sports Predictor</title>
-  <link rel="stylesheet" href="/static/style.css?v=2026-11-18b">
+  <link rel="stylesheet" href="/static/style.css?v=2026-11-18d">
   <script src="/static/htmx.min.js" defer></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -19,6 +19,9 @@
       <a href="/results" class="{{ 'active' if active == 'results' }}">Results</a>
       <a href="/bets" class="{{ 'active' if active == 'bets' }}">My bets</a>
       <a href="/backtest" class="{{ 'active' if active == 'backtest' }}">Backtest</a>
+      {%- if user.is_admin %}
+      <a href="/admin" class="{{ 'active' if active == 'admin' }}">Admin</a>
+      {%- endif %}
     </nav>
     <div class="site-user">
       <a href="/account/password" title="Change password">{{ user.username }}</a>

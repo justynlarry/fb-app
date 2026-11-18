@@ -633,3 +633,23 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .bet-settings .field { max-width: 12rem; }
 .check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
 .shared-list a { margin-right: 0.6rem; }
+
+/* ---------- Admin ---------- */
+.temp-password {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 0.9rem;
+  border-left: 3px solid var(--good);
+  background: var(--bg);
+  border-radius: 4px;
+}
+.temp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.4rem 0; }
+.temp-row code { font-size: 1.05rem; padding: 0.2rem 0.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; user-select: all; }
+.accounts td.actions { white-space: normal; }
+.accounts td.actions .link-button { margin-right: 0.75rem; }
+.accounts tr.disabled-row td { color: var(--muted); }
+.sub-title { font-size: 0.95rem; margin: 1.25rem 0 0.5rem; }
+.card.warn { border-color: var(--against); }
+.card-value.small-value { font-size: 1.05rem; }
+.status-jobs td.job-result { white-space: normal; max-width: 32rem; }
+.status-data { width: auto; }
+.plain-list { margin: 0.25rem 0 0.5rem; padding-left: 1.1rem; line-height: 1.7; }

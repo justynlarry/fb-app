@@ -4,6 +4,7 @@ import httpx
 from psycopg.types.json import Jsonb
 
 from cfb.db import connect
+from cfb.status import record_quota
 
 BASE_URL = "https://api.collegefootballdata.com"
 
@@ -49,4 +50,5 @@ def get(endpoint, params, refresh=False):
             (endpoint, Jsonb(params), resp.status_code, Jsonb(body)),
         )
         print(f"CFBD call used: {endpoint} {params} ({resp.headers.get('x-calllimit-remaining', '?')} left)")
+        record_quota("cfbd", resp.headers.get("x-calllimit-remaining"))
         return body

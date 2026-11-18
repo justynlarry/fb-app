@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block body_class %}wide{% endblock %}
+
+{#- Mon Nov 18, 6:00 AM, plus "(2 h ago)" filled in by the script below; "never" if missing -#}
+{%- macro when(t) -%}
+  {%- if t -%}<span class="when" data-time="{{ t.isoformat() }}">{{ t.strftime('%a %b %-d, %-I:%M %p') }}</span>
+  {%- else -%}<span class="muted">never</span>{%- endif -%}
+{%- endmacro -%}
+
+{% block content %}
+{%- set me = request.state.user %}
+<div class="page-head">
+  <h1>Admin</h1>
+  <p class="muted">Worker status, accounts and settings. Bettable books, pick rules and schedules become editable
+    here as they're built; for now they're shown read-only.</p>
+</div>
+
+{%- set st = status %}
+<section class="panel" aria-labelledby="status-title">
+  <h2 id="status-title">Status</h2>
+
+  <div class="cards">
+    {%- for source, label, limit in [('cfbd', 'CFBD calls left', 1000), ('odds_api', 'Odds API credits left', 500)] %}
+    {%- set q = st.quota.get(source) %}
+    <div class="card {{ 'warn' if q and q.remaining is not none and q.remaining < limit * 0.15 }}">
+      <div class="card-label">{{ label }}</div>
+      {%- if q and q.remaining is not none %}
+      <div class="card-value">{{ '{:,}'.format(q.remaining) }} <span class="muted small">/ {{ '{:,}'.format(limit) }} a month</span></div>
+      <div class="card-sub">as of {{ when(q.checked_at) }}{% if q.used_last %} · last call {{ q.used_last }}{% endif %}</div>
+      {%- else %}
+      <div class="card-value muted">–</div>
+      <div class="card-sub">recorded from the next call on</div>
+      {%- endif %}
+    </div>
+    {%- endfor %}
+    <div class="card">
+      <div class="card-label">Model versions</div>
+      <div class="card-value small-value">{% for league, v in st.versions.items() %}{{ league }} {{ v }}{{ ' · ' if not loop.last }}{% endfor %}</div>
+      <div class="card-sub">set in code (cfb/model.py, cfb/nfl_model.py)</div>
+    </div>
+  </div>
+
+  <h3 class="sub-title">Scheduled jobs <span class="muted small">(times Mountain)</span></h3>
+  <div class="table-wrap">
+    <table class="stats status-jobs">
+      <thead><tr><th>Job</th><th>Schedule</th><th>Last run</th><th>Result</th></tr></thead>
+      <tbody>
+        {%- for job, label, schedule in [
+              ('daily_update', 'College update: CFBD, predictions, weather', '5:00 AM (retries 5:30, 7:30)'),
+              ('nfl_daily_update', 'NFL update: nflverse, predictions', '5:30 AM'),
+              ('odds_snapshot', 'Odds snapshot + picks', '6 AM daily; Sun 4 & 8 PM; Sat 9 AM & noon')] %}
+        {%- set r = st.jobs.get(job) %}
+        <tr>
+          <td class="label">{{ label }}</td>
+          <td class="muted small">{{ schedule }}</td>
+          <td>{{ when(r.started_at if r else none) }}</td>
+          <td class="job-result">
+            {%- if not r -%}<span class="muted">not recorded yet</span>
+            {%- elif r.finished_at is none -%}<span class="outcome push">…</span> running, or stopped by a worker restart
+            {%- elif r.ok -%}<span class="outcome win">OK</span> <span class="muted small">{{ r.message or '' }}</span>
+            {%- else -%}<span class="outcome loss">Failed</span> <span class="small">{{ r.message or '' }}</span>
+            {%- endif -%}
+          </td>
+        </tr>
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Latest data</h3>
+  <div class="table-wrap">
+    <table class="stats status-data">
+      <tbody>
+        {%- for key, label in [('live_scores', 'Live scores (ESPN poller)'), ('odds_snapshot', 'Odds snapshot'),
+                               ('picks', 'Picks recorded'), ('predictions', 'Live predictions'),
+                               ('cfbd_fetch', 'CFBD download'), ('weather', 'Weather forecasts')] %}
+        <tr><td class="label">{{ label }}</td><td>{{ when(st.freshness[key]) }}</td></tr>
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Rules and books <span class="muted small">(read-only for now)</span></h3>
+  <ul class="plain-list small">
+    <li>Play: <strong>{{ '%g'|format(st.settings.play_gap) }}+</strong> points off the market ·
+        totals info at <strong>{{ '%g'|format(st.settings.total_gap) }}+</strong> ·
+        a line "moved" at <strong>{{ '%g'|format(st.settings.move_min) }}+</strong></li>
+    <li>Bettable books: {{ st.settings.bettable_books|join(', ') }}</li>
+  </ul>
+</section>
+
+<section class="panel" aria-labelledby="accounts-title">
+  <h2 id="accounts-title">Accounts</h2>
+
+  {#- A new or reset temporary password appears here once; it isn't stored anywhere it can be read back -#}
+  <div class="temp-password" id="temp-password" role="status" hidden>
+    <div><strong id="temp-for"></strong>'s temporary password:</div>
+    <div class="temp-row">
+      <code id="temp-value"></code>
+      <button type="button" class="toggle" id="temp-copy">Copy</button>
+      <button type="button" class="link-button" id="temp-hide">Hide</button>
+    </div>
+    <p class="muted small">Shown only this once. Send it to them privately (not in a group chat). They'll choose
+      their own password the first time they log in. If it's lost, reset it again.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="stats accounts">
+      <thead>
+        <tr><th>User</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {%- for u in users %}
+        {%- set is_me = u.username|lower == me.username|lower %}
+        <tr class="{{ 'disabled-row' if not u.active }}">
+          <td class="label">{{ u.username }}{% if is_me %} <span class="muted small">(you)</span>{% endif %}</td>
+          <td>{{ 'Admin' if u.is_admin else 'Viewer' }}</td>
+          <td>
+            {{- 'Active' if u.active else 'Disabled' -}}
+            {%- if u.must_change_password %} <span class="late-tag" title="Hasn't chosen their own password yet">temporary password</span>{% endif -%}
+          </td>
+          <td class="muted small">{{ u.last_login_at.strftime('%b %-d, %-I:%M %p') if u.last_login_at else 'never' }}</td>
+          <td class="actions">
+            {%- if is_me %}
+              <a href="/account/password" class="small">Change password</a>
+            {%- else %}
+              <button type="button" class="link-button user-action" data-user="{{ u.username }}" data-action="reset">Reset password</button>
+              {%- if u.active %}
+              <button type="button" class="link-button user-action" data-user="{{ u.username }}" data-action="disable">Disable</button>
+              {%- else %}
+              <button type="button" class="link-button user-action" data-user="{{ u.username }}" data-action="enable">Enable</button>
+              {%- endif %}
+              {%- if u.is_admin %}
+              <button type="button" class="link-button user-action" data-user="{{ u.username }}" data-action="remove-admin">Remove admin</button>
+              {%- else %}
+              <button type="button" class="link-button user-action" data-user="{{ u.username }}" data-action="make-admin">Make admin</button>
+              {%- endif %}
+            {%- endif %}
+          </td>
+        </tr>
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="form-message" id="accounts-message" role="status"></p>
+
+  <h3 class="sub-title">Add an account</h3>
+  <form id="add-user" class="bet-settings" novalidate>
+    <label class="field">
+      <span>Username</span>
+      <input type="text" id="new-username" maxlength="40" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="alex">
+    </label>
+    <label class="check">
+      <input type="checkbox" id="new-admin"> Admin (can change overrides and settings)
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="primary">Add account</button>
+      <span class="form-message" id="add-message" role="status"></span>
+    </div>
+  </form>
+  <p class="muted small">Usernames are 2–40 characters: letters, digits, dot, dash, underscore. There must always be at
+    least one active admin, and you can't disable, reset or remove admin from your own account here.</p>
+</section>
+
+<script>
+// "(2 h ago)" after each time on the status panel
+(function () {
+  var now = Date.now();
+  document.querySelectorAll(".when[data-time]").forEach(function (el) {
+    var minutes = Math.round((now - new Date(el.dataset.time).getTime()) / 60000);
+    if (isNaN(minutes) || minutes < 0) return;
+    var ago = minutes < 60 ? minutes + " min" : minutes < 48 * 60 ? Math.round(minutes / 60) + " h" : Math.round(minutes / 1440) + " days";
+    var span = document.createElement("span");
+    span.className = "muted small";
+    span.textContent = " (" + ago + " ago)";
+    el.appendChild(span);
+  });
+})();
+
+(function () {
+  var box = document.getElementById("temp-password");
+  var accountsMessage = document.getElementById("accounts-message");
+
+  // POST JSON; resolves to { ok, body } so callers can show the server's message
+  function post(url, data) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (body) { return { ok: r.ok, body: body }; });
+    });
+  }
+  function errorText(body, fallback) {
+    var d = body && body.detail;
+    if (typeof d === "string") return d;
+    if (Array.isArray(d) && d[0] && d[0].msg) return d[0].msg;
+    return fallback;
+  }
+  function say(el, text, isError) { el.textContent = text; el.classList.toggle("error", !!isError); }
+
+  function showPassword(username, password) {
+    document.getElementById("temp-for").textContent = username;
+    document.getElementById("temp-value").textContent = password;
+    box.hidden = false;
+    box.scrollIntoView({ block: "nearest" });
+  }
+  document.getElementById("temp-copy").addEventListener("click", function () {
+    var btn = this;
+    navigator.clipboard.writeText(document.getElementById("temp-value").textContent)
+      .then(function () { btn.textContent = "Copied"; })
+      .catch(function () { btn.textContent = "Select and copy it"; });
+  });
+  document.getElementById("temp-hide").addEventListener("click", function () {
+    box.hidden = true;
+    document.getElementById("temp-value").textContent = "";
+    window.location.reload();
+  });
+
+  // Account actions: first click asks to confirm, second click does it
+  var labels = { "reset": "Reset password", "disable": "Disable", "enable": "Enable",
+                 "make-admin": "Make admin", "remove-admin": "Remove admin" };
+  document.querySelectorAll("button.user-action").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.dataset.confirm !== "1") {
+        btn.dataset.confirm = "1";
+        btn.textContent = "Confirm " + labels[btn.dataset.action].toLowerCase() + "?";
+        btn.classList.add("danger");
+        setTimeout(function () {
+          btn.dataset.confirm = ""; btn.textContent = labels[btn.dataset.action]; btn.classList.remove("danger");
+        }, 4000);
+        return;
+      }
+      btn.disabled = true;
+      say(accountsMessage, "Saving…");
+      post("/api/admin/users/change", { username: btn.dataset.user, action: btn.dataset.action })
+        .then(function (res) {
+          btn.disabled = false;
+          if (!res.ok) return say(accountsMessage, errorText(res.body, "That didn't work."), true);
+          if (res.body.password) {
+            say(accountsMessage, "");
+            showPassword(btn.dataset.user, res.body.password);   // page reloads when it's hidden
+          } else {
+            window.location.reload();
+          }
+        })
+        .catch(function () { btn.disabled = false; say(accountsMessage, "Couldn't reach the server.", true); });
+    });
+  });
+
+  // Add an account
+  var form = document.getElementById("add-user");
+  var addMessage = document.getElementById("add-message");
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var name = document.getElementById("new-username").value.trim();
+    if (!/^[A-Za-z0-9._-]{2,40}$/.test(name)) {
+      return say(addMessage, "Usernames are 2–40 characters: letters, digits, dot, dash, underscore.", true);
+    }
+    say(addMessage, "Saving…");
+    post("/api/admin/users", { username: name, is_admin: document.getElementById("new-admin").checked })
+      .then(function (res) {
+        if (!res.ok) return say(addMessage, errorText(res.body, "Couldn't add that account."), true);
+        say(addMessage, "Added " + res.body.username + ".");
+        form.reset();
+        showPassword(res.body.username, res.body.password);
+      })
+      .catch(function () { say(addMessage, "Couldn't reach the server.", true); });
+  });
+})();
+</script>
+{% endblock %}
