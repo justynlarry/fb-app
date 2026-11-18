@@ -50,6 +50,7 @@
 {% block content %}
 {%- set nav = week_nav if week_nav is defined else none %}
 {%- set rates = pick_rates if pick_rates is defined else {} %}
+{%- set rules = rules if rules is defined else {'play_gap': 3.0, 'total_gap': 3.0, 'move_min': 0.5} %}
 <div class="page-head page-head-row">
   <div>
     <h1>Our NFL Lines{% if nav and nav.shown[1] is not none %} <span class="week-title">· {{ week_label(nav.shown) }}, {{ nav.shown[0] }}</span>{% endif %}</h1>
@@ -128,7 +129,7 @@
       {#- ---- Tier: same 3-point rule as college. No Caution: that needs an opening line, and we have none for the NFL. #}
       {%- set diff = (g.spread|float - g.market_spread|float) if (has_ours and has_market) else none %}
       {%- set gap = diff|abs if diff is not none else none %}
-      {%- set tier = none if gap is none else ('play' if gap >= 3 else 'pass') %}
+      {%- set tier = none if gap is none else ('play' if gap >= rules.play_gap else 'pass') %}
       {%- set side = none if (diff is none or diff == 0) else ('home' if diff < 0 else 'away') %}
       {%- set pick_team = g.home if side == 'home' else g.away %}
       {%- set tdiff = (g.total|float - g.market_total|float) if (has_ours and g.market_total is not none) else none %}
@@ -198,7 +199,7 @@
           {%- set rec_team = g.home if rec_home else g.away %}
           {%- if rec.tier == 'play' and rec.bet_spread is not none -%}
             <div class="pick-main">
-              <span class="tier tier-play" title="3+ points off the market line. Paper pick, not proven for the NFL.">Play</span>
+              <span class="tier tier-play" title="{{ '%g'|format(rules.play_gap) }}+ points off the market line. Paper pick, not proven for the NFL.">Play</span>
               <strong>{{ rec_team }} {{ side_number(rec.bet_spread, rec_home) }}</strong>
               <span class="price">{{ price_text(rec.bet_price) }}</span>
               <span class="book">{{ book_name(rec.bet_book) }}</span>
@@ -223,7 +224,7 @@
           {%- else %}
           {%- if tier == 'play' -%}
             <div class="pick-main">
-              <span class="tier tier-play" title="3+ points off the market line. Not proven for the NFL.">Play</span>
+              <span class="tier tier-play" title="{{ '%g'|format(rules.play_gap) }}+ points off the market line. Not proven for the NFL.">Play</span>
               <strong>{{ pick_team }} {{ side_number(g.market_spread, side == 'home') }}</strong>
               {%- if is_final %} {{ result_badge(g, side, g.market_spread, 'spread') }}
               {%- elif not g.started %} {{ rate_text(rates.get('play')) }}{% endif %}
@@ -250,7 +251,7 @@
 
           {%- if tdiff is not none %}
             {%- set total_side = 'over' if tdiff > 0 else 'under' %}
-            {%- if tdiff|abs >= 3 %}
+            {%- if tdiff|abs >= rules.total_gap %}
             <div class="pick-total">
               <span class="tier tier-info">Info</span>
               {{ total_side|capitalize }} {{ '%g'|format(g.market_total|float) }} · {{ '%.1f'|format(tdiff|abs) }} off
@@ -275,10 +276,10 @@
 
 <div class="legend market show-market">
   <p class="muted small">
-    <span class="tier tier-play">Play</span> our line is 3+ points off the market line (rows in blue, darker at 5+).
+    <span class="tier tier-play">Play</span> our line is {{ '%g'|format(rules.play_gap) }}+ points off the market line (rows in blue, darker at 5+).
     <span class="news-flag">Check news</span> 5+ apart: usually a QB or injury change the model doesn't have.
-    <span class="tier tier-pass">Pass</span> under 3 points.
-    <span class="tier tier-info">Info</span> totals 3+ apart, for display only.
+    <span class="tier tier-pass">Pass</span> under {{ '%g'|format(rules.play_gap) }} points.
+    <span class="tier tier-info">Info</span> totals {{ '%g'|format(rules.total_gap) }}+ apart, for display only.
     There's no <span class="tier tier-caution">Caution</span> tier for the NFL: it needs the line's movement since it
     opened, and we have no NFL opening lines yet.
   </p>

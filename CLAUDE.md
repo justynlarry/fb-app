@@ -454,6 +454,21 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   (`bet_dialog(bettable_books)`). **Open for step 5:** picks' "best number/price" (`market_now` best_*, `pick_log`)
   comes from EVERY book in the feed (Bovada included), not only the bettable ones, contrary to the "Bettable open"
   rule above. Restricting it changes what `pick_log` records: decide as a logged pick-rule change.
+  **Decided (user, 2026-11-18): keep all books.** Picks stay priced at the best number/price anywhere in the feed
+  (on 805 picks to Nov 18, 56% came from non-bettable books: LowVig 237, BetRivers 122, Bovada 58, BetUS 30, BetOnline 5),
+  so Results units/ROI are the best-anywhere record, optimistic for real betting. The Nov 17 "bettable books only"
+  rule does NOT apply to pick prices; the bettable list drives the bet form only. Real ROI = the bets log.
+  Step 5 decisions: thresholds editable with a reason; backtest rates (`PICK_RATES_SQL`, `NFL_PICK_RATES_SQL`) are
+  recomputed with the current thresholds. Step 5a done 2026-11-18 (user typed the start; Claude finished it at the
+  user's request, rule unchanged): `make_pick(g, rules)`, constants removed, callers read `app_settings.get_all()`
+  once; old vs new make_pick identical on all 95 upcoming picks at the defaults.
+  Step 5b done 2026-11-18 (Claude typed it at the user's request, rule unchanged): `PICK_RATES_SQL` /
+  `NFL_PICK_RATES_SQL` take `%(play_gap)s` `%(move_min)s` `%(total_gap)s` (identical rates at the defaults);
+  `POST /api/admin/settings/rules` (`RulesIn`, reason ≥ 5 chars, logs only changed keys, rounds to 0.1); editor on
+  `/admin`; predictions legends and the NFL page's own tier check follow `rules`. The 5+ "Check news"/dark-row cut
+  is display only, not a setting. Step 5c done the same day (Claude-typed at the user's request): `RULE_CHANGES_SQL`
+  (settings_log for `RULE_KEYS`, newest first) → "Pick rules" section on Results (rules now + every change: when,
+  from → to, reason, by). Step 5 complete; step 6 (schedules) left.
 - **UI ideas (user, 2026-11-18; 2–4 done the same day on both predictions pages: sort in
   `static/predictions-sort.js`, `lean_badge` macro, rate label "52% in backtest (W–L)"):**
   1. *Results page updates more often.* `pick_results` is a plain view, but college final scores reach `games` only

@@ -664,3 +664,20 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
   width: 100%;
   resize: vertical;
 }
+.rules-warning {
+  margin: 0.25rem 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid var(--caution);
+  background: var(--bg);
+  border-radius: 4px;
+  line-height: 1.5;
+}
+.rules-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.9rem 1.25rem;
+  align-items: end;
+  max-width: 44rem;
+}
+.rules-form .rules-reason { grid-column: 1 / -1; }
+.rule-changes td.reason { white-space: normal; min-width: 14rem; }

@@ -12,8 +12,7 @@
 {%- set me = request.state.user %}
 <div class="page-head">
   <h1>Admin</h1>
-  <p class="muted">Worker status, settings and accounts. Pick rules and schedules become editable here as they're
-    built; for now they're shown read-only.</p>
+  <p class="muted">Worker status, settings and accounts. Schedules become editable here once they're built.</p>
 </div>
 
 {%- set st = status %}
@@ -81,12 +80,39 @@
     </table>
   </div>
 
-  <h3 class="sub-title">Pick rules <span class="muted small">(read-only for now)</span></h3>
-  <ul class="plain-list small">
-    <li>Play: <strong>{{ '%g'|format(st.settings.play_gap) }}+</strong> points off the market ·
-        totals info at <strong>{{ '%g'|format(st.settings.total_gap) }}+</strong> ·
-        a line "moved" at <strong>{{ '%g'|format(st.settings.move_min) }}+</strong></li>
-  </ul>
+</section>
+
+<section class="panel" aria-labelledby="rules-title">
+  <h2 id="rules-title">Pick rules</h2>
+  <div class="rules-warning small">
+    <strong>These decide which picks are recorded.</strong> A change applies from the next odds snapshot on: picks
+    already in the log keep the tier they had. Every change is logged with your reason and listed with its date, so
+    the record shows which rule each pick was made under. The backtest rates on the Predictions page are recomputed
+    for the new numbers right away. For the 2027 test, leave these alone once the season starts.
+  </div>
+  <form id="rules-form" class="rules-form" novalidate>
+    <label class="field">
+      <span>Play: points off the market</span>
+      <input type="number" id="play-gap" step="0.5" min="0.5" max="20" value="{{ '%g'|format(st.settings.play_gap) }}">
+    </label>
+    <label class="field">
+      <span>Totals (info): points off</span>
+      <input type="number" id="total-gap" step="0.5" min="0.5" max="20" value="{{ '%g'|format(st.settings.total_gap) }}">
+    </label>
+    <label class="field">
+      <span>Line "moved" (Caution) at</span>
+      <input type="number" id="move-min" step="0.5" min="0" max="10" value="{{ '%g'|format(st.settings.move_min) }}">
+    </label>
+    <label class="field rules-reason">
+      <span>Reason <small class="muted">(required; shown in the change log)</small></span>
+      <input type="text" id="rules-reason" maxlength="300" autocomplete="off" placeholder="e.g. Test 8 passed: 3.5 is the better cut">
+    </label>
+    <div class="form-actions rules-reason">
+      <button type="submit" class="primary">Save rules</button>
+      <span class="form-message" id="rules-message" role="status"></span>
+    </div>
+  </form>
+  <p class="muted small">Defaults: Play 3, totals 3, moved 0.5 (the rules every backtest so far was judged under).</p>
 </section>
 
 <section class="panel" aria-labelledby="books-title">
@@ -191,6 +217,43 @@
     span.className = "muted small";
     span.textContent = " (" + ago + " ago)";
     el.appendChild(span);
+  });
+})();
+
+// Pick rules: a reason is required; the server logs each value that changed
+(function () {
+  var form = document.getElementById("rules-form");
+  var message = document.getElementById("rules-message");
+  function fail(text) { message.textContent = text; message.classList.add("error"); }
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var data = {
+      play_gap: parseFloat(document.getElementById("play-gap").value),
+      total_gap: parseFloat(document.getElementById("total-gap").value),
+      move_min: parseFloat(document.getElementById("move-min").value),
+      reason: document.getElementById("rules-reason").value.trim()
+    };
+    if (isNaN(data.play_gap) || data.play_gap < 0.5) return fail("Play must be at least 0.5.");
+    if (isNaN(data.total_gap) || data.total_gap < 0.5) return fail("Totals must be at least 0.5.");
+    if (isNaN(data.move_min) || data.move_min < 0) return fail("Moved must be 0 or more.");
+    if (data.reason.length < 5) return fail("Please give a reason: it goes in the change log.");
+    message.textContent = "Saving…";
+    message.classList.remove("error");
+    fetch("/api/admin/settings/rules", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (body) { return { ok: r.ok, body: body }; });
+    }).then(function (res) {
+      if (!res.ok) {
+        var d = res.body && res.body.detail;
+        return fail(typeof d === "string" ? d : (Array.isArray(d) && d[0] ? d[0].msg : "Couldn't save the rules."));
+      }
+      if (!res.body.changed.length) { message.textContent = "Nothing changed."; return; }
+      document.getElementById("rules-reason").value = "";
+      message.textContent = "Saved (" + res.body.changed.join(", ") + "). Picks use it from the next snapshot.";
+    }).catch(function () { fail("Couldn't reach the server."); });
   });
 })();
 

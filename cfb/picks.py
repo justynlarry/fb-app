@@ -8,13 +8,14 @@ from datetime import datetime, timezone
 
 from psycopg.rows import dict_row
 
+from cfb import settings as app_settings
 from cfb.db import connect
 from cfb.model import MODEL_VERSION
 from cfb.nfl_model import MODEL_VERSION as NFL_MODEL_VERSION
 
-PLAY_GAP = 3.0          # points off the market before a side is worth a bet
-TOTAL_GAP = 3.0         # same for totals (shown as info only)
-MOVE_MIN = 0.5      # a line "moved" if it changed by at least this much since the open
+# The pick thresholds (play_gap, total_gap, move_min) are settings in cfb/settings.py, editable on
+# the admin page; every change is logged with a reason.  Callers read them once and pass them in.
+
 # Which model's predictions to pick from, per league
 VERSIONS = {"cfb": MODEL_VERSION, "nfl": NFL_MODEL_VERSION}
 
@@ -58,13 +59,14 @@ WHERE g.league = %(league)s
 """
 
 
-def make_pick(g):
+def make_pick(g, rules):
     """Tier, side and best number for one game.
     
     g needs: spread, total (ours), market_spread, market_total, open_spread, and the 
     best_home_/best_away_/best_over_/best_under_ book, spread or total, and price.
 
-    play:    we differ from the current line by 3+ and the market isn't moving against us
+    rules:      the pick-rule settings, {"play_gap": 3.0, "total_gap": 3.0, "move_min": 0.5} (app_settings.get_all())
+    play:       we differ from the current line by 3+ and the market isn't moving against us
     caution:    3+ apart, but the line has moved the other way since it opened
     pass:       under 3 points apart
     PICK_RATES_SQL (cfb/web/main.py) gives the backtest rates: play/pass graded at the Bovada open,
@@ -91,9 +93,9 @@ def make_pick(g):
             toward = (move < 0 and ours < opened) or (move > 0 and ours > opened)
             pick["moved"] = abs(move)
             pick["toward"] = toward
-            against = abs(move) >= MOVE_MIN and not toward
+            against = abs(move) >= rules["move_min"] and not toward
         
-        if abs(diff) < PLAY_GAP:
+        if abs(diff) < rules["play_gap"]:
             pick["tier"] = "pass"
         elif against:
             pick["tier"] = "caution"
@@ -109,7 +111,7 @@ def make_pick(g):
     if g.get("market_total") is not None:
         tdiff = float(g["total"]) - float(g["market_total"])
         pick["total_gap"] = abs(tdiff)
-        if abs(tdiff) >= TOTAL_GAP:
+        if abs(tdiff) >= rules["total_gap"]:
             pick["total_side"] = "over" if tdiff > 0 else "under"
             prefix = "best_" + pick["total_side"] + "_"
             pick["bet_total"] = g.get(prefix + "total")
@@ -149,8 +151,9 @@ def record_picks(league="cfb"):
     with connect() as conn:
         conn.row_factory = dict_row
         games = conn.execute(UPCOMING_SQL, {"version": version, "league": league}).fetchall()
+        rules = app_settings.get_all()
         for g in games:
-            pick = make_pick(g)
+            pick = make_pick(g, rules)
             if pick["tier"] is None:
                 continue        # no market line yet
             conn.execute(

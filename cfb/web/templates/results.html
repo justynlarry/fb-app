@@ -152,6 +152,37 @@
   At the open there's no line movement yet, so every 3+ gap is a Play (no Caution row) and the rest are Pass.</p>
 {%- endif %}
 
+{#- Pick rules now in force, and every change to them (settings_log), so each pick can be matched to its rule -#}
+{%- set rules = rules if rules is defined else {'play_gap': 3.0, 'total_gap': 3.0, 'move_min': 0.5} %}
+{%- set rule_names = {'play_gap': 'Play: points off the market', 'total_gap': 'Totals (info): points off',
+                      'move_min': 'Line "moved" (Caution) at'} %}
+<h2 class="section-title">Pick rules</h2>
+<p class="muted small">Now: Play at <strong>{{ '%g'|format(rules.play_gap) }}+</strong> points off the market
+  {%- if not is_nfl %}, Caution when the line has moved <strong>{{ '%g'|format(rules.move_min) }}+</strong> against us{% endif %},
+  totals shown at <strong>{{ '%g'|format(rules.total_gap) }}+</strong>.
+  Each pick keeps the tier it had when it was saved, so a pick saved before a change below was made under the earlier rule.</p>
+{%- if rule_changes %}
+<div class="table-wrap">
+  <table class="stats rule-changes">
+    <thead><tr><th>When</th><th>Rule</th><th class="num">From → to</th><th>Reason</th><th>By</th></tr></thead>
+    <tbody>
+      {%- for c in rule_changes %}
+      <tr>
+        <td class="small">{{ c.changed_at.strftime('%b %-d, %Y %-I:%M %p') }}</td>
+        <td>{{ rule_names.get(c.key, c.key) }}</td>
+        <td class="num">{{ 'default' if c.old_value is none else '%g'|format(c.old_value) }} → <strong>{{ '%g'|format(c.new_value) }}</strong></td>
+        <td class="reason">{{ c.reason or '' }}</td>
+        <td class="muted small">{{ c.username or '?' }}</td>
+      </tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+{%- else %}
+<p class="muted small">No changes yet: every pick here was made under these rules, the defaults every backtest so far
+  was judged under.</p>
+{%- endif %}
+
 <h2 class="section-title">Line shopping: best book vs. the median</h2>
 {%- set shop = {} %}
 {%- for s in shopping or [] %}{% set _ = shop.update({s.kind: s}) %}{% endfor %}

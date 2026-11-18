@@ -35,6 +35,7 @@
 
 {% block content %}
 {%- set rates = pick_rates if pick_rates is defined else {} %}
+{%- set rules = rules if rules is defined else {'play_gap': 3.0, 'total_gap': 3.0, 'move_min': 0.5} %}
 {%- set nav = week_nav if week_nav is defined else none %}
 <div class="page-head page-head-row">
   <div>
@@ -274,7 +275,7 @@
               {%- endif %}
             </div>
             <div class="muted small">
-              {%- if not started and has_open and odiff|abs >= 3 -%}
+              {%- if not started and has_open and odiff|abs >= rules.play_gap -%}
                 edge gone: was {{ '%.1f'|format(odiff|abs) }} at open, {{ '%.1f'|format(pk.gap|float) }} now
               {%- elif pk.gap is not none and pk.gap|float >= 0.5 -%}
                 lean {{ pick_team }}, only {{ '%.1f'|format(pk.gap|float) }} off
@@ -320,14 +321,14 @@
 
 <div class="legend market show-market">
   <p class="muted small">
-    <span class="tier tier-play">Play</span> we differ from the current line by 3+ and the market isn't moving against us
+    <span class="tier tier-play">Play</span> we differ from the current line by {{ '%g'|format(rules.play_gap) }}+ and the market isn't moving against us
     (rows in blue, darker at 5+).
-    <span class="tier tier-caution">Caution</span> 3+ apart but the line has moved the other way since it opened: the market
+    <span class="tier tier-caution">Caution</span> {{ '%g'|format(rules.play_gap) }}+ apart but the line has moved the other way since it opened: the market
     may know something (injury, QB) the model doesn't.
     <span class="news-flag">Check news</span> 5+ apart: our biggest gaps have done worst (41% at the close in 2026),
     usually because of an injury or QB change the model can't see. Check before betting and enter an override if needed.
-    <span class="tier tier-pass">Pass</span> under 3 points, including when the market has already moved to our number.
-    <span class="tier tier-info">Info</span> totals 3+ apart; for display only, our totals haven't beaten the market.
+    <span class="tier tier-pass">Pass</span> under {{ '%g'|format(rules.play_gap) }} points, including when the market has already moved to our number.
+    <span class="tier tier-info">Info</span> totals {{ '%g'|format(rules.total_gap) }}+ apart; for display only, our totals haven't beaten the market.
     Under 3 apart, a grey "O/U lean" line shows which way our total leans (not recorded or graded).
   </p>
   <p class="muted small">

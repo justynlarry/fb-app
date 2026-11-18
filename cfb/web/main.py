@@ -316,13 +316,14 @@ ORDER BY g.start_time, a.school
 """
 
 
-# How each kind of pick did in the backtest (2021+, the seasons with a Bovada opening line).
-# Play and Pass are graded at the Bovada OPEN, because that's when we bet: 3+ apart = play, else pass.
-# Caution needs a line that has already moved, so it can only be graded later: 3+ apart at the CLOSE
-# after Bovada's line moved 0.5+ away from us (the same test as cfb/picks.py make_pick()).
+# How each kind of pick did in the backtest (2021+, the seasons with a Bovada opening line), using the
+# CURRENT pick-rule settings (play_gap, move_min, total_gap; admin page), so the rates describe the rule in force.
+# Play and Pass are graded at the Bovada OPEN, because that's when we bet: play_gap+ apart = play, else pass.
+# Caution needs a line that has already moved, so it can only be graded later: play_gap+ apart at the CLOSE
+# after Bovada's line moved move_min+ away from us (the same test as cfb/picks.py make_pick()).
 # Totals are graded at the close. graded_at tells the page which line each rate used.
 PICK_RATES_SQL = """
-SELECT CASE WHEN abs(open_diff) >= 3 THEN 'play' ELSE 'pass' END AS tier,
+SELECT CASE WHEN abs(open_diff) >= %(play_gap)s THEN 'play' ELSE 'pass' END AS tier,
        'open' AS graded_at,
        count(open_win) AS games,
        avg(open_win::int) AS win_rate
@@ -344,8 +345,8 @@ WHERE model_version = %(version)s
   AND is_backtest
   AND season >= 2021
   AND open_spread IS NOT NULL
-  AND abs(spread_diff) >= 3
-  AND abs(open_book_close - open_spread) >= 0.5
+  AND abs(spread_diff) >= %(play_gap)s
+  AND abs(open_book_close - open_spread) >= %(move_min)s
   AND sign(open_book_close - open_spread) <> sign(model_spread - open_spread)
 
 UNION ALL
@@ -358,7 +359,7 @@ FROM backtest_games
 WHERE model_version = %(version)s
   AND is_backtest
   AND season <> 2020
-  AND abs(total_diff) >= 3
+  AND abs(total_diff) >= %(total_gap)s
 GROUP BY 1
 """
 
@@ -467,9 +468,9 @@ ORDER BY g.start_time, a.school
 """
 
 # How each NFL tier did in the NFL backtest (2021-25), graded at the CLOSING line: there are no NFL
-# opening lines yet, so this is the only grade we have. Same 3-point rule as the college page.
+# opening lines yet, so this is the only grade we have. Same play_gap / total_gap settings as the college page.
 NFL_PICK_RATES_SQL = """
-SELECT CASE WHEN abs(model_spread - close_spread) >= 3 THEN 'play' ELSE 'pass' END AS tier,
+SELECT CASE WHEN abs(model_spread - close_spread) >= %(play_gap)s THEN 'play' ELSE 'pass' END AS tier,
        count(spread_win) AS games,
        avg(spread_win::int) AS win_rate
 FROM backtest_games
@@ -487,7 +488,7 @@ FROM backtest_games
 WHERE model_version = %(version)s
   AND is_backtest
   AND season >= 2021
-  AND abs(total_diff) >= 3
+  AND abs(total_diff) >= %(total_gap)s
 GROUP BY 1
 """
 
@@ -697,6 +698,15 @@ GROUP BY ROLLUP (bet_type)
 ORDER BY bet_type NULLS LAST
 """
 
+# Every pick-rule change (settings_log), newest first, for the Results page.  %(keys)s = settings.RULE_KEYS.
+RULE_CHANGES_SQL = """
+SELECT l.changed_at, l.key, l.old_value, l.new_value, l.reason, u.username
+FROM settings_log l
+LEFT JOIN users u ON u.id = l.changed_by
+WHERE l.key = ANY(%(keys)s)
+ORDER BY l.changed_at DESC, l.id DESC
+"""
+
 # Latest run of each scheduled worker job
 JOB_RUNS_SQL = """
 SELECT DISTINCT ON (job) job, started_at, finished_at, ok, message
@@ -847,6 +857,14 @@ class UserChangeIn(BaseModel):
     action: Literal["reset", "disable", "enable", "make-admin", "remove-admin"]
 
 
+class RulesIn(BaseModel):
+    """The pick-rule thresholds from the admin page.  A reason is required for any change."""
+    play_gap: float = Field(ge=0.5, le=20)
+    total_gap: float = Field(ge=0.5, le=20)
+    move_min: float = Field(ge=0, le=10)
+    reason: str = Field(max_length=300)
+
+
 class BooksIn(BaseModel):
     """The bettable-books list from the admin page."""
     books: list[str] = Field(min_length=1, max_length=20)
@@ -928,6 +946,21 @@ def admin_save_books(request: Request, form: BooksIn):
             books.append(name)
     app_settings.set_value("bettable_books", books, request.state.user["id"])
     return {"books": books}
+
+
+@app.post("/api/admin/settings/rules")
+def admin_save_rules(request: Request, form: RulesIn):
+    """Change the pick-rule thresholds.  Each value that changed is logged with the reason; the rest aren't."""
+    require_admin(request)
+    reason = form.reason.strip()
+    if len(reason) < 5:
+        raise HTTPException(status_code=400, detail="Please give a reason: it goes in the change log on the Results page.")
+    changed = []
+    for key in ("play_gap", "total_gap", "move_min"):
+        value = round(getattr(form, key), 1)
+        if app_settings.set_value(key, value, request.state.user["id"], reason):
+            changed.append(key)
+    return {"changed": changed}
 
 
 def backtest_summary(group, include_2020, version=MODEL_VERSION):
@@ -1105,10 +1138,11 @@ def predictions_page(request: Request, season: int | None = None, week: int | No
     if pick_league(league) == "nfl":
         return nfl_predictions_page(request, season, week, season_type)
     params = {"version": MODEL_VERSION, "season": season, "week": week, "season_type": season_type}
+    rules = app_settings.get_all()
     with connect() as conn:
         conn.row_factory = dict_row
         games = conn.execute(PREDICTIONS_SQL, params).fetchall()
-        rates = conn.execute(PICK_RATES_SQL, {"version": MODEL_VERSION}).fetchall()
+        rates = conn.execute(PICK_RATES_SQL, {"version": MODEL_VERSION, **rules}).fetchall()
         weeks = conn.execute(PREDICTION_WEEKS_SQL, {"league": "cfb"}).fetchall()
         current = conn.execute(f"WITH {CURRENT_WEEK_CTE} SELECT season, week, season_type FROM current_week",
                                {"league": "cfb"}).fetchone()
@@ -1119,24 +1153,25 @@ def predictions_page(request: Request, season: int | None = None, week: int | No
         if g["started"] and g["rec_tier"] is not None:
             g["pick"] = recorded_pick(g)    # what we actually picked before kickoff
         else:
-            g["pick"] = make_pick(g)        # same rule the worker uses to record picks
+            g["pick"] = make_pick(g, rules)        # same rule the worker uses to record picks
     return templates.TemplateResponse(
         request,
         "predictions.html",
         {"games": games, "pick_rates": pick_rates, "version": MODEL_VERSION, "active": "predictions",
-         "week_nav": week_nav, "league": "cfb", "bettable_books": app_settings.get("bettable_books")},
+         "week_nav": week_nav, "league": "cfb", "bettable_books": rules["bettable_books"], "rules": rules},
     )
 
 
 def nfl_predictions_page(request, season, week, season_type):
     """NFL tab of the predictions page: our line and total beside the nflverse line, paper picks only."""
     params = {"version": NFL_MODEL_VERSION, "season": season, "week": week, "season_type": season_type}
+    rules = app_settings.get_all()
     with connect() as conn:
         conn.row_factory = dict_row
         games = conn.execute(NFL_PREDICTIONS_SQL, params).fetchall()
         weeks = conn.execute(PREDICTION_WEEKS_SQL, {"league": "nfl"}).fetchall()
         current = conn.execute(NFL_CURRENT_WEEK_SQL).fetchone()
-        rates = conn.execute(NFL_PICK_RATES_SQL, {"version": NFL_MODEL_VERSION}).fetchall()
+        rates = conn.execute(NFL_PICK_RATES_SQL, {"version": NFL_MODEL_VERSION, **rules}).fetchall()
     for g in games:
         g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
         # Started games with a saved pick show that pick and its official result; the others work it
@@ -1146,7 +1181,7 @@ def nfl_predictions_page(request, season, week, season_type):
         request,
         "nfl_predictions.html",
         {"games": games, "version": NFL_MODEL_VERSION, "active": "predictions", "league": "nfl",
-         "bettable_books": app_settings.get("bettable_books"),
+         "bettable_books": rules["bettable_books"], "rules": rules,
          "pick_rates": {r["tier"]: r for r in rates},
          "week_nav": make_week_nav(games, weeks, current, season, week, season_type)},
     )
@@ -1184,13 +1219,15 @@ def results_page(request: Request, league: str = "cfb"):
             summary += conn.execute(OPEN_RESULTS_SQL, {"version": version}).fetchall()
         recent = conn.execute(RECENT_PICKS_SQL, {"version": version}).fetchall()
         shopping = conn.execute(SHOPPING_SQL, {"version": version}).fetchall()
+        rule_changes = conn.execute(RULE_CHANGES_SQL, {"keys": sorted(app_settings.RULE_KEYS)}).fetchall()
     for r in recent:
         r["local_start"] = r["start_time"].astimezone(LOCAL_TZ)
     return templates.TemplateResponse(
         request,
         "results.html",
         {"summary": summary, "recent": recent, "shopping": shopping, "version": version,
-         "active": "results", "league": league},
+         "active": "results", "league": league,
+         "rules": app_settings.get_all(), "rule_changes": rule_changes},
     )
 
 
