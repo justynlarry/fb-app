@@ -428,6 +428,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `main.py` `BetIn`/`add_bet`/`remove_bet`/`bets_page` (`/bets?user=`)/`save_bet_settings` (user-typed), `bets.html`,
   `bet_button`/`bet_dialog` macros + `static/bet-form.js` on both predictions pages (no button on final games; book
   prefilled only if bettable). Not yet tested in a real browser at the time of writing.
+  **Results page "Bets placed" (2026-11-18; Claude typed the Python at the user's request, rule unchanged):**
+  `RESULTS_BETTORS_SQL` (record per user) + `RESULTS_BETS_SQL` (last 21 days), per league tab; shows the viewer's own
+  bets and those of users with `share_bets` (user's choice: opt-in kept); notes never shown. `money`/`bet_text` macros
+  moved to `_macros.html`.
 - **Admin settings page (user idea, 2026-11-18):** admin-only page (`require_admin` + Origin check) to change
   settings without editing code. Likely a `settings` table (key, value, updated_by, updated_at) read by the app and
   the worker at each run, plus a change log. Candidates: odds snapshot times, poll interval, leagues on/off, the

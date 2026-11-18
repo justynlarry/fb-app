@@ -699,6 +699,40 @@ GROUP BY ROLLUP (bet_type)
 ORDER BY bet_type NULLS LAST
 """
 
+# Bets on the Results page, for one league: the viewer's own and those of users who share their record
+RESULTS_BETTORS_SQL = """
+SELECT u.username,
+       u.id = %(me)s AS is_me,
+       count(*) FILTER (WHERE r.outcome = 'win')  AS wins,
+       count(*) FILTER (WHERE r.outcome = 'loss') AS losses,
+       count(*) FILTER (WHERE r.outcome = 'push') AS pushes,
+       count(*) FILTER (WHERE r.outcome IS NULL)  AS pending,
+       coalesce(sum(r.stake) FILTER (WHERE r.outcome IS NOT NULL), 0) AS risked,
+       coalesce(sum(r.profit), 0) AS profit
+FROM bet_results r
+JOIN users u ON u.id = r.user_id
+WHERE r.league = %(league)s
+  AND (u.id = %(me)s OR (u.share_bets AND u.active))
+GROUP BY u.id, u.username
+ORDER BY u.id <> %(me)s, lower(u.username)
+"""
+
+# The same users' bets on games from the last 3 weeks (and upcoming ones), newest game first
+RESULTS_BETS_SQL = """
+SELECT u.username, r.bet_type, r.side, r.line, r.price, r.book, r.stake,
+       r.outcome, r.profit, r.logged_after_kickoff, r.league, r.start_time,
+       r.home_points, r.away_points, h.school AS home, a.school AS away
+FROM bet_results r
+JOIN users u ON u.id = r.user_id
+JOIN games g ON g.id = r.game_id
+JOIN teams h ON h.id = g.home_id
+JOIN teams a ON a.id = g.away_id
+WHERE r.league = %(league)s
+  AND (u.id = %(me)s OR (u.share_bets AND u.active))
+  AND r.start_time > now() - interval '21 days'
+ORDER BY r.start_time DESC, lower(u.username)
+"""
+
 # Every pick-rule change (settings_log), newest first, for the Results page.  %(keys)s = settings.RULE_KEYS.
 RULE_CHANGES_SQL = """
 SELECT l.changed_at, l.key, l.old_value, l.new_value, l.reason, u.username
@@ -1264,14 +1298,20 @@ def results_page(request: Request, league: str = "cfb"):
         recent = conn.execute(RECENT_PICKS_SQL, {"version": version}).fetchall()
         shopping = conn.execute(SHOPPING_SQL, {"version": version}).fetchall()
         rule_changes = conn.execute(RULE_CHANGES_SQL, {"keys": sorted(app_settings.RULE_KEYS)}).fetchall()
+        params = {"league": league, "me": request.state.user["id"]}
+        bettors = conn.execute(RESULTS_BETTORS_SQL, params).fetchall()
+        bets = conn.execute(RESULTS_BETS_SQL, params).fetchall()
     for r in recent:
         r["local_start"] = r["start_time"].astimezone(LOCAL_TZ)
+    for b in bets:
+        b["local_start"] = b["start_time"].astimezone(LOCAL_TZ)
     return templates.TemplateResponse(
         request,
         "results.html",
         {"summary": summary, "recent": recent, "shopping": shopping, "version": version,
          "active": "results", "league": league,
-         "rules": app_settings.get_all(), "rule_changes": rule_changes},
+         "rules": app_settings.get_all(), "rule_changes": rule_changes,
+         "bettors": bettors, "bets": bets},
     )
 
 

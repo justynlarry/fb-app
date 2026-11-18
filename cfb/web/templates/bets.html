@@ -1,34 +1,13 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_name %}
+{% from "_macros.html" import team_name, money, bet_text %}
 {% block title %}{{ 'My bets' if is_me else owner.username ~ "'s bets" }}{% endblock %}
 {% block body_class %}wide{% endblock %}
-
-{#- $1,234.50, with a sign when signed=true (+$90.91 / −$100.00) -#}
-{%- macro money(v, signed=false) -%}
-  {%- set x = v|float -%}
-  {{- ('+' if x > 0 else ('−' if x < 0 else '')) if signed else ('−' if x < 0 else '') -}}${{ '{:,.2f}'.format(x|abs) }}
-{%- endmacro -%}
 
 {#- Same amount in units, when the owner has set a unit size -#}
 {%- macro units(v, signed=false) -%}
   {%- if owner.unit_size -%}
     {%- set u = v|float / owner.unit_size|float -%}
     {{ ('%+.2f' if signed else '%.2f')|format(u) }}u
-  {%- endif -%}
-{%- endmacro -%}
-
-{#- "Michigan +3.5", "Over 52.5", "Michigan ML".  line is the HOME team's number. -#}
-{%- macro bet_text(b) -%}
-  {%- if b.bet_type == 'total' -%}
-    {{ b.side|capitalize }} {{ '%g'|format(b.line|float) }}
-  {%- else -%}
-    {%- set team = b.home if b.side == 'home' else b.away -%}
-    {{ team_name(team, b.league) }}
-    {%- if b.bet_type == 'moneyline' %} ML
-    {%- else -%}
-      {%- set n = b.line|float if b.side == 'home' else -(b.line|float) -%}
-      {{ ' PK' if n|abs < 0.05 else ' %+g'|format(n) }}
-    {%- endif -%}
   {%- endif -%}
 {%- endmacro -%}
 

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, league_tabs, schedule_text %}
+{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, league_tabs, schedule_text, team_name, money, bet_text %}
 {% block title %}Results{% endblock %}
 {% block body_class %}wide{% endblock %}
 
@@ -150,6 +150,62 @@
   several hours before the true close. "True open" grades our first saved line against Bovada's opening line (from CFBD)
   at an assumed −110. Only Bovada is used: other books' "open" is often a lookahead line from the week before.
   At the open there's no line movement yet, so every 3+ gap is a Play (no Caution row) and the rest are Pass.</p>
+{%- endif %}
+
+{#- Bets people actually placed: the viewer's own and those of users who share their record (bets log) -#}
+{%- set bettors = bettors if bettors is defined else [] %}
+{%- set bets = bets if bets is defined else [] %}
+<h2 class="section-title">Bets placed{{ ' (NFL)' if is_nfl }}</h2>
+<p class="muted small">Real bets from the Bet button, at the price each person actually got. Shown: yours, and those of
+  users who share their record (My bets → Settings). Notes stay private.</p>
+{%- if bettors %}
+<div class="table-wrap">
+  <table class="stats bettors">
+    <thead><tr><th>Who</th><th class="num">W–L–P</th><th class="num">Win %</th><th class="num">Profit</th><th class="num">ROI</th><th class="num">Pending</th></tr></thead>
+    <tbody>
+      {%- for u in bettors %}
+      {%- set decided = u.wins + u.losses %}
+      <tr>
+        <td class="label">{% if u.is_me %}<a href="/bets">{{ u.username }}</a> <span class="muted small">(you)</span>{% else %}<a href="/bets?user={{ u.username|urlencode }}">{{ u.username }}</a>{% endif %}</td>
+        <td class="num">{{ u.wins }}–{{ u.losses }}{% if u.pushes %}–{{ u.pushes }}{% endif %}</td>
+        <td class="num">{{ '%.1f%%'|format(100 * u.wins / decided) if decided else '–' }}</td>
+        <td class="num money {{ 'pos' if u.profit|float > 0 else ('neg' if u.profit|float < 0) }}">{{ money(u.profit, true) if (decided or u.pushes) else '–' }}</td>
+        <td class="num">{{ '%+.1f%%'|format(100 * u.profit|float / u.risked|float) if u.risked|float > 0 else '–' }}</td>
+        <td class="num">{{ u.pending or '' }}</td>
+      </tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+{%- if bets %}
+<div class="table-wrap">
+  <table class="stats bets results-bets">
+    <thead><tr><th>Game</th><th>Who</th><th>Bet</th><th>Book</th><th class="num">Stake</th><th>Result</th></tr></thead>
+    <tbody>
+      {%- for b in bets %}
+      <tr>
+        <td>{{ team_name(b.away, b.league) }} at {{ team_name(b.home, b.league) }}
+          <div class="muted small">{{ b.local_start.strftime('%a %b %-d, %-I:%M %p') }}</div></td>
+        <td>{{ b.username }}</td>
+        <td class="bet-what">{{ bet_text(b) }} <span class="price">{{ '%+d'|format(b.price) }}</span>
+          {%- if b.logged_after_kickoff %} <span class="late-tag" title="Saved after the game had started">logged after kickoff</span>{% endif %}</td>
+        <td>{{ b.book }}</td>
+        <td class="num">{{ money(b.stake) }}</td>
+        <td>
+          {%- if b.outcome %}<span class="outcome {{ b.outcome }}">{{ b.outcome[0]|upper }}</span>
+            <span class="money {{ 'pos' if b.profit|float > 0 else ('neg' if b.profit|float < 0) }}">{{ money(b.profit, true) }}</span>
+            <div class="muted small">Final {{ b.away_points }}–{{ b.home_points }}</div>
+          {%- else %}<span class="muted">pending</span>{% endif -%}
+        </td>
+      </tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+{%- endif %}
+{%- else %}
+<p class="muted small">No {{ 'NFL ' if is_nfl }}bets to show yet{{ '' if is_nfl else '' }}. Log one with the Bet button on the
+  <a href="/predictions{{ '?league=nfl' if is_nfl }}">Predictions</a> page.</p>
 {%- endif %}
 
 {#- Pick rules now in force, and every change to them (settings_log), so each pick can be matched to its rule -#}
