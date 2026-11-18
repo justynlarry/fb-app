@@ -917,3 +917,64 @@ Reading: a small accuracy gain (0.014 pts) that makes our gaps line up *less* wi
 teams is something the market already prices (SP+/FPI include it), so adding it moves us toward information the
 opener already has, the same pattern as Round 3's SP+ prior. **Special teams goes on the don't-retry list** (no
 variants: not per-play, not split by unit, not with a garbage-time filter) unless new information appears.
+
+### T-OCDC: new offensive / defensive coordinator as a preseason input (pre-registered 2026-11-18, approved by the user; amended before any model run, see below)
+Written before any coordinator data was pulled beyond a 20-page coverage sample (2016–25 FBS team-seasons: 19 pages
+found, the miss a title mismatch; 17 with both fields; the 3 blanks are real: head coach calls plays, or no page).
+
+- **Question:** when a team starts a season with a new offensive (defensive) coordinator, does it score (allow)
+  differently from what its ratings say, early in the season? The model already has `new_coach` (head coach) as a
+  faded preseason input; coordinators are the next level down and no data source had them until now.
+- **Data:** Wikipedia team-season pages (`{season} {school} {mascot} football team`, redirects followed), infobox
+  fields `off_coach` and `def_coach`, 2015–2025 FBS team-seasons (2015 only to code 2016 changes). MediaWiki API,
+  50 titles per request (~30 requests), no key, openly licensed. Saved raw in scratch before parsing. A small title
+  map for known mismatches (e.g. Miami (OH) → Miami RedHawks), written before the change flags are computed.
+- **Change flag (fixed now):** names cleaned (links, refs, notes in brackets removed, case and spacing normalised);
+  `new_oc` = 1 if this season's `off_coach` differs from last season's for the same team, else 0; same for `new_dc`.
+  Blank in one season and a name in the other counts as a change; blank in both = no change. A team-season whose page
+  or previous page is missing gets 0 (treated as no change) and is counted in the coverage report.
+  Co-coordinators: the set of names must differ (order ignored). Mid-season changes are not in this data and not tested.
+- **Amendment (user, 2026-11-18, after the data pull and flag counts, before any model run):** the infobox often lists
+  in-season replacements too ("Cam Cameron (first 4 games) / Steve Ensminger (interim)"); 20–22% of fields hold 2+ names.
+  A change is now counted only if **none** of this season's coordinator names appears anywhere in last season's field
+  (Colorado 2024: Pat Shurmur took over mid-2023, so no change; a co-coordinator partial swap is no change). Flags:
+  OC 533 of 1,297 known team-seasons (41%), DC 482 (37%) vs 649 / 627 under the first wording, which is never run.
+  Data facts found while parsing (no model output): two infobox template names (both parsed), co-coordinator fields
+  `cooff_coach<n>` / `codef_coach<n>` (included), 8 team names mapped to Wikipedia titles; all 1,437 pages found,
+  OC named on 1,368, DC on 1,427; 12 teams new to FBS have no previous season (flags 0).
+- **Candidate:** v5 + `pr_new_oc` (the team's own new OC) + `oppr_new_dc` (the opponent's new DC), faded over
+  PRIOR_INPUT_WEEKS = 16 exactly like `pr_new_coach` (each points row is one team's scoring: its offense vs the
+  opponent's defense, so these are the two that belong in it). LinearRegression, walk-forward as v5; baseline replay
+  check (mean |diff| < 0.01).
+- **Rule:** the accuracy adoption rule, as T5a: spread MAE better pooled 2021–25 and in at least 4 of 5 seasons; no
+  harm at the Bovada reference open (Δ result slope ≥ −1 paired SE; ATS 3+ not down > 1.0 pp; CLV % not down > 1.0 pp;
+  CLV points not down > 2 paired SE; season-week bootstrap, 2,000).
+- **Reported, not judged:** weeks 0–4 MAE and calibration (where a preseason input acts); share of team-seasons with
+  a new OC / DC by season; overlap with `new_coach`; the two coefficients (points, full weight); total MAE; coverage.
+- **No variants after results** (not offense-only, not interactions with the ratings, not a different fade). If it
+  fails, coordinators go on the don't-retry list for the model; the data can still feed override suggestions.
+- **Live use, if ever adopted:** each August, pull that season's pages once and check them by hand (the infobox is
+  preseason staff; mid-season changes go in the coordinator table by hand, from the media trackers).
+
+### T-OCDC result (run 2026-11-18, scratch `ocdc/ocdc_test.py`, 117 s, nothing written to the DB, 0 calls): **passed the accuracy rule (small)**
+Checks: baseline replay vs stored v5 n = 6,727, mean |diff| 0.0025 (max 0.005); a coordinator flag on 93–98% of rows by
+season (FCS teams have none).
+
+| Rule item | Base (v5) | v5 + new OC / DC | Pass |
+|---|---|---|---|
+| 1a spread MAE pooled (n = 4,433) | 12.826 | 12.820 | yes |
+| 1b MAE better by season | | 4 of 5 (2021 +0.001, 2022 −0.006, 2023 −0.011, 2024 −0.008, 2025 −0.006) | yes |
+| 2a Δ result slope at the open | 0.1128 | 0.1130 (+0.0002 ± 0.0024, +0.06 SE) | yes |
+| 2b ATS 3+ at the open | 52.41% (n = 2,093) | 52.39% (n = 2,088) | yes |
+| 2c CLV % | 52.65 | 52.35 | yes (−0.3 pp) |
+| 2d CLV points | 0.562 | 0.554 (−0.007 ± 0.011, −0.6 SE) | yes |
+
+Information only: weeks 0–4 spread MAE 12.900 → 12.883; total MAE 12.969 → 12.965 (better in 5 of 5 seasons); Rule C
+items flat (line-move +0.4 SE, slope left at close 0.0 SE); calibration and line SD unchanged; lines moved 0.17 pts on
+average. Coefficients at full weight (2025 model): a new OC −0.36 pts scored, an opponent's new DC +0.56 pts allowed.
+New OC in 31–53% of team-seasons a year (2022 highest); 209 of 490 week-0 new-OC rows also had a new head coach.
+
+Reading: a small, consistent accuracy gain, largest early in the season and in totals, with no betting effect in
+either direction. **Labelled "accuracy", never edge evidence.** What it earns (candidate for the frozen 2027 model under
+the plan's no-harm check, or nothing) is the user's decision. Live use would need the August Wikipedia pull + hand
+check each season.

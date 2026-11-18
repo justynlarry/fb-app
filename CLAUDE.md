@@ -623,6 +623,11 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   WP garbage time), each under the accuracy rule.
   **T5a special teams REJECTED (2026-11-18, model-tests.md §10):** spread MAE 12.826 → 12.812 (4 of 5 seasons) but
   CLV points −0.029 ± 0.012 (−2.4 SE, bar −2) and line-move slope −3.2 SE: priced-in information. Don't retry.
+  **T-OCDC PASSED the accuracy rule (2026-11-18, model-tests.md §10), small:** offseason new OC / DC from Wikipedia
+  infoboxes (`off_coach`, `def_coach`, co-coordinator fields; all 1,437 FBS team-seasons 2015–25; change = no name in
+  common with last season's field, amended by the user before running), as `pr_new_oc` + `oppr_new_dc` faded like
+  `new_coach`. Spread MAE 12.826 → 12.820 (4 of 5), weeks 0–4 12.900 → 12.883, totals better 5 of 5, betting checks flat.
+  Accuracy only. **CFBD has no coordinator data** (head coaches only, checked against the spec 2026-11-18).
   Round 2 left: T5b (win-probability garbage time), T2(b) state-space.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
