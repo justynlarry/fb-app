@@ -269,6 +269,10 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 | F | 11-16 | DraftKings lookahead: v5 with ratings one week staler, at the DK open 2023–25 | **Supported** (tag and track in 2027; no betting on this alone) | n=2,150. Slope +0.175 ± 0.063 (2.77 SE; bar 2.24); by season +0.15/+0.28/+0.09. Bovada Sunday open moved toward us by +0.73 ± 0.09 pts on 3+ gaps (n=1,124). Info: ATS 3+ at the DK open 53.5% (604–525, ±2.9) vs 55.4% for normal v5, whose slope +0.225 is inflated by lookahead. Caveat: some DK opens are older than one week, which flatters this. |
 | P1-T1 | 11-17 | Full matchup rows (college port of nfl-v3), Rule C at 1.96 | **Passed** → 2027 candidate | Δ line-move slope +0.0084 ± 0.0031 (2.72 SE), +all 5 seasons; result slope +0.009 ± 0.018; close slope +0.001; MAE 12.826 → 12.803; CLV 0.562 → 0.609; dogs 72 → 61% |
 | P1-T4 | 11-17 | 8 cached advanced stats (line yards, stuff rate, power, 2nd-level, open-field, down splits), Rule C at 1.96 | **Rejected** (2027 hypothesis H-T4) | Δ line-move −0.0031 ± 0.0021; slope left at close +0.038 ± 0.010 (fails guard); result slope +0.034 ± 0.010; ATS 52.41 → 53.22% |
+| T5a | 11-18 | Special-teams EPA (play-by-play) as a rated metric, accuracy rule | **Rejected** | MAE 12.826 → 12.812 (4 of 5); CLV points −0.029 ± 0.012 (−2.4 SE); line-move −3.2 SE |
+| T-OCDC | 11-18 | New offensive / defensive coordinator (Wikipedia infobox), faded prior, accuracy rule | **Passed** (small) → frozen 2027 candidate | MAE 12.826 → 12.820 (4 of 5); weeks 0–4 12.900 → 12.883; totals better 5 of 5; betting flat |
+| T5b | 11-18 | Six metrics from play-by-play with our market-free WP garbage-time cut, accuracy rule | **Rejected** | MAE 12.826 → 12.876 (0 of 5); CLV points −2.5 SE |
+| T2(b) | 11-18 | State-space (Kalman) ratings for all 7 metrics, accuracy rule | **Rejected** (2027 hypothesis H-T2b) | MAE 12.826 → 12.732 (5 of 5); totals 12.969 → 12.895; ATS 3+ open 52.41 → 50.92% (−1.5 pp); CLV % −1.6 pp |
 
 ### H-T4: cached-stats batch as a 2027 hypothesis (pre-registered 2026-11-17, before any 2027 game)
 - **Why:** P1-T4 failed Rule C because its gain appeared at the close as much as at the open (result slope +0.034 ± 0.010,
@@ -281,6 +285,28 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 - **Supported** if the paired Δ result slope at the **close** (median close of books) is ≥ 1.96 paired SE
   (season-week bootstrap, 2,000). Reported beside it: Δ line-move slope, Δ result slope at the open, ATS 3+ at the open.
 - **Then:** supported → a candidate for 2028 under the accuracy rule plus this result; not supported → dropped for good.
+- One judged run, after the 2027 regular season.
+
+### H-T2b: state-space ratings as a 2027 hypothesis (pre-registered 2026-11-18, before any 2027 game)
+- **Why:** T2(b) was the most accurate model tested (spread MAE −0.094, 5 of 5 seasons; totals −0.074; every metric
+  predicted better one step ahead) but failed two fixed betting bars (ATS 3+ at the open −1.5 pp, CLV % −1.6 pp) while
+  the continuous betting measures were inside noise (Δ result slope at the open −0.4 SE, CLV points −0.4 SE). Either
+  the better ratings really give back edge, or the drop was noise. 2021–25 is used up for this question; only new
+  seasons can tell.
+- **Models, frozen before 2027 week 0:** the frozen 2027 model (v5 + T1 + T-OCDC, plus coach career if 5A is
+  confirmed) and the same model with all 7 metrics' ratings from the state-space filter, with **exactly the T2(b)
+  parameters chosen on 2026-11-18** (no re-tuning): epa/play, success, points q 0.005 p₀ 0.15 ρ 0.8; explosiveness
+  q 0.001 p₀ 0.05 ρ 0.6; pass q 0.001 p₀ 0.15 ρ 0.6; rush q 0.005 p₀ 0.05 ρ 0.8; plays q 0.005 p₀ 0.05 ρ 0.6.
+  Both trained on 2017–2026, points model refit as usual. Paper only: the H-T2b version never drives a pick.
+- **Games:** 2027 FBS-involved games with a Bovada open and close (n ≈ 850; about 350 3+ picks, so ATS ±5 pp).
+- **Supported** if all hold, against the frozen model on the same games:
+  1. spread MAE better (all 2027 games with a closing line);
+  2. paired Δ result slope at the Bovada open ≥ −1 paired SE (season-week bootstrap, 2,000);
+  3. paired Δ line-move slope (Bovada open → median close) ≥ −1 paired SE.
+  The continuous measures replace T2(b)'s fixed ATS / CLV % bars because one season can't resolve a 1 pp difference;
+  ATS 3+ at the open, CLV % and CLV points are reported beside them, not judged.
+- **Then:** supported → a candidate for the 2028 model under the accuracy rule plus this result (combined with
+  2021–25 for the record, never instead of it); not supported → dropped for good.
 - One judged run, after the 2027 regular season.
 
 ### Slope metric (added 2026-11-13; information only for past decisions)
@@ -978,6 +1004,8 @@ Reading: a small, consistent accuracy gain, largest early in the season and in t
 either direction. **Labelled "accuracy", never edge evidence.** What it earns (candidate for the frozen 2027 model under
 the plan's no-harm check, or nothing) is the user's decision. Live use would need the August Wikipedia pull + hand
 check each season.
+**Decision (user, 2026-11-18): include in the frozen 2027 model candidate** (with T1, and coach career if Holdout 5A
+confirms on Dec 7), under the plan's no-harm check of the combined stack; reads table `coordinators` (026).
 
 ### T5b: metrics rebuilt from play-by-play with a market-free win-probability garbage-time cut (pre-registered 2026-11-18, approved by the user before running)
 Found before drafting (data only, no model output): the sportsdataverse `wp_before` **uses the betting spread**
@@ -1042,3 +1070,72 @@ market-free WP cut on every measure. The test can't separate the two parts (diff
 once, and the cut drops more plays), but no part of the result suggests a gain to chase. **Win-probability garbage
 time and the sportsdataverse EPA model go on the don't-retry list for the ratings.** Round 2's play-by-play line is
 closed (T5a rejected, T5b rejected); T2(b) state-space is the last round-2 candidate.
+
+### T2(b): state-space (Kalman-filter) ratings instead of recency-weighted ridge (pre-registered 2026-11-18, approved by the user before running)
+From `docs/model-plan-2026-11-17.md` §2.2: round 2, accuracy rule, only if T1 passed (it did, 2026-11-17).
+
+- **Question:** v5 rates each team by a ridge regression on games weighted by age (half-life 4 weeks, last season at
+  0.25 × fade over 6 weeks). A state-space model instead treats each team's offense and defense, per metric, as a
+  quantity that drifts week to week, and updates it after every game by how surprising the result was given the
+  opponent. It sets the right weight on old games and on the preseason from the data, per metric (D2/D3 showed the
+  metrics differ in noise: success repeats at r ≈ 0.57, explosiveness ≈ 0.2). Risk named in the plan: it replaces the
+  recency weighting behind the one large edge gain (v3 → v4), so the betting checks matter as much as accuracy.
+- **Model, per metric (all 7 of v5's, from the same `team_game_stats`), fixed now:**
+  - Observation for each team-game: y = μ + o[team] + d[opponent] + h·home + f_o·fcs_offense + f_d·fcs_defense + e,
+    with noise variance r × (mean plays ÷ this game's plays) (v5's ridge weights games by plays the same way).
+  - State: o and d for every team (FBS and FCS) plus the globals μ, h, f_o, f_d. All updated jointly, game by game in
+    kickoff order (full covariance, so opponent adjustment works as in the ridge).
+  - Between weeks each team's o and d drift: variance + q per week. Globals drift at q/100.
+  - Between seasons: o, d → ρ × (end-of-season value); variance → ρ² × (end variance) + p₀. A team with no earlier
+    games starts at 0 with variance p₀.
+  - Ratings handed to the points model at each week's cutoff (the first kickoff of the week, as v5): off = μ + o (+ f_o
+    for FCS teams), def = μ + d (+ f_d for FCS teams), the filtered means from games before the cutoff only. Same
+    feature names as v5, so the points model is unchanged except for its inputs.
+- **Parameters (no peeking at judged seasons):** y is scaled by each metric's SD, r = 1. For each metric, q/r, p₀/r and ρ
+  are chosen from a fixed grid by the smallest mean squared one-step-ahead error of the metric itself (FBS-vs-FBS
+  team-games, seasons 2017–2020, 2016 as burn-in): q ∈ {0.001, 0.005, 0.02}, p₀ ∈ {0.05, 0.15, 0.4}, ρ ∈ {0.4, 0.6, 0.8}
+  (27 per metric). The chosen values are fixed for every season. Games, scores and lines of 2021–25 are not used to
+  choose anything. If a chosen value sits on the edge of the grid, that's reported, not re-run.
+- **Candidate:** v5 with all 7 metrics' ratings replaced by the filtered ones; priors (talent, returning production,
+  new coach), coach change, home/FCS columns unchanged; LinearRegression, walk-forward 2018–25; baseline replay check.
+- **Rule:** the accuracy rule, as T5a / T-OCDC / T5b.
+- **Reported, not judged:** the chosen q, p₀, ρ per metric and the one-step-ahead error vs v5's ridge ratings on the
+  same 2017–20 team-games; Rule C items; total MAE; weeks 0–4 and 5+ MAE; calibration; by-season results.
+- **No variants after results** (no other grid, no mixing ridge and filter, no per-season parameters). A fail puts
+  state-space ratings on the don't-retry list.
+- **Effort:** research build in scratch (a few hundred lines), nothing in the app; live use would need a rewrite of
+  `cfb/ratings.py`.
+
+### T2(b) result (run 2026-11-18, scratch `t2b/t2b.py`, 1,058 s, nothing written to the DB, 0 calls): **rejected (betting checks), largest accuracy gain of any test**
+Checks: baseline replay mean |diff| 0.0025; 22,006 team-games, 167 weekly blocks, 266 teams in the state; every
+predicted game mapped to a block, no missing ratings.
+
+Chosen parameters (2017–20 one-step-ahead error, grid fixed in advance; edges reported, not re-run):
+epa/play, success, points q 0.005 p₀ 0.15 ρ 0.8 (ρ on the edge); explosiveness q 0.001 p₀ 0.05 ρ 0.6 (q, p₀ on the edge);
+pass q 0.001 p₀ 0.15 ρ 0.6 (q edge); rush q 0.005 p₀ 0.05 ρ 0.8 (p₀, ρ edges); plays q 0.005 p₀ 0.05 ρ 0.6 (p₀ edge).
+One-step-ahead scaled MSE, filter vs v5's ridge, same 2017–20 FBS-v-FBS team-games: better for all 7 metrics
+(epa 0.693 vs 0.721, success 0.647 vs 0.672, explosiveness 0.890 vs 0.981, pass 0.854 vs 0.903, rush 0.821 vs 0.864,
+plays 0.866 vs 0.910, points 0.644 vs 0.669).
+
+| Rule item | Base (v5) | State-space | Pass |
+|---|---|---|---|
+| 1a spread MAE pooled (n = 4,433) | 12.826 | **12.732** | yes |
+| 1b MAE better by season | | **5 of 5** (−0.099 / −0.116 / −0.201 / −0.004 / −0.052) | yes |
+| 2a Δ result slope at the open | 0.113 | 0.099 (−0.014 ± 0.034, −0.4 SE) | yes |
+| 2b ATS 3+ at the open | 52.41% (n = 2,093) | 50.92% (n = 1,742) | **no** (−1.49 pp) |
+| 2c CLV % | 52.65 | 51.04 | **no** (−1.61 pp) |
+| 2d CLV points | 0.562 | 0.543 (−0.019 ± 0.043, −0.4 SE) | yes |
+
+Information only: total MAE 12.969 → 12.895 (better in 4 of 5); weeks 0–4 spread MAE 12.900 → 12.757, weeks 5+
+12.679 → 12.660; calibration weeks 5+ 1.064 → 0.982 (the line is no longer too flat late), weeks 0–4 0.943 → 0.930;
+line SD 13.65 → 14.33 (close 14.57); line-move slope +0.5 SE, slope left at the close −0.6 SE; lines moved 2.5 pts on
+average; 3+ gaps at the open fell from 2,093 to 1,742.
+
+Reading: the most accurate model we have built (−0.094 pts spread, −0.074 totals, all 5 seasons, every metric
+predicted better one step ahead), and it agrees with the market more: 17% fewer 3+ gaps, and the remaining ones
+did a bit worse at the open and moved our way a bit less often. The two failed checks are fixed bars, not
+significance tests (−1.5 pp on ~1,742 picks is inside one SE of the difference), but the rule was written that way
+before the run and isn't loosened. **Rejected for adoption under the accuracy rule; no variants** (no wider grid, no
+mixing with the ridge, despite the edge values). What it does show: v5's ratings are not the best predictor of
+next week's stats, and the "edge" in v5 may partly live in its noise. A possible next step, if wanted, is a
+pre-registered 2027 holdout hypothesis (like H-T4), judged on the frozen-season record, not a re-run here.

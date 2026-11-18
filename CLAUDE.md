@@ -633,10 +633,17 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   common with last season's field, amended by the user before running), as `pr_new_oc` + `oppr_new_dc` faded like
   `new_coach`. Spread MAE 12.826 → 12.820 (4 of 5), weeks 0–4 12.900 → 12.883, totals better 5 of 5, betting checks flat.
   Accuracy only. **CFBD has no coordinator data** (head coaches only, checked against the spec 2026-11-18).
+  **User decision (2026-11-18): T-OCDC goes into the frozen 2027 model candidate** (v5 + T1 + T-OCDC, + coach career if
+  5A confirms), checked together for no harm before the freeze; data from table `coordinators`.
   **T5b REJECTED (2026-11-18):** six metrics rebuilt from sportsdataverse play-by-play with OUR market-free WP cut
   (their `wp_before` uses the betting spread, so it can't be used: market leak). Spread MAE 12.826 → 12.876, worse in
   all 5 seasons; CLV points −2.5 SE. CFBD's metrics are better; don't retry WP garbage time or the sdv EPA model.
-  Round 2 left: T2(b) state-space.
+  **T2(b) state-space (Kalman) ratings REJECTED on betting checks (2026-11-18), but the biggest accuracy gain yet:**
+  spread MAE 12.826 → 12.732 (5 of 5 seasons), totals 12.969 → 12.895, weeks 0–4 12.900 → 12.757, late-season
+  calibration 1.064 → 0.982, all 7 metrics predicted better one step ahead; but ATS 3+ at open 52.41 → 50.92% (−1.5 pp,
+  bar −1.0) and CLV % −1.6 pp, with 17% fewer 3+ gaps (agrees with the market more). No variants. Round 2 complete.
+  **Pre-registered as 2027 hypothesis H-T2b (user, 2026-11-18; model-tests.md after H-T4):** frozen params, paper only,
+  judged once after the 2027 regular season on MAE + Δ result slope at open + Δ line-move slope (≥ −1 SE each).
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.
