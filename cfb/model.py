@@ -175,6 +175,8 @@ def save_predictions(model, rows, is_backtest, version=MODEL_VERSION):
                     weeks_played    = EXCLUDED.weeks_played,
                     is_backtest     = EXCLUDED.is_backtest,
                     created_at      = now()
+                -- A backtest replay never overwrites a live (pre-game) prediction, the real record
+                WHERE predictions.is_backtest OR NOT EXCLUDED.is_backtest
                 """,
                 (
                     int(game_id),

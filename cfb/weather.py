@@ -3,6 +3,7 @@
 Run once a day by the worker. Each run saves one forecast per game for that day, so the
 forecasts build up as history.
 """
+import time
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -11,6 +12,8 @@ from cfb.db import connect
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 DAYS_AHEAD = 7          # forecast games kicking off within this many days
+RETRY_WAITS = (3, 10, 30)   # seconds to wait before each retry of a failed request (connection reset, 429, 5xx)
+PAUSE = 0.5             # seconds between stadiums: ~70 requests in a burst got some refused (Nov 17-18)
 
 UPCOMING_GAMES_SQL = """
 SELECT g.id, g.start_time, v.id AS venue_id, v.latitude, v.longitude
@@ -38,9 +41,21 @@ def fetch_hourly(latitude, longitude, first_day, last_day):
         "precipitation_unit": "inch",
         "timezone": "UTC",
     }
-    resp = httpx.get(FORECAST_URL, params=params, timeout=30)
-    resp.raise_for_status()
-    return resp.json()["hourly"]
+    for attempt, wait in enumerate((0,) + RETRY_WAITS):
+        if wait:
+            time.sleep(wait)
+        try:
+            resp = httpx.get(FORECAST_URL, params=params, timeout=30)
+        except httpx.TransportError as err:       # connection reset/refused, timeout: worth another try
+            if attempt == len(RETRY_WAITS):
+                raise
+            print(f"weather: {err!r}, retrying in {RETRY_WAITS[attempt]} s")
+            continue
+        if (resp.status_code == 429 or resp.status_code >= 500) and attempt < len(RETRY_WAITS):
+            print(f"weather: HTTP {resp.status_code}, retrying in {RETRY_WAITS[attempt]} s")
+            continue
+        resp.raise_for_status()
+        return resp.json()["hourly"]
 
 
 def kickoff_weather(hourly, kickoff):
@@ -80,6 +95,7 @@ def update_forecasts():
     saved = 0
     failed = 0
     for (venue_id, lat, lon), venue_games in by_venue.items():
+        time.sleep(PAUSE)
         first_day = min(start for _, start in venue_games).astimezone(timezone.utc).date()
         last_day = max(start for _, start in venue_games).astimezone(timezone.utc).date() + timedelta(days=1)
         try:

@@ -252,6 +252,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     2021–25 trainings −3.8 to −4.7 margin). Bias on affected teams: −3.3 under v4 → +0.4 under v5. The market
     already prices most of it (teams only −1.2 vs the open), so corrections mostly remove bad picks or land
     under the 3-pt threshold. **2026 changes must be entered by hand** in `coach_changes`, or v5 = v4 for 2026.
+  - **2026 entered 2026-11-18** (source 'manual', list from the user, dates checked against news reports and our game
+    logs; changed_at = last old-coach kickoff + 1 day, like the loader): Maryland (Oct 17), NC State (Oct 23), Baylor
+    (Oct 24), Sam Houston (Oct 27), Florida State (Oct 31), UTEP and Arkansas State (Nov 14). Live predictions pick it
+    up from the next `predict_upcoming` (5 AM); games already played since the changes keep their recorded predictions.
 
 ## Parking lot (not started; pick up when the user asks)
 
@@ -370,6 +374,11 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   1. `cfb/model.py backtest()` defaults to `last_season=2025`. **Never backtest a season that has live predictions
      under the same model version** (2026 for v5): `save_predictions` upserts on (game_id, model_version) and would
      overwrite the real pre-game record with replays. Planned guard: don't overwrite rows where `is_backtest` is false.
+     **Guard built 2026-11-18** (Claude-typed at the user's request): `model.save_predictions` upsert has
+     `WHERE predictions.is_backtest OR NOT EXCLUDED.is_backtest`, like `nfl_model` already did; tested (backtest save on a
+     live row: 0 rows changed). Still don't do it on purpose: the replay simply isn't saved for those games.
+     **Weather fetch (same day):** `weather.fetch_hourly` retries connection errors / 429 / 5xx after 3, 10, 30 s and
+     pauses 0.5 s between stadiums (Nov 17–18 lost 4 and 9 of ~68 stadiums to connection resets).
   2. `cfb/coaches.py load_coach_changes(last_season=2025)`: each August, once CFBD fills last season's `/coaches`,
      run it with the new `last_season` (replaces hand-entered 'manual' rows only where source is 'cfbd').
   3. NFL daily refresh is done (`nfl_daily_update`, 5:30 AM MT). Still to do each August: check the first NFL
@@ -612,6 +621,9 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   +4.0 SE); no more backtest variants, kept only as a pre-registered 2027 hypothesis (model-tests.md §4, H-T4).
   Dropped: T2(a), T3 (= Test 3), T6 (= Test D). Round 2 candidates: T2(b) state-space, T5 (special teams;
   WP garbage time), each under the accuracy rule.
+  **T5a special teams REJECTED (2026-11-18, model-tests.md §10):** spread MAE 12.826 → 12.812 (4 of 5 seasons) but
+  CLV points −0.029 ± 0.012 (−2.4 SE, bar −2) and line-move slope −3.2 SE: priced-in information. Don't retry.
+  Round 2 left: T5b (win-probability garbage time), T2(b) state-space.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.

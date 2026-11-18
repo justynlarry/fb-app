@@ -855,3 +855,65 @@ explains none of it (b ≈ 0), so nfl-v3 anticipates where the market goes durin
 What isn't shown is that this turns into wins at the Monday price (slope +0.04 ± 0.10, ATS 50.0%). Per the agreed
 consequence, NFL paper-tracking at the live Monday snapshot is built for 2027. The paper record, not these
 backtests, decides whether NFL picks are ever bet.
+
+## 10. Round 2, college (from `docs/model-plan-2026-11-17.md` §2.2)
+
+### T5a: special-teams EPA as a rated metric (pre-registered 2026-11-18, approved by the user before running)
+Written before any T5a number was computed. Only the play-type list and the EPA sign convention were looked at
+(2024 file, play counts and mean EPA by type; no results, no lines, no model output).
+
+- **Question:** does a team's special-teams play, which our ratings see only through points, make our line more
+  accurate? Expected: accuracy, not edge (SP+ and FPI already include special teams).
+- **Data:** sportsdataverse `play_by_play_2016–2025.parquet` (copy from 2026-11-13, scratch; free, no key). Matched by
+  `game_id` = `games.espn_id` and `pos_team_id` / `def_pos_team_id` = `teams.espn_id` (league cfb). 0 CFBD calls.
+- **Special-teams plays (fixed now):** `type.text` in Kickoff, Kickoff Return (Offense), Kickoff Return Touchdown,
+  Kickoff Team Fumble Recovery, Punt, Punt Return Touchdown, Punt Team Fumble Recovery, Blocked Punt, Blocked Punt
+  Touchdown, Punt (Safety), Field Goal Good, Field Goal Missed, Blocked Field Goal, Blocked Field Goal Touchdown,
+  Missed Field Goal Return. Regulation only (period 1–4). No garbage-time filter (that is T5b's question).
+- **Metric:** per team-game, `st_epa` = sum of `EPA` on those plays where the team is `pos_team`, minus the sum where
+  the opponent is `pos_team` (EPA is from `pos_team`'s side: the kicking team on punts and field goals, the receiving
+  team on kickoffs, so crediting `pos_team` and debiting the other side needs no kicker/receiver logic). One row per
+  team-game, like the other metrics.
+- **Ratings:** opponent-adjusted exactly like the current metrics: the same `ratings_as_of` weights (recency half-life,
+  last season faded over PRIOR_WEEKS), the same `fit_ratings` ridge (α = 1, home field, FCS flags), via the copied
+  weighting from round 1's `t1t4.py` (`fit_new`), checked again on an existing metric (max |diff| reported).
+  Team-games without play-by-play are left out of this one metric's fit; a team with no rating gets the league mean.
+- **Candidate:** v5 + `off_st_epa` + `oppdef_st_epa` (2 columns). Nothing else changes: LinearRegression points model,
+  walk-forward training on earlier seasons (rows 2017–25, predictions 2018–25), same baseline replay check
+  (mean |diff| vs stored v5 < 0.01).
+- **Rule (the accuracy adoption rule, section "Adoption policy", unchanged):**
+  1. Spread MAE better pooled (2021–25, all games with a closing line) and in at least 4 of 5 seasons.
+  2. No harm to betting, at the Bovada reference open, season-week paired bootstrap (2,000):
+     Δ result slope ≥ −1 paired SE; ATS 3+ at open not down more than 1.0 pp; CLV % not down more than 1.0 pp;
+     CLV points not down more than 2 paired SE.
+  - Pass = all of 1 and 2. A pass is labelled "accuracy" and never quoted as edge evidence. What it earns is decided
+    by the user after the result (candidate for the frozen 2027 model under the plan's no-harm check, or nothing).
+- **Reported, not judged:** total MAE pooled and by season; Rule C items (Δ line-move slope, slope left at the close);
+  the two coefficients (points per SD); play-by-play coverage of judged games by season; split-half repeatability of
+  `st_epa` within team-seasons (odd vs even games); calibration and line SD as in round 1.
+- **No variants after results.** If it fails, special teams goes on the don't-retry list unless new information
+  appears. T5b and T2(b) are separate tests with their own drafts.
+- **Live use, if ever adopted:** needs the 2026 file refreshed weekly (free download, ~50 MB) and a loader; not built.
+
+### T5a result (run 2026-11-18, scratch `t5a/t5a.py`, 131 s, nothing written to the DB, 0 calls): **rejected**
+Checks before judging: baseline replay vs stored v5 n = 6,727, mean |diff| 0.0025 (max 0.005); copied ratings
+weighting vs `ratings_as_of` max |diff| 0.0; 98% of judged games have play-by-play (team-game coverage is ~60% in
+2022–25 only because `team_game_stats` also holds FCS-vs-FCS games, which the files don't cover).
+
+| Rule item | Base (v5) | v5 + st_epa | Pass |
+|---|---|---|---|
+| 1a spread MAE pooled (n = 4,433) | 12.826 | 12.812 | yes |
+| 1b MAE better by season | | 4 of 5 (2021 −0.008, 2022 tie, 2023 −0.001, 2024 −0.015, 2025 −0.045) | yes |
+| 2a Δ result slope at the open | 0.113 | 0.117 (+0.004 ± 0.004, +1.2 SE) | yes |
+| 2b ATS 3+ at the open | 52.41% (n = 2,093) | 52.18% (n = 2,091) | yes (−0.23 pp) |
+| 2c CLV % (3+ picks, Bovada line moved toward us) | 52.65 | 52.02 | yes (−0.63 pp) |
+| 2d CLV points (3+ picks) | 0.562 | 0.533 (−0.029 ± 0.012, **−2.4 SE**) | **no** |
+
+Information only: total MAE 12.969 → 12.971 (worse); Rule C Δ line-move slope −0.0015 ± 0.0005 (−3.2 SE), slope left
+at the close +1.7 SE; coefficients +0.20 / +0.17 pts per SD; split-half r of `st_epa` 0.20 (1,309 team-seasons: about
+as noisy as explosiveness); calibration and line SD unchanged; lines moved 0.32 pts on average.
+
+Reading: a small accuracy gain (0.014 pts) that makes our gaps line up *less* with where the market moves. Special
+teams is something the market already prices (SP+/FPI include it), so adding it moves us toward information the
+opener already has, the same pattern as Round 3's SP+ prior. **Special teams goes on the don't-retry list** (no
+variants: not per-play, not split by unit, not with a garbage-time filter) unless new information appears.
