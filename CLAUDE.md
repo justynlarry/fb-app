@@ -628,7 +628,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   common with last season's field, amended by the user before running), as `pr_new_oc` + `oppr_new_dc` faded like
   `new_coach`. Spread MAE 12.826 → 12.820 (4 of 5), weeks 0–4 12.900 → 12.883, totals better 5 of 5, betting checks flat.
   Accuracy only. **CFBD has no coordinator data** (head coaches only, checked against the spec 2026-11-18).
-  Round 2 left: T5b (win-probability garbage time), T2(b) state-space.
+  **T5b REJECTED (2026-11-18):** six metrics rebuilt from sportsdataverse play-by-play with OUR market-free WP cut
+  (their `wp_before` uses the betting spread, so it can't be used: market leak). Spread MAE 12.826 → 12.876, worse in
+  all 5 seasons; CLV points −2.5 SE. CFBD's metrics are better; don't retry WP garbage time or the sdv EPA model.
+  Round 2 left: T2(b) state-space.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.

@@ -978,3 +978,67 @@ Reading: a small, consistent accuracy gain, largest early in the season and in t
 either direction. **Labelled "accuracy", never edge evidence.** What it earns (candidate for the frozen 2027 model under
 the plan's no-harm check, or nothing) is the user's decision. Live use would need the August Wikipedia pull + hand
 check each season.
+
+### T5b: metrics rebuilt from play-by-play with a market-free win-probability garbage-time cut (pre-registered 2026-11-18, approved by the user before running)
+Found before drafting (data only, no model output): the sportsdataverse `wp_before` **uses the betting spread**
+(first-play WP ranges 0.008–0.976 before any score; the files carry `homeTeamSpread`, `pos_team_spread`,
+`spread_time`). A cut on it would choose which plays count by the market line, against the first model rule. So
+T5b uses **our own WP model with no line in it** (user's choice, 2026-11-18). Also found: with their WP, even a 1–99%
+cut drops 19% of scrimmage plays vs ~9% for CFBD's rule; the files have no yardage-based success column.
+
+- **Question:** does a smoother, situation-aware garbage-time rule (win probability from score, time, down, distance,
+  field position) give better ratings than CFBD's score-margin-by-quarter rule? Expected: small; a market-free WP is
+  close to a smoothed version of CFBD's rule.
+- **WP model (fixed now):** logistic regression, outcome = `pos_team` won the game (final score from `games`, matched
+  by ESPN id). Inputs: pos-team score margin before the play; margin ÷ (minutes left in regulation + 1); minutes left
+  ÷ 60; down (1–4 as dummies); distance; yards to goal; home (+1 / 0 neutral / −1). **No spread, no team strength.**
+  Regulation scrimmage plays only. For season S the model is fit on seasons 2016 … S−1 (2016's own plays are scored
+  with a model fit on 2016, used only as faded prior games for 2017). Reported: log loss and calibration on each
+  scored season.
+- **Cut (fixed now as a rule, computed before any metric):** keep a play if our WP for the possessing team is within
+  [c, 1 − c]. c is the value from {1, 2, 2.5, 3, 4, 5, 7.5, 10}% whose pooled share of dropped scrimmage plays in
+  2016–2020 is closest to CFBD's (1 − CFBD `plays` ÷ play-by-play scrimmage plays, same team-games). Matching the share
+  makes this a test of *which* plays count, not *how many*. OT plays are left out.
+- **Metrics (replace six of v5's seven):** per team-game on kept scrimmage plays with the pass or rush flag (sacks
+  count as pass, as in the files): `epa_per_play` = mean EPA; `success_rate` = CFBD's yardage rule (1st down 50%,
+  2nd 70%, 3rd/4th 100% of the distance, on `statYardage`); `explosiveness` = mean EPA on successful plays;
+  `pass_epa`, `rush_epa` = mean EPA by type; `plays` = kept plays. `points` stays the final score (unchanged).
+  The two EPA models are never mixed: team-games without play-by-play are left out of these six metrics' fits
+  (no CFBD fallback).
+- **Candidate:** v5 with those six metrics' ratings replaced (same `fit_ratings`, same copied `ratings_as_of`
+  weighting, checked again), same feature names, LinearRegression refit, walk-forward 2018–25; baseline replay check.
+- **Rule:** the accuracy rule, as T5a / T-OCDC.
+- **Reported, not judged:** c and the drop shares; WP log loss; correlation of each rebuilt metric with CFBD's; Rule C
+  items; total MAE; weeks 0–4 MAE; coverage; by-season results.
+- **No variants after results** (no other c, no other WP inputs, no mixing with CFBD metrics). A fail puts WP garbage
+  time on the don't-retry list.
+- **Live use, if ever adopted:** weekly play-by-play download + our WP model + a loader; not built.
+
+### T5b result (run 2026-11-18, scratch `t5b/t5b.py`, 276 s, nothing written to the DB, 0 calls): **rejected**
+First attempt stopped before judging (a script bug: `fit_ratings` weights team-games by `plays` and the column had been
+renamed). Fixed by keeping CFBD's `plays` for the weighting check and using the rebuilt `plays` as the weight for the
+six rebuilt metrics (plays is one of the six replaced); rerun from the start. Checks: baseline replay mean |diff|
+0.0025; copied weighting max |diff| 0.0.
+
+- Our WP model (no line): out-of-sample log loss 0.376–0.431 by season; first-play WP 0.08–0.94 (vs 0.008–0.976 with
+  the spread). Cut rule chose **c = 1%** (closest in the list), but it still drops **15.0%** of plays vs CFBD's 8.6%
+  (2016–20), so the "same amount, different plays" aim was only partly met; c stands (no variants).
+- Rebuilt vs CFBD per team-game: r = 0.91 EPA/play, 0.97 success, 0.63 explosiveness, 0.88 pass, 0.84 rush, 0.94 plays.
+
+| Rule item | Base (v5) | Rebuilt metrics | Pass |
+|---|---|---|---|
+| 1a spread MAE pooled (n = 4,433) | 12.826 | 12.876 | **no** |
+| 1b MAE better by season | | **0 of 5** (+0.022 / +0.056 / +0.072 / +0.089 / +0.009) | **no** |
+| 2a Δ result slope at the open | 0.113 | 0.110 (−0.3 SE) | yes |
+| 2b ATS 3+ at the open | 52.41% (n = 2,093) | 51.54% (n = 2,117) | yes (−0.87 pp) |
+| 2c CLV % | 52.65 | 51.67 | yes (−0.98 pp) |
+| 2d CLV points | 0.562 | 0.517 (−0.045 ± 0.018, **−2.5 SE**) | **no** |
+
+Information only: line-move slope −4.6 SE; weeks 0–4 MAE 12.900 → 12.919; total MAE 12.969 → 12.979 (worse in 3 of 5);
+lines moved 0.87 pts on average; line SD 13.65 → 13.46.
+
+Reading: CFBD's metrics (their EPA model + their score-based garbage rule) beat the play-by-play EPA model + our
+market-free WP cut on every measure. The test can't separate the two parts (different EPA model and different cut at
+once, and the cut drops more plays), but no part of the result suggests a gain to chase. **Win-probability garbage
+time and the sportsdataverse EPA model go on the don't-retry list for the ratings.** Round 2's play-by-play line is
+closed (T5a rejected, T5b rejected); T2(b) state-space is the last round-2 candidate.
