@@ -450,6 +450,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   the whole update (4 CFBD calls wasted that morning, 626 → 622). **Fixed the same day** (Claude typed it at the
   user's request, rule unchanged): `status.ran_ok_today(job)` reads `job_runs` (today in `TZ`), `daily_retry` uses it,
   `last_daily_ok` removed. A skipped (off-season) run counts as OK, so it isn't retried.
+  Step 4 done 2026-11-18: `/api/admin/settings/books` (user-typed), editor on `/admin`, bet form reads the setting
+  (`bet_dialog(bettable_books)`). **Open for step 5:** picks' "best number/price" (`market_now` best_*, `pick_log`)
+  comes from EVERY book in the feed (Bovada included), not only the bettable ones, contrary to the "Bettable open"
+  rule above. Restricting it changes what `pick_log` records: decide as a logged pick-rule change.
 - **UI ideas (user, 2026-11-18; 2–4 done the same day on both predictions pages: sort in
   `static/predictions-sort.js`, `lean_badge` macro, rate label "52% in backtest (W–L)"):**
   1. *Results page updates more often.* `pick_results` is a plain view, but college final scores reach `games` only

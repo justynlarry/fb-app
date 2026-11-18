@@ -18,8 +18,10 @@
   function remembered(key) { try { return localStorage.getItem(key) || ""; } catch (e) { return ""; } }
   function remember(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
 
-  // Only books the user can bet at are prefilled (Bovada and the rest are reference lines only)
-  var BETTABLE = ["MyBookie", "DraftKings", "FanDuel", "BetMGM", "Caesars", "Fanatics"];
+  // Only books the user can bet at are prefilled (the bettable-books setting on the admin page);
+  // Bovada and the rest are reference lines only
+  var BETTABLE = [];
+  try { BETTABLE = JSON.parse(dialog.dataset.books || "[]"); } catch (e) {}
   function bookOrLast(name) { return BETTABLE.indexOf(name) >= 0 ? name : remembered("betBook"); }
 
   function chooseSide(value) { (sideA.value === value ? sideA : sideB).checked = true; }

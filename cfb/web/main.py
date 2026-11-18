@@ -847,6 +847,11 @@ class UserChangeIn(BaseModel):
     action: Literal["reset", "disable", "enable", "make-admin", "remove-admin"]
 
 
+class BooksIn(BaseModel):
+    """The bettable-books list from the admin page."""
+    books: list[str] = Field(min_length=1, max_length=20)
+
+
 def admin_status():
     """Everything the admin status panel shows (read-only)."""
     with connect() as conn:
@@ -908,6 +913,21 @@ def admin_change_user(request: Request, form: UserChangeIn):
     except UserError as err:
         raise HTTPException(status_code=400, detail=str(err)) from None
     return {"done": form.action}
+
+
+@app.post("/api/admin/settings/books")
+def admin_save_books(request: Request, form: BooksIn):
+    """Save the list of books users can actually bet at."""
+    require_admin(request)
+    books = []
+    for name in form.books:
+        name = name.strip()
+        if not name or len(name) > 40:
+            raise HTTPException(status_code=400, detail="Each book needs a name of 1 to 40 characters.")
+        if name.lower() not in [b.lower() for b in books]:
+            books.append(name)
+    app_settings.set_value("bettable_books", books, request.state.user["id"])
+    return {"books": books}
 
 
 def backtest_summary(group, include_2020, version=MODEL_VERSION):
@@ -1104,7 +1124,7 @@ def predictions_page(request: Request, season: int | None = None, week: int | No
         request,
         "predictions.html",
         {"games": games, "pick_rates": pick_rates, "version": MODEL_VERSION, "active": "predictions",
-         "week_nav": week_nav, "league": "cfb"},
+         "week_nav": week_nav, "league": "cfb", "bettable_books": app_settings.get("bettable_books")},
     )
 
 
@@ -1126,6 +1146,7 @@ def nfl_predictions_page(request, season, week, season_type):
         request,
         "nfl_predictions.html",
         {"games": games, "version": NFL_MODEL_VERSION, "active": "predictions", "league": "nfl",
+         "bettable_books": app_settings.get("bettable_books"),
          "pick_rates": {r["tier"]: r for r in rates},
          "week_nav": make_week_nav(games, weeks, current, season, week, season_type)},
     )

@@ -653,3 +653,14 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .status-jobs td.job-result { white-space: normal; max-width: 32rem; }
 .status-data { width: auto; }
 .plain-list { margin: 0.25rem 0 0.5rem; padding-left: 1.1rem; line-height: 1.7; }
+.books-form { max-width: 24rem; }
+.field textarea {
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+  resize: vertical;
+}

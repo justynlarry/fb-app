@@ -12,8 +12,8 @@
 {%- set me = request.state.user %}
 <div class="page-head">
   <h1>Admin</h1>
-  <p class="muted">Worker status, accounts and settings. Bettable books, pick rules and schedules become editable
-    here as they're built; for now they're shown read-only.</p>
+  <p class="muted">Worker status, settings and accounts. Pick rules and schedules become editable here as they're
+    built; for now they're shown read-only.</p>
 </div>
 
 {%- set st = status %}
@@ -81,13 +81,29 @@
     </table>
   </div>
 
-  <h3 class="sub-title">Rules and books <span class="muted small">(read-only for now)</span></h3>
+  <h3 class="sub-title">Pick rules <span class="muted small">(read-only for now)</span></h3>
   <ul class="plain-list small">
     <li>Play: <strong>{{ '%g'|format(st.settings.play_gap) }}+</strong> points off the market ·
         totals info at <strong>{{ '%g'|format(st.settings.total_gap) }}+</strong> ·
         a line "moved" at <strong>{{ '%g'|format(st.settings.move_min) }}+</strong></li>
-    <li>Bettable books: {{ st.settings.bettable_books|join(', ') }}</li>
   </ul>
+</section>
+
+<section class="panel" aria-labelledby="books-title">
+  <h2 id="books-title">Bettable books</h2>
+  <p class="muted small">Books you can actually bet at. They're suggested in the Bet form's Book field, and only these
+    are prefilled from a pick's best price. Every other book in the odds feed (Bovada, BetOnline…) stays a reference
+    line. This doesn't change how picks are priced or recorded.</p>
+  <form id="books-form" class="books-form" novalidate>
+    <label class="field">
+      <span>One book per line, in the order you want them suggested</span>
+      <textarea id="books" rows="{{ [st.settings.bettable_books|length + 1, 4]|max }}" spellcheck="false">{{ st.settings.bettable_books|join('\n') }}</textarea>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="primary">Save books</button>
+      <span class="form-message" id="books-message" role="status"></span>
+    </div>
+  </form>
 </section>
 
 <section class="panel" aria-labelledby="accounts-title">
@@ -175,6 +191,37 @@
     span.className = "muted small";
     span.textContent = " (" + ago + " ago)";
     el.appendChild(span);
+  });
+})();
+
+// Bettable books: one per line
+(function () {
+  var form = document.getElementById("books-form");
+  var message = document.getElementById("books-message");
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var books = document.getElementById("books").value.split("\n")
+      .map(function (b) { return b.trim(); })
+      .filter(function (b) { return b.length > 0; });
+    if (!books.length) { message.textContent = "Keep at least one book."; message.classList.add("error"); return; }
+    message.textContent = "Saving…";
+    message.classList.remove("error");
+    fetch("/api/admin/settings/books", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ books: books })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (body) { return { ok: r.ok, body: body }; });
+    }).then(function (res) {
+      if (!res.ok) {
+        var d = res.body && res.body.detail;
+        message.textContent = typeof d === "string" ? d : "Couldn't save the list.";
+        message.classList.add("error");
+        return;
+      }
+      document.getElementById("books").value = res.body.books.join("\n");
+      message.textContent = "Saved " + res.body.books.length + " books.";
+    }).catch(function () { message.textContent = "Couldn't reach the server."; message.classList.add("error"); });
   });
 })();
 

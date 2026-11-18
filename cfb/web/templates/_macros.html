@@ -91,9 +91,10 @@
 {%- endmacro -%}
 
 {#- The bet form, once per page (static/bet-form.js runs it).  The line is typed for the side bet on
-    ("+3.5"); the script converts spreads to the home team's number before saving. -#}
-{%- macro bet_dialog() -%}
-<dialog id="bet-dialog" class="bet-dialog" aria-labelledby="bet-title">
+    ("+3.5"); the script converts spreads to the home team's number before saving.
+    books = the bettable-books setting (admin page): suggested in the Book field, and the only books prefilled. -#}
+{%- macro bet_dialog(books) -%}
+<dialog id="bet-dialog" class="bet-dialog" aria-labelledby="bet-title" data-books="{{ books|tojson|forceescape }}">
   <form id="bet-form" class="bet-form" novalidate>
     <div class="bet-head">
       <h2 id="bet-title">Log a bet</h2>
@@ -124,10 +125,9 @@
     </label>
     <label class="field">
       <span>Book</span>
-      <input type="text" id="bet-book" list="bet-books" maxlength="40" autocomplete="off" placeholder="MyBookie">
+      <input type="text" id="bet-book" list="bet-books" maxlength="40" autocomplete="off" placeholder="{{ books[0] if books else '' }}">
       <datalist id="bet-books">
-        <option value="MyBookie"></option><option value="DraftKings"></option><option value="FanDuel"></option>
-        <option value="BetMGM"></option><option value="Caesars"></option><option value="Fanatics"></option>
+        {%- for b in books %}<option value="{{ b }}"></option>{% endfor %}
       </datalist>
     </label>
     <label class="field">
