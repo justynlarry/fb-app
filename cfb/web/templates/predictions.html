@@ -36,6 +36,12 @@
 {% block content %}
 {%- set rates = pick_rates if pick_rates is defined else {} %}
 {%- set rules = rules if rules is defined else {'play_gap': 3.0, 'total_gap': 3.0, 'move_min': 0.5} %}
+{#- Display note (plan-2027.md, added 2026-11-18): in weeks played 3-9 the frozen stack runs steep, so a gap there is worth
+    less than it looks. Factor = calibration slope (result on our line) by weeks played, from plan-2026-11-18.md D-EARLY
+    (v5 + T1 rows 2021-25; T-OCDC barely changes it). Display only: tiers and recorded picks use the gap as computed.
+    Keyed by model version, so nothing shows for v5. Update from freeze_check.py's own v6 calibration in August. -#}
+{%- set steep_by_version = {'v6': {3: 0.846, 4: 0.846, 5: 0.872, 6: 0.872, 7: 0.872, 8: 0.872, 9: 0.872}} %}
+{%- set steep = steep_by_version.get(version, {}) %}
 {%- set nav = week_nav if week_nav is defined else none %}
 <div class="page-head page-head-row">
   <div>
@@ -263,6 +269,8 @@
                 not tracked (picks are recorded from Nov 12 on)
               {%- else -%}
                 {{- '%.1f'|format(pk.gap|float) }} pts off the line
+                {%- set factor = steep.get(g.weeks_played|int) if g.weeks_played is not none else none %}
+                {%- if factor %} <span class="effective" title="In weeks 3–9 our lines run about {{ '%.0f'|format((1 - factor) * 100) }}% steep (backtest calibration {{ factor }}), so this gap is worth about {{ '%.1f'|format(pk.gap|float * factor) }} points. Display only: the tier uses the gap as shown.">(≈ {{ '%.1f'|format(pk.gap|float * factor) }} effective)</span>{% endif %}
                 {%- if has_open and odiff|abs >= 0.5 %} · {{ '%.1f'|format(odiff|abs) }} at open{% endif -%}
                 {%- if tier == 'caution' %} · market moving the other way: check news{% endif -%}
               {%- endif -%}
@@ -328,6 +336,10 @@
     <span class="news-flag">Check news</span> 5+ apart: our biggest gaps have done worst (41% at the close in 2026),
     usually because of an injury or QB change the model can't see. Check before betting and enter an override if needed.
     <span class="tier tier-pass">Pass</span> under {{ '%g'|format(rules.play_gap) }} points, including when the market has already moved to our number.
+    {%- if steep %}
+    "≈ effective": in weeks 3–9 of the season model {{ version }}'s lines run 13–15% steep in the backtest, so a gap
+    there is worth a bit less than it looks (a 3-point gap ≈ 2.6). Shown for information; tiers use the gap as computed.
+    {%- endif %}
     <span class="tier tier-info">Info</span> totals {{ '%g'|format(rules.total_gap) }}+ apart; for display only, our totals haven't beaten the market.
     Under 3 apart, a grey "O/U lean" line shows which way our total leans (not recorded or graded).
   </p>

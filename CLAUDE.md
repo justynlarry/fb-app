@@ -711,6 +711,9 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   unchanged):** `cfb/paper_features.py` (`add_t4_columns`: 8 cached advanced stats rated like v5; `state_space_rows`:
   Kalman ratings at the frozen `STATE_PARAMS`, filter from 2016, T1 columns rebuilt), `paper.ROW_BUILDERS`,
   `model.VERSION_FEATURES` entries; checked against the research scripts column for column.
+  **Builds #5 / #6 (2026-11-19, Claude typed them at the user's request, rule unchanged):** `cfb/report_2027.py`
+  (read-only report: median line moves, totals agree tag, Test 1 weeknight, Test L's X, DK lookahead; dry run on 2026 OK,
+  B1 at bet time empty until B1's first full week); weeks 3–9 "≈ effective" gap note on the predictions page, keyed to v6.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.
