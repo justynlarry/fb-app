@@ -20,7 +20,8 @@ from cfb import settings as app_settings
 from cfb.backfill import refresh_recent_qbs
 from cfb.db import connect
 from cfb.load import refresh_season
-from cfb.model import predict_upcoming
+from cfb import paper
+from cfb.model import build_rows, predict_upcoming
 from cfb.odds import save_snapshot
 from cfb.picks import record_picks
 from cfb.status import job_run, ran_ok_today
@@ -85,12 +86,33 @@ def daily_update():
         try:
             refresh_season(season)
             refresh_recent_qbs(season)
-            predict_upcoming(season)
+            rows = build_rows(season)       # built once, shared with the paper models below
+            predict_upcoming(season, rows=rows)
             update_forecasts()
             run.message = f"refreshed {season}, re-predicted, weather saved"
         except Exception as err:
             print(f"daily update FAILED: {err!r}")
             run.fail(repr(err))
+            return
+    paper_models(season, rows)
+
+
+def paper_models(season, rows):
+    """The paper models (cfb/paper.py), after the live prediction so a failure here can't touch it; then the
+    health check.  Each is its own job_runs row ('paper_models', 'paper_check')."""
+    with job_run("paper_models") as run:
+        try:
+            saved, errors = paper.run(season, rows)
+            run.message = ", ".join(f"{v} {n}" for v, n in saved.items())
+            for e in errors:
+                run.fail(e)
+        except Exception as err:
+            print(f"paper models FAILED: {err!r}")
+            run.fail(repr(err))
+    try:
+        paper.check(season)
+    except Exception as err:
+        print(f"paper check FAILED: {err!r}")
 
 
 def daily_retry():

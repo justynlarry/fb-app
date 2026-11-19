@@ -1,4 +1,5 @@
 """Web UI. Pages only read from Postgres; the worker does all the fetching."""
+import hmac
 import ipaddress
 import os
 from datetime import datetime
@@ -15,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
-from cfb import coordinators, schedule
+from cfb import coordinators, paper, schedule
 from cfb import settings as app_settings
 from cfb.auth import (
     SESSION_DAYS,
@@ -95,6 +96,8 @@ async def require_login(request: Request, call_next):
         return PlainTextResponse("Forbidden", status_code=403)
     if path == "/login" or path.startswith("/static/"):
         return await call_next(request)
+    if path == "/metrics":
+        return metrics(request)     # its own check: a bearer token, LAN only (no login session)
 
     with connect() as conn:
         user = session_user(conn, request.cookies.get(SESSION_COOKIE))
@@ -112,6 +115,29 @@ async def require_login(request: Request, call_next):
 
     request.state.user = user
     return await call_next(request)
+
+
+def metrics(request: Request):
+    """Prometheus scrape: paper-model rows and the worker jobs' last runs (cfb/paper.py metrics_text).
+    Off (404) unless METRICS_TOKEN is set in .env; needs "Authorization: Bearer <METRICS_TOKEN>"; refused through
+    Cloudflare (a CF-Connecting-IP header), so it's reachable only on the LAN address."""
+    token = os.environ.get("METRICS_TOKEN", "")
+    if not token or request.method != "GET":
+        return PlainTextResponse("Not Found", status_code=404)
+    if request.headers.get("cf-connecting-ip"):
+        return PlainTextResponse("Forbidden", status_code=403)
+    given = request.headers.get("authorization", "")
+    if not hmac.compare_digest(given.encode(), f"Bearer {token}".encode()):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    today = datetime.now()
+    season = today.year if today.month >= 8 else today.year - 1     # January bowls belong to last fall's season
+    with connect() as conn:
+        in_season = conn.execute(
+            """SELECT EXISTS (SELECT 1 FROM games WHERE league = 'cfb' AND season = %s
+                              AND start_time BETWEEN now() - interval '3 days' AND now() + interval '10 days')""",
+            (season,),
+        ).fetchone()[0]
+    return PlainTextResponse(paper.metrics_text(season, in_season), media_type="text/plain; version=0.0.4")
 
 
 # One week's games for one league (FBS only for college) with their latest live snapshot (if any).

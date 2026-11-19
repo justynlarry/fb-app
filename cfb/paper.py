@@ -1,0 +1,184 @@
+"""Paper models: predicted every morning beside the live model, stored in paper_predictions (030), never used for a
+pick or shown as our line (docs/plan-2027.md section 4).  Their records judge the 2027 hypotheses (H-T4, H-T2b,
+H-AVG, H-TOT-B1), graded at bet time from the morning row in force then.
+
+    docker compose exec worker python -m cfb.paper 2026          # predict now (replaces today's rows)
+    docker compose exec worker python -m cfb.paper 2026 --check  # only the health check
+
+The worker runs it inside the college daily update (job 'paper_models'), sharing that morning's walk-forward rows,
+then checks that every version wrote its rows (job 'paper_check'; a failed check shows on /admin and in /metrics).
+"""
+
+import os
+import sys
+
+from cfb import benchmark
+from cfb import model
+from cfb.db import connect
+from cfb.status import job_run
+
+TZ = os.environ.get("TZ", "America/Denver")
+
+# Points-model versions on paper.  The live model (model.MODEL_VERSION) is skipped here, so at the 2027 freeze
+# MODEL_VERSION becomes "v6" and "v5" keeps running on paper with no change to this list.
+# "v6-ht4" and "v6-ht2b" are added when they are built (each needs its own code in cfb/model.py).
+POINTS_VERSIONS = ["v6", "v5"]
+
+
+def points_versions():
+    return [v for v in POINTS_VERSIONS if v != model.MODEL_VERSION and v in model.VERSION_FEATURES]
+
+
+def all_versions():
+    """Every paper version that should write rows each morning."""
+    return points_versions() + [benchmark.VERSION]
+
+
+def save(games, version):
+    """Store one morning's predictions (rows from model.pair_predictions or benchmark.upcoming_predictions)."""
+    with connect() as conn:
+        for g in games.itertuples():
+            home_pts, away_pts = float(g.home_points), float(g.away_points)
+            conn.execute(
+                """
+                INSERT INTO paper_predictions (game_id, model_version, run_date, home_points, away_points,
+                                               spread, total, weeks_played)
+                VALUES (%s, %s, (now() AT TIME ZONE %s)::date, %s, %s, %s, %s, %s)
+                ON CONFLICT (game_id, model_version, run_date) DO UPDATE SET
+                    created_at   = now(),
+                    home_points  = EXCLUDED.home_points,
+                    away_points  = EXCLUDED.away_points,
+                    spread       = EXCLUDED.spread,
+                    total        = EXCLUDED.total,
+                    weeks_played = EXCLUDED.weeks_played
+                """,
+                (int(g.game_id), version, TZ, round(home_pts, 2), round(away_pts, 2),
+                 round(away_pts - home_pts, 2), round(home_pts + away_pts, 2), int(g.weeks_played)),
+            )
+    return len(games)
+
+
+def run(season, rows=None):
+    """Predict every paper version for the season's upcoming games.  Each version runs on its own, so one failure
+    doesn't stop the others.  Returns ({version: games saved}, [errors])."""
+    saved, errors = {}, []
+    for version in points_versions():
+        try:
+            if rows is None:
+                rows = model.build_rows(season)
+            saved[version] = save(model.upcoming_predictions(rows, season, version), version)
+        except Exception as err:
+            errors.append(f"{version}: {err!r}")
+    try:
+        saved[benchmark.VERSION] = save(benchmark.upcoming_predictions(season), benchmark.VERSION)
+    except Exception as err:
+        errors.append(f"{benchmark.VERSION}: {err!r}")
+    print(f"paper models: {saved}" + (f", errors: {errors}" if errors else ""))
+    return saved, errors
+
+
+# For each paper version: rows written today, and the live model's upcoming games for comparison.
+# A paper version is short if it wrote nothing today, or fewer rows than 90% of the live model's upcoming games
+# (B1 can miss a few games the points model rates, and vice versa; a real failure writes none or few).
+HEALTH_SQL = """
+WITH upcoming AS (
+    SELECT id FROM games WHERE league = 'cfb' AND season = %(season)s AND start_time > now()
+),
+live AS (
+    SELECT count(*) AS n
+    FROM predictions p JOIN upcoming u ON u.id = p.game_id
+    WHERE p.model_version = %(live)s AND NOT p.is_backtest
+)
+SELECT v.version,
+       count(pp.game_id) FILTER (WHERE pp.run_date = (now() AT TIME ZONE %(tz)s)::date) AS rows_today,
+       extract(epoch FROM now() - max(pp.created_at))::int AS newest_age_seconds,
+       (SELECT n FROM live) AS live_upcoming
+FROM unnest(%(versions)s::text[]) AS v(version)
+LEFT JOIN paper_predictions pp ON pp.model_version = v.version
+GROUP BY v.version
+ORDER BY v.version
+"""
+
+
+def health(season):
+    """[{version, rows_today, newest_age_seconds, live_upcoming, ok}] for every paper version."""
+    with connect() as conn:
+        rows = conn.execute(HEALTH_SQL, {"season": season, "live": model.MODEL_VERSION, "tz": TZ,
+                                         "versions": all_versions()}).fetchall()
+    out = []
+    for version, rows_today, age, live in rows:
+        ok = rows_today > 0 and rows_today >= 0.9 * (live or 0)
+        out.append({"version": version, "rows_today": rows_today, "newest_age_seconds": age,
+                    "live_upcoming": live, "ok": ok})
+    return out
+
+
+def check(season):
+    """The daily health check, recorded in job_runs as 'paper_check' (not OK if any version is short)."""
+    with job_run("paper_check") as run:
+        result = health(season)
+        short = [f"{h['version']} {h['rows_today']}/{h['live_upcoming']}" for h in result if not h["ok"]]
+        if short:
+            run.fail("short: " + ", ".join(short))
+        else:
+            run.message = ", ".join(f"{h['version']} {h['rows_today']}" for h in result)
+        print("paper check:", run.message)
+    return result
+
+
+def metrics_text(season, in_season):
+    """Prometheus text format for /metrics: paper-model rows and every worker job's last run."""
+    lines = [
+        "# HELP sports_in_season 1 if college games are within 3 days back / 10 ahead (paper models expected), else 0.",
+        "# TYPE sports_in_season gauge",
+        f"sports_in_season {1 if in_season else 0}",
+        "# HELP sports_paper_rows_today Paper-model predictions written today (local day), per version.",
+        "# TYPE sports_paper_rows_today gauge",
+    ]
+    result = health(season)
+    for h in result:
+        lines.append(f'sports_paper_rows_today{{version="{h["version"]}"}} {h["rows_today"]}')
+    lines += ["# HELP sports_paper_ok 1 if the version wrote at least 90% of the live model's upcoming games today.",
+              "# TYPE sports_paper_ok gauge"]
+    for h in result:
+        lines.append(f'sports_paper_ok{{version="{h["version"]}"}} {1 if h["ok"] else 0}')
+    lines += ["# HELP sports_paper_newest_age_seconds Seconds since the version's newest row (-1 = never written).",
+              "# TYPE sports_paper_newest_age_seconds gauge"]
+    for h in result:
+        age = h["newest_age_seconds"] if h["newest_age_seconds"] is not None else -1
+        lines.append(f'sports_paper_newest_age_seconds{{version="{h["version"]}"}} {age}')
+    lines += ["# HELP sports_live_upcoming_predictions The live model's predictions for upcoming college games.",
+              "# TYPE sports_live_upcoming_predictions gauge",
+              f"sports_live_upcoming_predictions {result[0]['live_upcoming'] if result else 0}"]
+
+    with connect() as conn:
+        jobs = conn.execute(
+            """
+            SELECT DISTINCT ON (job) job, ok, extract(epoch FROM now() - started_at)::int,
+                   extract(epoch FROM now() - max(started_at) FILTER (WHERE ok) OVER (PARTITION BY job))::int
+            FROM job_runs
+            WHERE finished_at IS NOT NULL
+            ORDER BY job, started_at DESC
+            """
+        ).fetchall()
+    lines += ["# HELP sports_job_last_ok 1 if the job's latest finished run was OK.", "# TYPE sports_job_last_ok gauge"]
+    lines += [f'sports_job_last_ok{{job="{job}"}} {1 if ok else 0}' for job, ok, _, _ in jobs]
+    lines += ["# HELP sports_job_last_run_age_seconds Seconds since the job's latest finished run started.",
+              "# TYPE sports_job_last_run_age_seconds gauge"]
+    lines += [f'sports_job_last_run_age_seconds{{job="{job}"}} {age}' for job, _, age, _ in jobs]
+    lines += ["# HELP sports_job_last_ok_age_seconds Seconds since the job's latest OK run started (-1 = never).",
+              "# TYPE sports_job_last_ok_age_seconds gauge"]
+    lines += [f'sports_job_last_ok_age_seconds{{job="{job}"}} {ok_age if ok_age is not None else -1}'
+              for job, _, _, ok_age in jobs]
+    return "\n".join(lines) + "\n"
+
+
+if __name__ == "__main__":
+    season = int(sys.argv[1])
+    if "--check" not in sys.argv:
+        with job_run("paper_models") as job:
+            saved, errors = run(season)
+            job.message = ", ".join(f"{v} {n}" for v, n in saved.items())
+            for e in errors:
+                job.fail(e)
+    check(season)

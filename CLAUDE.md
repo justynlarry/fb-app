@@ -700,6 +700,13 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   0.0025, v6 app vs research stack 0.0000 on 6,727 games. `cfb/freeze_check.py`: the August no-harm check (plan-2027
   2.2) with the fixed fallback order; **not run** (it is the August gate; no tests on 2021–25 before Dec 7). Coach career
   is a stub (`COACH_CAREER = False`) until 5A is decided and built.
+  **Build #3 (2026-11-18, Claude typed it at the user's request, rule unchanged):** paper models in their own table
+  `paper_predictions` (030), NOT `predictions` (the pages fall back to any version's prediction, and the 2027 tests
+  grade paper models at bet time, so every morning's row is kept). `cfb/paper.py` (versions, save, `health`, `check`,
+  `metrics_text`), `cfb/benchmark.py` (B1, matches research exactly). `model.build_rows` is built once in
+  `daily_update` and shared; paper models run after the live prediction (jobs `paper_models`, `paper_check`, shown on
+  /admin), so a paper failure can't touch v5. `/metrics` (Prometheus): only with `METRICS_TOKEN` in `.env`, bearer
+  token, refused through Cloudflare. v6-ht4 / v6-ht2b not built yet.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.

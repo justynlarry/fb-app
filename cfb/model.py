@@ -195,23 +195,33 @@ def train(rows, version=MODEL_VERSION):
     return model
 
 
-def save_predictions(model, rows, is_backtest, version=MODEL_VERSION):
-    """Predict every row, pair each game's two sides, and save one row per game."""
+def pair_predictions(model, rows, version=MODEL_VERSION):
+    """Predict every row and pair each game's two sides: one row per game with
+    game_id, home_points, away_points, weeks_played."""
     rows = rows.copy()
     rows["pred"] = model.predict(rows[VERSION_FEATURES[version]].astype(float))
-
     game_ids = [int(x) for x in rows["game_id"].unique()]
     with connect() as conn:
         home_ids = dict(
             conn.execute("SELECT id, home_id FROM games WHERE id = ANY(%s)", (game_ids,)).fetchall()
         )
-        rows["is_home"] = rows["team_id"] == rows["game_id"].map(home_ids)
-        home = rows[rows["is_home"]].set_index("game_id")
-        away = rows[~rows["is_home"]].set_index("game_id")
+    rows["is_home"] = rows["team_id"] == rows["game_id"].map(home_ids)
+    home = rows[rows["is_home"]].set_index("game_id")
+    away = rows[~rows["is_home"]].set_index("game_id")
+    return pd.DataFrame({
+        "home_points": home["pred"],
+        "away_points": away["pred"].reindex(home.index),
+        "weeks_played": home["weeks_played"],
+    }).rename_axis("game_id").reset_index()
 
-        for game_id in home.index:
-            home_pts = float(home.at[game_id, "pred"])
-            away_pts = float(away.at[game_id, "pred"])
+
+def save_predictions(model, rows, is_backtest, version=MODEL_VERSION):
+    """Predict every row, pair each game's two sides, and save one row per game."""
+    games = pair_predictions(model, rows, version)
+    with connect() as conn:
+        for g in games.itertuples():
+            home_pts = float(g.home_points)
+            away_pts = float(g.away_points)
             conn.execute(
                 """
                 INSERT INTO predictions (game_id, model_version, home_points, away_points,
@@ -229,17 +239,17 @@ def save_predictions(model, rows, is_backtest, version=MODEL_VERSION):
                 WHERE predictions.is_backtest OR NOT EXCLUDED.is_backtest
                 """,
                 (
-                    int(game_id),
+                    int(g.game_id),
                     version,
                     round(home_pts, 2),
                     round(away_pts, 2),
                     round(away_pts - home_pts, 2),      # home side: negative = home favored
                     round(home_pts + away_pts, 2),
-                    int(home.at[game_id, "weeks_played"]),
+                    int(g.weeks_played),
                     is_backtest,
                 ),
             )
-    return len(home)
+    return len(games)
 
 
 def backtest(first_season=2018, last_season=2025, version=MODEL_VERSION):
@@ -255,26 +265,46 @@ def backtest(first_season=2018, last_season=2025, version=MODEL_VERSION):
         print(f"  {season}: {saved} games predicted")
 
 
-def predict_upcoming(season, first_training_season=2017, version=MODEL_VERSION):
-    """Train on every finished game so far and save predictions for games that haven't kicked off.
-
-    Re-running updates those predictions with the latest data. Once a game kicks off it's
-    no longer 'upcoming', so its last pre-game prediction stays as the permanent record.
-    """
-    print("building walk-forward rows (a few minutes)...")
-    all_rows = pd.concat(
-        [season_rows(s) for s in range(first_training_season, season + 1)],
-        ignore_index=True,
-    )
-    model = train(all_rows, version)        # train() skips games without a final score
-
+def upcoming_game_ids(season):
+    """Games of this season that haven't kicked off."""
     with connect() as conn:
-        not_started = {
+        return {
             row[0]
             for row in conn.execute(
                 "SELECT id FROM games WHERE season = %s AND start_time > now()", (season,)
             ).fetchall()
         }
-    upcoming = all_rows[all_rows["game_id"].isin(not_started)]
+
+
+def build_rows(season, first_training_season=2017):
+    """Walk-forward rows for every season from first_training_season to this one (a few minutes).
+    Built once each morning and shared by the live model and the paper models."""
+    print("building walk-forward rows (a few minutes)...")
+    return pd.concat(
+        [season_rows(s) for s in range(first_training_season, season + 1)],
+        ignore_index=True,
+    )
+
+
+def upcoming_predictions(rows, season, version):
+    """Train this version on every finished game and predict the season's games that haven't kicked off
+    (one row per game, as pair_predictions)."""
+    model = train(rows, version)            # train() skips games without a final score
+    upcoming = rows[rows["game_id"].isin(upcoming_game_ids(season))]
+    return pair_predictions(model, upcoming, version)
+
+
+def predict_upcoming(season, first_training_season=2017, version=MODEL_VERSION, rows=None):
+    """Train on every finished game so far and save predictions for games that haven't kicked off.
+
+    Re-running updates those predictions with the latest data. Once a game kicks off it's
+    no longer 'upcoming', so its last pre-game prediction stays as the permanent record.
+    Pass rows (from build_rows) to reuse rows already built this morning.
+    """
+    if rows is None:
+        rows = build_rows(season, first_training_season)
+    model = train(rows, version)            # train() skips games without a final score
+    upcoming = rows[rows["game_id"].isin(upcoming_game_ids(season))]
     saved = save_predictions(model, upcoming, is_backtest=False, version=version)
     print(f"{saved} upcoming games predicted ({version})")
+    return saved
