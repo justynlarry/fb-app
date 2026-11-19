@@ -119,3 +119,71 @@ def upcoming_predictions(season):
                 out.append({"game_id": gid, "home_points": (total - spread) / 2, "away_points": (total + spread) / 2,
                             "weeks_played": wp})
     return pd.DataFrame(out, columns=["game_id", "home_points", "away_points", "weeks_played"])
+
+
+# ------------------------------------------------------------------------------------------------------------- NFL
+# NFL B1 (plan-2027 section 8.3, N-TOT-B1): the same idea on NFL closing lines (nflverse's one number per game, in
+# `lines` as provider 'nflverse'), weighted like nfl-v3's ratings (half-life 6, last season faded out over 12 weeks,
+# last season's games at weight 0.5), ridge alpha 1.  Spread exactly as T-OPEN-B's B1; total = T_home + T_away + c,
+# as college's B1-total.  Fit on games that kicked off before the cutoff (the NFL bet time); computed at judging.
+NFL_HALF_LIFE, NFL_LAST_WEIGHT, NFL_PRIOR_WEEKS = 6, 0.5, 12
+
+NFL_GAMES_SQL = """
+SELECT g.id AS game_id, g.season, g.week, g.season_type, g.start_time, g.home_id, g.away_id, g.neutral_site,
+       l.spread::float AS close_s, l.over_under::float AS close_t
+FROM games g
+LEFT JOIN lines l ON l.game_id = g.id AND l.provider = 'nflverse'
+WHERE g.league = 'nfl' AND g.season BETWEEN %(first)s AND %(last)s
+"""
+
+
+def nfl_load(first, last):
+    with connect() as conn:
+        conn.row_factory = dict_row
+        G = pd.DataFrame(conn.execute(NFL_GAMES_SQL, {"first": first, "last": last}).fetchall()).set_index("game_id")
+    G["ns"] = (~G["neutral_site"].astype(bool)).astype(float)
+    return G
+
+
+def nfl_predictions(G, season, cutoff, game_ids):
+    """{game_id: (B1 spread, B1 total)} for these games, from closes of games that kicked off before the cutoff."""
+    regular = G[(G["season"] == season) & (G["season_type"] == "regular")]
+    wp = int((regular.groupby("week")["start_time"].max() < cutoff).sum())
+    cur = G[(G["season"] == season) & (G["start_time"] < cutoff)].copy()
+    week = cur["week"].where(cur["season_type"] == "regular", wp)
+    cur["w"] = 0.5 ** ((wp - week).clip(lower=0) / NFL_HALF_LIFE)
+    parts = [cur]
+    fade = max(0.0, 1 - wp / NFL_PRIOR_WEEKS)
+    if fade > 0:
+        last = G[G["season"] == season - 1].copy()
+        offseason_age = NFL_HALF_LIFE * np.log2(1 / NFL_LAST_WEIGHT)
+        last["w"] = fade * 0.5 ** (offseason_age / NFL_HALF_LIFE)
+        parts.append(last)
+    H = pd.concat(parts)
+    teams = sorted(set(G["home_id"]) | set(G["away_id"]))
+    ix = {t: k for k, t in enumerate(teams)}
+    n = len(teams)
+    out_s, out_t = {}, {}
+    hs = H.dropna(subset=["close_s"])
+    if len(hs):
+        X = np.zeros((len(hs), n + 1))
+        r = np.arange(len(hs))
+        X[r, hs["away_id"].map(ix).values] = 1
+        X[r, hs["home_id"].map(ix).values] = -1
+        X[:, n] = -hs["ns"].values
+        s = Ridge(alpha=1.0, fit_intercept=False).fit(X, hs["close_s"].values, sample_weight=hs["w"].values)
+    ht = H.dropna(subset=["close_t"])
+    if len(ht):
+        X = np.zeros((len(ht), n))
+        r = np.arange(len(ht))
+        X[r, ht["away_id"].map(ix).values] = 1
+        X[r, ht["home_id"].map(ix).values] += 1
+        t = Ridge(alpha=1.0, fit_intercept=True).fit(X, ht["close_t"].values, sample_weight=ht["w"].values)
+    out = {}
+    for gid in game_ids:
+        g = G.loc[gid]
+        a, h = ix[g["away_id"]], ix[g["home_id"]]
+        spread = float(s.coef_[a] - s.coef_[h] - s.coef_[n] * g["ns"]) if len(hs) else np.nan
+        total = float(t.coef_[a] + t.coef_[h] + t.intercept_) if len(ht) else np.nan
+        out[gid] = (spread, total)
+    return out

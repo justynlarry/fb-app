@@ -4,6 +4,7 @@ H-AVG, H-TOT-B1), graded at bet time from the morning row in force then.
 
     docker compose exec worker python -m cfb.paper 2026          # predict now (replaces today's rows)
     docker compose exec worker python -m cfb.paper 2026 --check  # only the health check
+    docker compose exec worker python -m cfb.paper 2026 --nfl    # NFL (also with --check)
 
 The worker runs it inside the college daily update (job 'paper_models'), sharing that morning's walk-forward rows,
 then checks that every version wrote its rows (job 'paper_check'; a failed check shows on /admin and in /metrics).
@@ -12,8 +13,11 @@ then checks that every version wrote its rows (job 'paper_check'; a failed check
 import os
 import sys
 
+import pandas as pd
+
 from cfb import benchmark
 from cfb import model
+from cfb import nfl_model
 from cfb import paper_features
 from cfb.db import connect
 from cfb.status import job_run
@@ -39,8 +43,21 @@ def points_versions():
 
 
 def all_versions():
-    """Every paper version that should write rows each morning."""
+    """Every college paper version that should write rows each morning."""
     return points_versions() + [benchmark.VERSION]
+
+
+# NFL (plan-2027 section 8.3): the champion's raw line (nfl-v3) and nfl-v2.  nfl-v3-wk is added when it's built.
+NFL_VERSIONS = ["nfl-v3", "nfl-v2"]
+
+
+def nfl_versions():
+    return [nfl_model.MODEL_VERSION] + [v for v in NFL_VERSIONS
+                                        if v != nfl_model.MODEL_VERSION and v in nfl_model.VERSION_FEATURES]
+
+
+def versions_for(league):
+    return nfl_versions() if league == "nfl" else all_versions()
 
 
 def save(games, version):
@@ -88,12 +105,32 @@ def run(season, rows=None):
     return saved, errors
 
 
+def nfl_frame(games):
+    """nfl_model.predict_games output (indexed by game_id) in the shape save() takes."""
+    return pd.DataFrame({"game_id": games.index, "home_points": games["home_pred"].values,
+                         "away_points": games["away_pred"].values, "weeks_played": games["weeks_played"].values})
+
+
+def run_nfl(season, rows=None):
+    """Predict every NFL paper version for the season's upcoming games.  Returns ({version: games saved}, [errors])."""
+    saved, errors = {}, []
+    for version in nfl_versions():
+        try:
+            if rows is None:
+                rows = nfl_model.season_rows_through(season)
+            saved[version] = save(nfl_frame(nfl_model.upcoming_predictions(rows, season, version)), version)
+        except Exception as err:
+            errors.append(f"{version}: {err!r}")
+    print(f"NFL paper models: {saved}" + (f", errors: {errors}" if errors else ""))
+    return saved, errors
+
+
 # For each paper version: rows written today, and the live model's upcoming games for comparison.
 # A paper version is short if it wrote nothing today, or fewer rows than 90% of the live model's upcoming games
 # (B1 can miss a few games the points model rates, and vice versa; a real failure writes none or few).
 HEALTH_SQL = """
 WITH upcoming AS (
-    SELECT id FROM games WHERE league = 'cfb' AND season = %(season)s AND start_time > now()
+    SELECT id FROM games WHERE league = %(league)s AND season = %(season)s AND start_time > now()
 ),
 live AS (
     SELECT count(*) AS n
@@ -111,56 +148,56 @@ ORDER BY v.version
 """
 
 
-def health(season):
-    """[{version, rows_today, newest_age_seconds, live_upcoming, ok}] for every paper version."""
+def health(season, league="cfb"):
+    """[{version, rows_today, newest_age_seconds, live_upcoming, ok}] for every paper version of the league."""
+    live = nfl_model.MODEL_VERSION if league == "nfl" else model.MODEL_VERSION
     with connect() as conn:
-        rows = conn.execute(HEALTH_SQL, {"season": season, "live": model.MODEL_VERSION, "tz": TZ,
-                                         "versions": all_versions()}).fetchall()
+        rows = conn.execute(HEALTH_SQL, {"season": season, "league": league, "live": live, "tz": TZ,
+                                         "versions": versions_for(league)}).fetchall()
     out = []
     for version, rows_today, age, live in rows:
         ok = rows_today > 0 and rows_today >= 0.9 * (live or 0)
         out.append({"version": version, "rows_today": rows_today, "newest_age_seconds": age,
-                    "live_upcoming": live, "ok": ok})
+                    "live_upcoming": live, "ok": ok, "league": league})
     return out
 
 
-def check(season):
-    """The daily health check, recorded in job_runs as 'paper_check' (not OK if any version is short)."""
-    with job_run("paper_check") as run:
-        result = health(season)
+def check(season, league="cfb"):
+    """The daily health check, recorded in job_runs as 'paper_check' ('paper_check_nfl'), not OK if any version is short."""
+    with job_run("paper_check_nfl" if league == "nfl" else "paper_check") as run:
+        result = health(season, league)
         short = [f"{h['version']} {h['rows_today']}/{h['live_upcoming']}" for h in result if not h["ok"]]
         if short:
             run.fail("short: " + ", ".join(short))
         else:
             run.message = ", ".join(f"{h['version']} {h['rows_today']}" for h in result)
-        print("paper check:", run.message)
+        print(f"paper check ({league}):", run.message)
     return result
 
 
 def metrics_text(season, in_season):
-    """Prometheus text format for /metrics: paper-model rows and every worker job's last run."""
-    lines = [
-        "# HELP sports_in_season 1 if college games are within 3 days back / 10 ahead (paper models expected), else 0.",
-        "# TYPE sports_in_season gauge",
-        f"sports_in_season {1 if in_season else 0}",
-        "# HELP sports_paper_rows_today Paper-model predictions written today (local day), per version.",
-        "# TYPE sports_paper_rows_today gauge",
-    ]
-    result = health(season)
-    for h in result:
-        lines.append(f'sports_paper_rows_today{{version="{h["version"]}"}} {h["rows_today"]}')
+    """Prometheus text format for /metrics: paper-model rows and every worker job's last run.
+    in_season = {"cfb": bool, "nfl": bool} (games within 3 days back / 10 ahead, so paper rows are expected)."""
+    lines = ["# HELP sports_in_season 1 if the league has games within 3 days back / 10 ahead (paper models expected).",
+             "# TYPE sports_in_season gauge"]
+    lines += [f'sports_in_season{{league="{lg}"}} {1 if on else 0}' for lg, on in in_season.items()]
+    result = health(season, "cfb") + health(season, "nfl")
+    label = lambda h: f'league="{h["league"]}",version="{h["version"]}"'
+    lines += ["# HELP sports_paper_rows_today Paper-model predictions written today (local day), per version.",
+              "# TYPE sports_paper_rows_today gauge"]
+    lines += [f'sports_paper_rows_today{{{label(h)}}} {h["rows_today"]}' for h in result]
     lines += ["# HELP sports_paper_ok 1 if the version wrote at least 90% of the live model's upcoming games today.",
               "# TYPE sports_paper_ok gauge"]
-    for h in result:
-        lines.append(f'sports_paper_ok{{version="{h["version"]}"}} {1 if h["ok"] else 0}')
+    lines += [f'sports_paper_ok{{{label(h)}}} {1 if h["ok"] else 0}' for h in result]
     lines += ["# HELP sports_paper_newest_age_seconds Seconds since the version's newest row (-1 = never written).",
               "# TYPE sports_paper_newest_age_seconds gauge"]
-    for h in result:
-        age = h["newest_age_seconds"] if h["newest_age_seconds"] is not None else -1
-        lines.append(f'sports_paper_newest_age_seconds{{version="{h["version"]}"}} {age}')
-    lines += ["# HELP sports_live_upcoming_predictions The live model's predictions for upcoming college games.",
-              "# TYPE sports_live_upcoming_predictions gauge",
-              f"sports_live_upcoming_predictions {result[0]['live_upcoming'] if result else 0}"]
+    lines += [f'sports_paper_newest_age_seconds{{{label(h)}}} '
+              f'{h["newest_age_seconds"] if h["newest_age_seconds"] is not None else -1}' for h in result]
+    lines += ["# HELP sports_live_upcoming_predictions The live model's predictions for the league's upcoming games.",
+              "# TYPE sports_live_upcoming_predictions gauge"]
+    for lg in ("cfb", "nfl"):
+        first = next((h for h in result if h["league"] == lg), None)
+        lines.append(f'sports_live_upcoming_predictions{{league="{lg}"}} {first["live_upcoming"] if first else 0}')
 
     with connect() as conn:
         jobs = conn.execute(
@@ -186,10 +223,11 @@ def metrics_text(season, in_season):
 
 if __name__ == "__main__":
     season = int(sys.argv[1])
+    league = "nfl" if "--nfl" in sys.argv else "cfb"
     if "--check" not in sys.argv:
-        with job_run("paper_models") as job:
-            saved, errors = run(season)
+        with job_run("paper_models_nfl" if league == "nfl" else "paper_models") as job:
+            saved, errors = run_nfl(season) if league == "nfl" else run(season)
             job.message = ", ".join(f"{v} {n}" for v, n in saved.items())
             for e in errors:
                 job.fail(e)
-    check(season)
+    check(season, league)

@@ -13,6 +13,7 @@ None of these decides anything during the season. Each is reported once after th
                   registered in docs/edge-plan-2026-11-16.md; slope of the line move on X, X in thirds
   dk_lookahead    Test F: our line against DraftKings' first-seen line when that line was posted before bet time
                   (a lookahead line), graded at DraftKings' number and price on 3+ gaps
+  nfl_tot_b1      NFL N-TOT-B1 (judged, plan-2027 8.3): Monday -> last median total move on nfl-v3's raw gap, B1 in
 Conference tier (Holdout T) is added only if Holdout T is "supported" on December 7.
 """
 
@@ -249,13 +250,60 @@ def dk_lookahead(season, version=MODEL_VERSION):
             "3+ gaps, finished, at DK's number and price": record(big["outcome"], big["units"])}
 
 
+# ------------------------------------------------------------------------------------------------- NFL N-TOT-B1
+# plan-2027 section 8.3: (last pre-kickoff median total - bet-time median total) = a * (nfl-v3 raw total at bet time -
+# bet-time median) + b * (NFL B1-total - bet-time median) + c.  Judged after the 2027 regular season: a >= 1.96 SE
+# (season-week bootstrap, 2,000).  nfl-v3's raw line = its paper_predictions row in force at bet time (no overrides).
+NFL_PICKS_SQL = """
+SELECT f.game_id, f.recorded_at, g.season, g.week, g.season_type,
+       f.market_total::float AS bet_tmedian, l.market_total::float AS last_tmedian,
+       (SELECT pp.total::float FROM paper_predictions pp
+        WHERE pp.game_id = f.game_id AND pp.model_version = 'nfl-v3' AND pp.created_at <= f.recorded_at
+        ORDER BY pp.created_at DESC LIMIT 1) AS ours
+FROM pick_results f
+JOIN games g ON g.id = f.game_id
+LEFT JOIN pick_results l ON l.game_id = f.game_id AND l.model_version = f.model_version AND l.taken = 'last'
+WHERE f.taken = 'first' AND f.model_version = 'nfl-v3' AND g.season = %(season)s AND g.league = 'nfl'
+"""
+
+
+def nfl_tot_b1(season, seed=2027):
+    from cfb import benchmark
+    p = query(NFL_PICKS_SQL, {"season": season})
+    if p.empty:
+        return {"games": 0}
+    G = benchmark.nfl_load(season - 1, season)
+    b1 = {}
+    for when, x in p.groupby("recorded_at"):
+        for gid, (_, total) in benchmark.nfl_predictions(G, season, when, list(x["game_id"])).items():
+            b1[gid] = total
+    d = p.assign(b1=p["game_id"].map(b1)).dropna(subset=["ours", "b1", "bet_tmedian", "last_tmedian"]).reset_index(drop=True)
+    out = {"bet-time picks": len(p), "games with all inputs": len(d)}
+    if len(d) < 20:
+        return out
+    g, gb, mv = (d["ours"] - d["bet_tmedian"]).values, (d["b1"] - d["bet_tmedian"]).values, (d["last_tmedian"] - d["bet_tmedian"]).values
+    def fit(i):
+        X = np.column_stack([g[i], gb[i], np.ones(len(i))])
+        return np.linalg.lstsq(X, mv[i], rcond=None)[0]
+    cl = (d["season"].astype(str) + d["season_type"] + d["week"].astype(str)).values
+    keys = np.unique(cl)
+    where = {k: np.where(cl == k)[0] for k in keys}
+    rng = np.random.default_rng(seed)
+    boots = np.array([fit(np.concatenate([where[k] for k in rng.choice(keys, len(keys))])) for _ in range(2000)])
+    a, b, _ = fit(np.arange(len(d)))
+    out.update({"a (our gap, B1 in)": f"{a:+.4f} ± {boots[:, 0].std():.4f} ({a / boots[:, 0].std():+.2f} SE; bar 1.96)",
+                "b (B1's gap)": f"{b:+.4f} ± {boots[:, 1].std():.4f}", "week clusters": len(keys)})
+    return out
+
+
 def report(season, version=MODEL_VERSION):
     p = bet_time_picks(season, version)
     if p.empty:
         return {"season": season, "version": version, "picks": 0}
     return {"season": season, "version": version, "bet-time picks": len(p),
             "line_moves": line_moves(p), "totals_agree": totals_agree(p, season, version),
-            "weeknight": weeknight(p, season), "luck": luck(p, season), "dk_lookahead": dk_lookahead(season, version)}
+            "weeknight": weeknight(p, season), "luck": luck(p, season), "dk_lookahead": dk_lookahead(season, version),
+            "nfl_tot_b1": nfl_tot_b1(season)}
 
 
 if __name__ == "__main__":

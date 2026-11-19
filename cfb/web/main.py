@@ -132,11 +132,14 @@ def metrics(request: Request):
     today = datetime.now()
     season = today.year if today.month >= 8 else today.year - 1     # January bowls belong to last fall's season
     with connect() as conn:
-        in_season = conn.execute(
-            """SELECT EXISTS (SELECT 1 FROM games WHERE league = 'cfb' AND season = %s
-                              AND start_time BETWEEN now() - interval '3 days' AND now() + interval '10 days')""",
-            (season,),
-        ).fetchone()[0]
+        in_season = {
+            league: conn.execute(
+                """SELECT EXISTS (SELECT 1 FROM games WHERE league = %s AND season = %s
+                                  AND start_time BETWEEN now() - interval '3 days' AND now() + interval '10 days')""",
+                (league, season),
+            ).fetchone()[0]
+            for league in ("cfb", "nfl")
+        }
     return PlainTextResponse(paper.metrics_text(season, in_season), media_type="text/plain; version=0.0.4")
 
 

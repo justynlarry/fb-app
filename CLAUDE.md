@@ -720,6 +720,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   model in comparisons; the champion's raw line is saved daily in `paper_predictions` (college built; NFL runner in the
   spring). Built the same day (Claude-typed at the user's request): `v6-noT1`, `v6-pts` version switches. NFL D-TOT (info):
   +0.124 ± 0.020 (6.3 SE, 2023–25). C-HIST not pursued (only 2014–15 usable, ~19 CFBD calls, can't resolve v6 vs v5).
+  **NFL paper runner + N-TOT-B1 code built 2026-11-19 (Claude-typed at the user's request):** `nfl_model.VERSION_FEATURES`
+  (nfl-v3, nfl-v2), `season_rows_through`, `upcoming_predictions`; `paper.run_nfl` after `nfl_daily_update` (jobs
+  `paper_models_nfl`, `paper_check_nfl`); `benchmark.nfl_predictions`; `report_2027.nfl_tot_b1`. `/metrics` gauges now
+  carry a `league` label (`sports_in_season{league=…}`). nfl-v3-wk: January.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.

@@ -25,6 +25,11 @@ NO_CROWD_SEASONS = {2020}   # used for ratings, but not to train the points mode
 V1_FEATURES = ["off_" + m for m in METRICS] + ["oppdef_" + m for m in METRICS] + ["home"]
 QB_FEATURES = ["qb_adj", "opp_qb_adj"]      # starting-QB adjustment (T-QB, model-tests.md section 9)
 FEATURES = V1_FEATURES + QB_FEATURES + MATCH_FEATURES
+# Paper models (plan-2027 section 8.3): each version's columns.  nfl-v2 = nfl-v3 without the matchup rows (reported).
+VERSION_FEATURES = {
+    "nfl-v3": FEATURES,
+    "nfl-v2": V1_FEATURES + QB_FEATURES,
+}
 # Chosen 2026-11-16 by choose_settings() on 2017-19 (model-tests.md section 9). Frozen: don't re-tune.
 SETTINGS = {"half_life": 6, "last_weight": 0.5, "prior_weeks": 12}
 
@@ -245,24 +250,43 @@ def backtest(first_season=2017, last_season=2025):
     print(f"spread miss, 2021-2025: {spread_mae(games[games['season'] >= 2021]):.3f}")
 
 
-def predict_upcoming(season):
-    """Train on every finished game and save predictions for this season's games that haven't kicked off.
-
-    Re-running updates those predictions.  Once a game kicks off it's no longer upcoming, so its
-    last pre-game prediction stays as the permanent record. Games without a projected starter
-    get no QB adjustment (qb_adj = 0).
-    """
-    print("building NFL rows (about a minute)...")
-    rows = build_rows(SETTINGS, FIRST_SEASON, season)
-    model = train(rows)         # train() skips games without a final score, and 2020
+def upcoming_game_ids(season):
+    """This season's NFL games that haven't kicked off."""
     with connect() as conn:
-        not_started = {
+        return {
             row[0]
             for row in conn.execute(
                 "SELECT id FROM games WHERE league = 'nfl' AND season = %s AND start_time > now()",
                 (season,),
             ).fetchall()
         }
-    upcoming = rows[rows["game_id"].isin(not_started)]
-    saved = save_predictions(predict_games(model, upcoming), is_backtest=False)
+
+
+def season_rows_through(season):
+    """Every season's rows up to this one with the frozen SETTINGS (about a minute).  Built once each morning and
+    shared by the live prediction and the NFL paper models."""
+    print("building NFL rows (about a minute)...")
+    return build_rows(SETTINGS, FIRST_SEASON, season)
+
+
+def upcoming_predictions(rows, season, version=MODEL_VERSION):
+    """Train this version on every finished game and predict the season's games that haven't kicked off
+    (one row per game, as predict_games)."""
+    features = VERSION_FEATURES[version]
+    model = train(rows, features)       # train() skips games without a final score, and 2020
+    upcoming = rows[rows["game_id"].isin(upcoming_game_ids(season))]
+    return predict_games(model, upcoming, features)
+
+
+def predict_upcoming(season, rows=None):
+    """Train on every finished game and save predictions for this season's games that haven't kicked off.
+
+    Re-running updates those predictions.  Once a game kicks off it's no longer upcoming, so its
+    last pre-game prediction stays as the permanent record. Games without a projected starter
+    get no QB adjustment (qb_adj = 0).  Pass rows (from season_rows_through) to reuse rows already built.
+    """
+    if rows is None:
+        rows = season_rows_through(season)
+    saved = save_predictions(upcoming_predictions(rows, season), is_backtest=False)
     print(f"{saved} upcoming NFL games predicted ({MODEL_VERSION})")
+    return saved

@@ -133,11 +133,32 @@ def nfl_daily_update():
         print(f"NFL daily update: reloading {season} from nflverse and re-predicting")
         try:
             nflverse.load_seasons([season])
-            nfl_model.predict_upcoming(season)
+            rows = nfl_model.season_rows_through(season)      # built once, shared with the NFL paper models
+            nfl_model.predict_upcoming(season, rows=rows)
             run.message = f"reloaded {season} from nflverse and re-predicted"
         except Exception as err:
             print(f"NFL daily update FAILED: {err!r}")
             run.fail(repr(err))
+            return
+    nfl_paper_models(season, rows)
+
+
+def nfl_paper_models(season, rows):
+    """NFL paper models (cfb/paper.py run_nfl) after the live NFL prediction, then their check
+    (jobs 'paper_models_nfl', 'paper_check_nfl')."""
+    with job_run("paper_models_nfl") as run:
+        try:
+            saved, errors = paper.run_nfl(season, rows)
+            run.message = ", ".join(f"{v} {n}" for v, n in saved.items())
+            for e in errors:
+                run.fail(e)
+        except Exception as err:
+            print(f"NFL paper models FAILED: {err!r}")
+            run.fail(repr(err))
+    try:
+        paper.check(season, "nfl")
+    except Exception as err:
+        print(f"NFL paper check FAILED: {err!r}")
 
 
 def odds_snapshot():
