@@ -714,6 +714,12 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   **Builds #5 / #6 (2026-11-19, Claude typed them at the user's request, rule unchanged):** `cfb/report_2027.py`
   (read-only report: median line moves, totals agree tag, Test 1 weeknight, Test L's X, DK lookahead; dry run on 2026 OK,
   B1 at bet time empty until B1's first full week); weeks 3–9 "≈ effective" gap note on the predictions page, keyed to v6.
+  **Challengers registered 2026-11-19 (user; plan-2027 §8, model-tests "2027 college family"):** college family of 6
+  judged items at **2.39** (H-T4, H-TOT, H-TOT-B1, v6-pts; H-T2b / H-AVG need ΔMAE ≥ 1 SE); v6-noT1, EARLY-1, v5
+  reported; v6-hl3 dropped. NFL: N-TOT-B1 (2027) and nfl-v3-wk (2027–28) at 1.96, nfl-v2 reported. Overrides apply to no
+  model in comparisons; the champion's raw line is saved daily in `paper_predictions` (college built; NFL runner in the
+  spring). Built the same day (Claude-typed at the user's request): `v6-noT1`, `v6-pts` version switches. NFL D-TOT (info):
+  +0.124 ± 0.020 (6.3 SE, 2023–25). C-HIST not pursued (only 2014–15 usable, ~19 CFBD calls, can't resolve v6 vs v5).
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.

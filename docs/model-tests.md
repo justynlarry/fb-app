@@ -290,11 +290,13 @@ rejected a current-season bias correction, and nothing new has turned up. No new
   Both trained on 2017–2026. Paper only; the T4 version never drives a pick.
 - **Games:** 2027 FBS-involved games with a Bovada open and close.
 - **Supported** if the paired Δ result slope at the **close** (median close of books) is ≥ 1.96 paired SE
+  **Amended 2026-11-19 (user, before any 2027 game): bar 2.39 instead of 1.96.** See "2027 college family" below.
   (season-week bootstrap, 2,000). Reported beside it: Δ line-move slope, Δ result slope at the open, ATS 3+ at the open.
 - **Then:** supported → a candidate for 2028 under the accuracy rule plus this result; not supported → dropped for good.
 - One judged run, after the 2027 regular season.
 
 ### H-T2b: state-space ratings as a 2027 hypothesis (pre-registered 2026-11-18, before any 2027 game)
+  **Amended 2026-11-19 (user, before any 2027 game): condition 1 becomes paired ΔMAE (frozen − H-T2b) ≥ 1 SE (season-week bootstrap), not just "better".** See "2027 college family" below.
 - **Why:** T2(b) was the most accurate model tested (spread MAE −0.094, 5 of 5 seasons; totals −0.074; every metric
   predicted better one step ahead) but failed two fixed betting bars (ATS 3+ at the open −1.5 pp, CLV % −1.6 pp) while
   the continuous betting measures were inside noise (Δ result slope at the open −0.4 SE, CLV points −0.4 SE). Either
@@ -317,6 +319,7 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 - One judged run, after the 2027 regular season.
 
 ### H-AVG: average of v6 and v6-ht2b as a 2027 hypothesis (pre-registered 2026-11-18, before any 2027 game, approved by the user)
+  **Amended 2026-11-19 (user, before any 2027 game): "spread MAE better" becomes paired ΔMAE ≥ 1 SE, as H-T2b.** See "2027 college family" below.
 - **Why:** the frozen model and the state-space version make different errors (T2(b) is more accurate but agrees with
   the market more). A simple average may keep most of the accuracy and most of the disagreement. Registered before
   any average was computed on any season.
@@ -331,6 +334,7 @@ rejected a current-season bias correction, and nothing new has turned up. No new
   in `docs/plan-2026-11-18.md` as information only, computed after this registration.
 
 ### H-TOT: totals Play tier as a 2027 paper hypothesis (pre-registered 2026-11-18, before any 2027 game; registered because B1-totals was supported, plan-2026-11-18.md)
+  **Amended 2026-11-19 (user, before any 2027 game): main test bar 2.39 instead of 1.645 (now one family with the other college items).** See "2027 college family" below.
 - **Pick:** over or under when |our total − the bettable open total| ≥ `total_gap` (3.0 unless changed before the freeze
   with a logged reason), at the spreads' bet time (first snapshot with 4+ books, 8+ hours after both teams' previous
   kickoff; `pick_results` 'first').
@@ -344,6 +348,7 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 - **Then:** supported → totals become a candidate for real bets in 2028 under rule 5C; not supported → totals stay info.
 
 ### H-TOT-B1: B1-total's gap predicts total results at the bettable open, as a 2027 paper hypothesis (pre-registered 2026-11-18, before any 2027 game)
+  **Amended 2026-11-19 (user, before any 2027 game): bar 2.39 instead of 1.96.** See "2027 college family" below.
 - **Why:** in the B1 run (plan-2026-11-18.md), B1-total's own gap predicted results: (result − open) on (B1 − open) =
   +0.312 ± 0.069 with our gap in the regression, positive in all 5 seasons (+0.55 / +0.24 / +0.11 / +0.51 / +0.23),
   while our total's gap did not (+0.050 ± 0.062). Found as a reported item, not tested: hindsight on 2021–25, so only
@@ -362,6 +367,20 @@ rejected a current-season bias correction, and nothing new has turned up. No new
   ROI at bettable prices; by month; B1-total's line move (bet-time median → last pre-kickoff median).
 - **Then:** supported → a candidate input for a totals selection layer, registered for 2028; not supported → dropped.
   Paper only: no 2027 bets or changes.
+
+### 2027 college family (amended 2026-11-19 by the user, before any 2027 game; plan-2027.md section 8)
+- **Judged college items, one family:** H-T4, H-T2b, H-AVG, H-TOT, H-TOT-B1, v6-pts = 6 → one-sided Bonferroni 5%
+  bar **2.39** for every "≥ k SE" test (7 → 2.45 if v6-cc is added after 5A). H-T2b and H-AVG are accuracy rules: their
+  MAE condition is now paired ΔMAE ≥ 1 SE (their no-harm checks stay at ≥ −1 SE). Replaces the bars each registration
+  carried (1.96 / 1.645); allowed because none has seen a 2027 game.
+- **v6-pts, the floor (registered 2026-11-19):** v6's non-rating columns (home, FCS, coach change, preseason inputs,
+  new coordinators) plus only the points ratings (`off_`, `oppdef_`, `def_`, `oppoff_` points), same points model,
+  daily paper model. **Supported** (v6 beats the floor) if paired ΔMAE (v6-pts − v6) ≥ 2.39 SE on all 2027 games with a
+  closing line, season-week bootstrap 2,000. Power: the two lines differ by ~1.9 pts on average (2026 dry run), so the
+  one-season SE is ≈ 0.08; it detects a floor about 0.2 pts or more worse. Not supported → the per-play metrics aren't
+  shown to earn their place live: review before 2028 (no automatic change).
+- **Reported only, no decision:** v6-noT1 (v5 + T-OCDC: T1's live contribution), EARLY-1 (v6 × bucket multipliers fixed at
+  the freeze from the v6 backtest 2018–25, 2020 out), v5. v6-hl3 dropped (undetectable even over two seasons).
 
 ### Totals "agree" tag, reported only (registered 2026-11-18, before any 2027 game; not judged, not in any count)
 - **Tag:** a 2027 totals pick (H-TOT's picks) is "agree" when our total and B1-total (frozen, as in H-TOT-B1) are on the

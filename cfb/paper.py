@@ -20,10 +20,11 @@ from cfb.status import job_run
 
 TZ = os.environ.get("TZ", "America/Denver")
 
-# Points-model versions on paper.  The live model (model.MODEL_VERSION) is skipped here, so at the 2027 freeze
-# MODEL_VERSION becomes "v6" and "v5" keeps running on paper with no change to this list.
+# Points-model versions on paper (plan-2027 section 8).  The live model (model.MODEL_VERSION) is always saved first as
+# the champion's raw line and isn't repeated from this list, so at the 2027 freeze MODEL_VERSION becomes "v6" and "v5"
+# keeps running on paper with no change here.
 # v6-ht4 and v6-ht2b need their own rows (ROW_BUILDERS); the others use the morning's rows as they are.
-POINTS_VERSIONS = ["v6", "v6-ht4", "v6-ht2b", "v5"]
+POINTS_VERSIONS = ["v6", "v6-ht4", "v6-ht2b", "v6-noT1", "v6-pts", "v5"]
 ROW_BUILDERS = {
     "v6-ht4": paper_features.add_t4_columns,
     "v6-ht2b": paper_features.state_space_rows,
@@ -31,7 +32,10 @@ ROW_BUILDERS = {
 
 
 def points_versions():
-    return [v for v in POINTS_VERSIONS if v != model.MODEL_VERSION and v in model.VERSION_FEATURES]
+    """The champion's raw line first (plan-2027 8.1: challengers are compared with it, overrides left out), then the
+    challengers.  The champion's line is the same model as the live prediction, saved here every morning so its value
+    at bet time is kept like everyone else's."""
+    return [model.MODEL_VERSION] + [v for v in POINTS_VERSIONS if v != model.MODEL_VERSION and v in model.VERSION_FEATURES]
 
 
 def all_versions():

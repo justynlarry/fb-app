@@ -41,6 +41,8 @@ FEATURES = (
 #   T-OCDC, new coordinators (2026-11-18): this team has a new offensive coordinator, the opponent a new
 #   defensive coordinator, from table coordinators, faded like the other preseason inputs
 MATCH_FEATURES = ["def_" + m for m in METRICS] + ["oppoff_" + m for m in METRICS]
+# v5's columns that aren't team ratings (home, FCS, coach change, preseason inputs), for the points-only floor
+NON_RATING_FEATURES = [f for f in FEATURES if not f.startswith(("off_", "oppdef_"))]
 COORDINATOR_FEATURES = ["pr_new_oc", "oppr_new_dc"]
 VERSION_FEATURES = {
     "v5": FEATURES,
@@ -48,6 +50,9 @@ VERSION_FEATURES = {
     # 2027 paper models (cfb/paper.py builds their rows with cfb/paper_features.py; never a pick):
     "v6-ht4": FEATURES + MATCH_FEATURES + COORDINATOR_FEATURES + T4_FEATURES,      # H-T4: + 8 cached advanced stats
     "v6-ht2b": FEATURES + MATCH_FEATURES + COORDINATOR_FEATURES,                   # H-T2b: same columns, state-space ratings
+    "v6-noT1": FEATURES + COORDINATOR_FEATURES,                                    # T1's live contribution (reported)
+    "v6-pts": NON_RATING_FEATURES + ["off_points", "oppdef_points", "def_points", "oppoff_points"]
+              + COORDINATOR_FEATURES,                                              # the floor: points ratings only (judged)
 }
 
 # Which teams start this season with a new coordinator (coordinators.is_new; NULL = no previous season = not new)
