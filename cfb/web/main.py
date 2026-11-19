@@ -535,6 +535,40 @@ GROUP BY taken
 """
 
 
+# The same picks graded at the BETTABLE number and price (view 029, the Nov 17 rule that rule 5C and H-TOT use),
+# with the best-anywhere units beside them for comparison.  no_line = picks whose snapshot had no bettable book.
+BETTABLE_SUMMARY_SQL = """
+SELECT taken,
+       tier,
+       count(*) FILTER (WHERE b_spread_outcome IS NOT NULL) AS graded,
+       count(*) FILTER (WHERE b_spread_outcome = 'win') AS wins,
+       count(*) FILTER (WHERE b_spread_outcome = 'loss') AS losses,
+       count(*) FILTER (WHERE b_spread_outcome = 'push') AS pushes,
+       COALESCE(sum(b_spread_units), 0) AS units,
+       COALESCE(sum(spread_units) FILTER (WHERE b_spread_outcome IS NOT NULL), 0) AS units_anywhere,
+       count(*) FILTER (WHERE side IS NOT NULL AND b_spread IS NULL) AS no_line
+FROM pick_results_bettable
+WHERE model_version = %(version)s
+GROUP BY taken, tier
+
+UNION ALL
+
+SELECT taken,
+       'total',
+       count(*) FILTER (WHERE b_total_outcome IS NOT NULL),
+       count(*) FILTER (WHERE b_total_outcome = 'win'),
+       count(*) FILTER (WHERE b_total_outcome = 'loss'),
+       count(*) FILTER (WHERE b_total_outcome = 'push'),
+       COALESCE(sum(b_total_units), 0),
+       COALESCE(sum(total_units) FILTER (WHERE b_total_outcome IS NOT NULL), 0),
+       count(*) FILTER (WHERE total_side IS NOT NULL AND b_total IS NULL)
+FROM pick_results_bettable
+WHERE model_version = %(version)s
+  AND total_side IS NOT NULL
+GROUP BY taken
+"""
+
+
 # Our first saved line graded against Bovada's opening line (from CFBD) at an assumed -110.
 # No line movement exists yet at the open, so 3+ apart = 'play', otherwise 'pass' (no 'caution').
 OPEN_RESULTS_SQL = """
@@ -1386,6 +1420,7 @@ def results_page(request: Request, league: str = "cfb"):
     with connect() as conn:
         conn.row_factory = dict_row
         summary = conn.execute(RESULTS_SUMMARY_SQL, {"version": version}).fetchall()
+        bettable = conn.execute(BETTABLE_SUMMARY_SQL, {"version": version}).fetchall()
         if league == "cfb":
             # Bovada's opening line exists only for college
             summary += conn.execute(OPEN_RESULTS_SQL, {"version": version}).fetchall()
@@ -1405,7 +1440,7 @@ def results_page(request: Request, league: str = "cfb"):
         {"summary": summary, "recent": recent, "shopping": shopping, "version": version,
          "active": "results", "league": league,
          "rules": app_settings.get_all(), "rule_changes": rule_changes,
-         "bettors": bettors, "bets": bets},
+         "bettors": bettors, "bets": bets, "bettable": bettable},
     )
 
 

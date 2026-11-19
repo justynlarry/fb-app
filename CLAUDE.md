@@ -670,6 +670,36 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   bar −1.0) and CLV % −1.6 pp, with 17% fewer 3+ gaps (agrees with the market more). No variants. Round 2 complete.
   **Pre-registered as 2027 hypothesis H-T2b (user, 2026-11-18; model-tests.md after H-T4):** frozen params, paper only,
   judged once after the 2027 regular season on MAE + Δ result slope at open + Δ line-move slope (≥ −1 SE each).
+  **Outside review 2026-11-18 (`docs/plan-2026-11-18.md`):** diagnostics D-CLV (CLV % 61.2 = moved-only vs 52.6 = all
+  picks; 14% of 3+ picks don't move), D-TOT (**totals line-move slope at the open +0.111, +9 SE**, every season; nothing
+  left at the close), D-EARLY (v5 + T1 0.85–0.87 in weeks 3–9), D-SEL, D-ML (no opening moneylines; nothing at the close).
+  Accuracy rule now uses continuous no-harm checks (new registrations). H-AVG and H-TOT registered for 2027. Bar 2.24 for
+  4 tests: **B1-spreads supported** (+4.8 SE; college B1 is a weak benchmark), **B1-totals supported** (+8.7 SE); TOT-1
+  dropped. **B1-spreads supports the spread signal but is a weak benchmark** (college B1 is less accurate than the
+  opener, 13.8 vs 12.3 MAE, and the line moves away from it): **the bet-time-median → last-median line move in 2027 is the
+  real opener-noise check** (plan-2027.md). Result version: spreads a +0.115 ± 0.050 (2.3 SE) with B1 in; **totals a
+  +0.050 ± 0.062 (consistent with 0 and with the ~0.105 the line move implies: can't tell them apart), while B1-total's own gap predicts total results +0.31 ± 0.07 (4.5 SE, all 5
+  seasons)** → registered H-TOT-B1 (2027, paper, bar 1.96). Moneylines (`h2h`) added to the odds snapshots 2026-11-18
+  (Claude typed it at the user's request): 3 credits per league per snapshot, ≈ 283 a month in season (of 500).
+  **EARLY-1 rejected** (calibration error +3.7 SE better, but line-move −1.3 SE and CLV points −2.1 SE: shrinking lines
+  shrinks the disagreements the market follows). **SEL-v0 failed** (Δr +0.025 ± 0.037; nothing ranks line moves within 3+
+  gaps out of sample). All 4 judged tests of the plan are done; calibration stays a reported item for the August check.
+  **B1-total beats the close (information, leak-free):** (result − close) on (B1-total − close) +0.198 ± 0.062 (3.2 SE),
+  with season-week fixed effects +0.173 ± 0.065 (2.7 SE); 2021 and 2024 carry it, 2022 = 0. B1-total is fit on earlier
+  closing totals only (no scores); leakage audit on all 4,160 games clean. Small at the close (implied 51.3% on 3+ gaps,
+  below break-even). H-TOT-B1 unchanged. **No new tests on 2021–25 until Dec 7** (user).
+  **2027 build #1 (2026-11-18, Claude typed `029_bettable_grading.sql` at the user's request, rule unchanged):** view
+  `pick_results_bettable` grades pick_results' first/last picks at the best bettable number then price in the snapshot
+  each pick was made from (books fixed in the view). Dry run: so far 8–9 graded Plays, units nearly equal; one example
+  +9 anywhere vs +7.5 bettable. Totals "agree" tag (our total and B1-total same side) registered, reported only.
+  Results page: "At the books you can bet" section (`BETTABLE_SUMMARY_SQL`, Early/Late by tier, best-anywhere units
+  beside). **Build #2 (2026-11-18, Claude typed it at the user's request, rule unchanged):** `cfb/model.py` has v6 =
+  v5 + `MATCH_FEATURES` (T1) + `COORDINATOR_FEATURES` (T-OCDC, from table `coordinators`), chosen per version through
+  `VERSION_FEATURES`; `train`, `backtest`, `predict_upcoming` take `version`; `MODEL_VERSION` stays "v5" until the freeze.
+  Equivalence (read-only): all 15,182 rows match the research stack (max diff 7e-14), v5 via the app code vs stored v5
+  0.0025, v6 app vs research stack 0.0000 on 6,727 games. `cfb/freeze_check.py`: the August no-harm check (plan-2027
+  2.2) with the fixed fallback order; **not run** (it is the August gate; no tests on 2021–25 before Dec 7). Coach career
+  is a stub (`COACH_CAREER = False`) until 5A is decided and built.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.

@@ -118,6 +118,44 @@
     </tbody>
   </table>
 </div>
+
+{#- The same picks graded at the books the user can actually bet (view pick_results_bettable, the Nov 17 rule) -#}
+{%- set bt = {} %}
+{%- for r in (bettable if bettable is defined else []) %}{% set _ = bt.update({(r.taken, r.tier): r}) %}{% endfor %}
+<h2 class="section-title">At the books you can bet</h2>
+<p class="muted small">The same picks, graded at the best number (then price) among MyBookie, DraftKings, FanDuel and
+  BetMGM (Caesars and Fanatics when the feed has them) in the snapshot each pick was made from. This is the record rule 5C
+  and the 2027 totals test use. "Anywhere" is the table above's units on the same picks, at the best number in the whole
+  feed (Bovada, LowVig, BetOnline… included), which you can't always get.</p>
+<div class="table-wrap">
+  <table class="stats results-summary">
+    <thead>
+      <tr class="group-head">
+        <th></th>
+        <th colspan="5">Early: first line we saved</th>
+        <th colspan="5" class="late-group">Late: last line before kickoff</th>
+      </tr>
+      <tr>
+        <th>Tier</th>
+        <th class="num">W–L–P</th><th class="num">Win % <span class="muted small">±95%</span></th><th class="num">Units</th><th class="num">ROI</th><th class="num muted">Anywhere</th>
+        <th class="num late-group">W–L–P</th><th class="num">Win % <span class="muted small">±95%</span></th><th class="num">Units</th><th class="num">ROI</th><th class="num muted">Anywhere</th>
+      </tr>
+    </thead>
+    <tbody>
+      {%- for tier, label in spread_tiers[:-1] + [('total', 'Totals (info)')] %}
+      <tr>
+        <td class="label"><span class="tier tier-{{ 'info' if tier == 'total' else tier }}">{{ label }}</span></td>
+        {%- for taken in ['first', 'last'] %}
+        {%- set r = bt.get((taken, tier)) %}
+        {{ record(r) }}
+        <td class="num muted small">{% if r and r.graded %}{{ '%+.2f'|format(r.units_anywhere|float) }}{% else %}–{% endif %}
+          {%- if r and r.no_line %}<div title="Picks whose snapshot had no bettable book on that side">{{ r.no_line }} no line</div>{% endif %}</td>
+        {%- endfor %}
+      </tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
 {%- set ns = namespace(spread=0, total=0, known=false) %}
 {%- for r in summary if r.taken == 'last' and r.upcoming is defined %}
   {%- set ns.known = true %}

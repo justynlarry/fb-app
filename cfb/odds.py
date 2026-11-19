@@ -1,7 +1,8 @@
 """Sportsbook lines from The Odds API (free Starter plan: 500 credits a month).
 
 One request returns every upcoming game in one league (college or NFL) for every book in the region.
-Cost = markets x regions = 2 credits per league (spreads + totals, US books).
+Cost = markets x regions = 3 credits per league (spreads + totals + moneylines, US books).
+Moneylines (h2h) are kept only in the raw response in api_responses for now (not parsed into odds_snapshots).
 Market lines are for display and grading only, not model inputs.
 """
 
@@ -17,7 +18,7 @@ from cfb.status import record_quota
 
 BASE_URL = "https://api.the-odds-api.com/v4/sports"
 SPORTS = {"cfb": "americanfootball_ncaaf", "nfl": "americanfootball_nfl"}   # their name for each league
-PARAMS = {"regions": "us", "markets": "spreads,totals", "oddsFormat": "american"}
+PARAMS = {"regions": "us", "markets": "spreads,totals,h2h", "oddsFormat": "american"}
 
 # Their name -> our "school mascot", where it differs by more than accents or punctuation
 NAME_FIXES = {
@@ -66,7 +67,7 @@ def find_game(conn, home_id, away_id, kickoff):
 
 
 def fetch_odds(league="cfb"):
-    """Download current spreads and totals for every upcoming game in one league (2 credits)."""
+    """Download current spreads, totals and moneylines for every upcoming game in one league (3 credits)."""
     params = {"apiKey": os.environ["ODDS_API_KEY"], **PARAMS}
     resp = httpx.get(f"{BASE_URL}/{SPORTS[league]}/odds", params=params, timeout=30)
     if resp.status_code != 200:
@@ -101,7 +102,7 @@ def book_line(book, home_team):
 
 
 def save_snapshot(league="cfb"):
-    """Fetch every book's current lines for one league and save them as one snapshot (2 credits)."""
+    """Fetch every book's current lines for one league and save them as one snapshot (3 credits)."""
     events = fetch_odds(league)
     fetched_at = datetime.now(timezone.utc)
     saved = 0

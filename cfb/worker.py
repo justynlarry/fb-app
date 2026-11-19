@@ -119,7 +119,7 @@ def nfl_daily_update():
 
 
 def odds_snapshot():
-    """Save every book's current lines (2 Odds API credits per league in season), then our picks."""
+    """Save every book's current lines (3 Odds API credits per league in season), then our picks."""
     season = current_season()
     with job_run("odds_snapshot") as run:
         saved = []

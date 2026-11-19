@@ -49,7 +49,7 @@ DEFAULT_ODDS_SCHEDULE = {
     ],
 }
 
-CREDITS_PER_SNAPSHOT = 4        # 2 Odds API credits per league (spreads + totals), both leagues in season
+CREDITS_PER_SNAPSHOT = 6        # 3 Odds API credits per league (spreads, totals, moneylines), both leagues in season
 MONTHLY_CREDITS = 500           # our Odds API plan
 UPDATE_MINUTES = 30             # give a daily update this long to finish before a snapshot uses its predictions
 

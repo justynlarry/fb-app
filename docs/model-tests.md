@@ -94,8 +94,11 @@ One rulebook, two ways in. Both need the rule written down first.
 - **Adopt for edge:** passes the acceptance rule in force (A now, B once approved).
 - **Adopt for accuracy:** all of the following.
   - Spread MAE better pooled (2021–25, all games) and in at least 4 of 5 seasons.
-  - No harm to betting: Δslope ≥ −1 paired SE; ATS 3+ at open not down by more than 1.0 pp; CLV % not down by more
-    than 1.0 pp; CLV points not down by more than 2 paired SEs.
+  - No harm to betting: Δ result slope at the Bovada open ≥ −1 paired SE; Δ line-move slope (Bovada open → median
+    close) ≥ −1 paired SE; CLV points not down by more than 2 paired SEs (season-week bootstrap, 2,000).
+    ATS 3+ at the open and CLV % (both definitions, see "CLV % definitions") are reported, not judged.
+  - (Changed 2026-11-18 for registrations from that date on. Earlier results keep the rule they were judged under:
+    T5a, T-OCDC, T5b and T2(b) used the fixed ATS −1 pp and CLV % −1 pp bars.)
   - The change is labeled "accuracy" and never quoted as edge evidence.
 
 What it would say (not re-deciding anything):
@@ -273,6 +276,10 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 | T-OCDC | 11-18 | New offensive / defensive coordinator (Wikipedia infobox), faded prior, accuracy rule | **Passed** (small) → frozen 2027 candidate | MAE 12.826 → 12.820 (4 of 5); weeks 0–4 12.900 → 12.883; totals better 5 of 5; betting flat |
 | T5b | 11-18 | Six metrics from play-by-play with our market-free WP garbage-time cut, accuracy rule | **Rejected** | MAE 12.826 → 12.876 (0 of 5); CLV points −2.5 SE |
 | T2(b) | 11-18 | State-space (Kalman) ratings for all 7 metrics, accuracy rule | **Rejected** (2027 hypothesis H-T2b) | MAE 12.826 → 12.732 (5 of 5); totals 12.969 → 12.895; ATS 3+ open 52.41 → 50.92% (−1.5 pp); CLV % −1.6 pp |
+| B1-spreads | 11-18 | Our gap vs a closing-line benchmark (B1) in the line-move regression, bar 2.24 | **Supported** (weak benchmark) | a +0.107 ± 0.022 (+4.8 SE); B1 moves away from itself (−0.11); B1 MAE 13.8 |
+| B1-totals | 11-18 | Same for totals, bar 2.24 | **Supported** → H-TOT registered | a +0.105 ± 0.012 (+8.7 SE); b +0.055 (4.0 SE); B1's gap predicts results +0.31 ± 0.07 (info) |
+| EARLY-1 | 11-18 | Calibration multipliers (weeks 0–4 / 5–9 / 10+) on v5 + T1 + T-OCDC, bar 2.24 | **Rejected** (no-harm) | CE −0.0078 ± 0.0021 (+3.7 SE) but line-move −1.3 SE, CLV points −2.1 SE; MAE 12.800 → 12.786 |
+| SEL-v0 | 11-18 | Bet-selection layer v0 vs gap-only, fit 2021–23, judged 2024–25, bar 2.24 | **Failed** | Δr +0.025 ± 0.037 (+0.7 SE); out-of-sample r 0.033 vs 0.007 |
 
 ### H-T4: cached-stats batch as a 2027 hypothesis (pre-registered 2026-11-17, before any 2027 game)
 - **Why:** P1-T4 failed Rule C because its gain appeared at the close as much as at the open (result slope +0.034 ± 0.010,
@@ -308,6 +315,70 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 - **Then:** supported → a candidate for the 2028 model under the accuracy rule plus this result (combined with
   2021–25 for the record, never instead of it); not supported → dropped for good.
 - One judged run, after the 2027 regular season.
+
+### H-AVG: average of v6 and v6-ht2b as a 2027 hypothesis (pre-registered 2026-11-18, before any 2027 game, approved by the user)
+- **Why:** the frozen model and the state-space version make different errors (T2(b) is more accurate but agrees with
+  the market more). A simple average may keep most of the accuracy and most of the disagreement. Registered before
+  any average was computed on any season.
+- **Line:** for every 2027 game, the plain average of `v6`'s and `v6-ht2b`'s spread (and total), both stored daily in
+  2027 (plan-2027.md section 4). No weights tuned, nothing else built.
+- **Games:** 2027 FBS-involved games with a Bovada open and close.
+- **Supported** if all hold, against `v6` on the same games: spread MAE better; Δ result slope at the Bovada open
+  ≥ −1 paired SE; Δ line-move slope (Bovada open → median close) ≥ −1 paired SE (season-week bootstrap, 2,000).
+  Reported: Δ line-move slope, ATS 3+ at the open, CLV % (both definitions), CLV points.
+- **Then:** supported → a candidate for 2028 beside H-T2b's result; not supported → dropped. Paper only.
+- One judged run, after the 2027 regular season. The 2021–25 average of v5 and the saved T2(b) rows is reported
+  in `docs/plan-2026-11-18.md` as information only, computed after this registration.
+
+### H-TOT: totals Play tier as a 2027 paper hypothesis (pre-registered 2026-11-18, before any 2027 game; registered because B1-totals was supported, plan-2026-11-18.md)
+- **Pick:** over or under when |our total − the bettable open total| ≥ `total_gap` (3.0 unless changed before the freeze
+  with a logged reason), at the spreads' bet time (first snapshot with 4+ books, 8+ hours after both teams' previous
+  kickoff; `pick_results` 'first').
+- **Number and price: the bettable open** (best number, then best price, among the bettable books in the bet-time snapshot;
+  the Nov 17 rule), from `odds_snapshots`. `pick_log`'s best-anywhere number and price are reported beside it, never judged.
+- **Grading:** win / loss / push against the bettable number; units at the bettable price.
+- **Judged once, after the 2027 regular season,** paper only, never bet in 2027. **Main test:** totals line-move slope
+  (bet-time snapshot median → last pre-kickoff median of our books, regressed on our total − the bettable open total)
+  ≥ 1.645 SE above zero (one 2027 test, its own family). **Sanity check, not the main test:** O/U win rate ≥ 50% at the
+  bettable number. Reported: ROI at bettable and at best-anywhere prices, overs and unders separately, calibration.
+- **Then:** supported → totals become a candidate for real bets in 2028 under rule 5C; not supported → totals stay info.
+
+### H-TOT-B1: B1-total's gap predicts total results at the bettable open, as a 2027 paper hypothesis (pre-registered 2026-11-18, before any 2027 game)
+- **Why:** in the B1 run (plan-2026-11-18.md), B1-total's own gap predicted results: (result − open) on (B1 − open) =
+  +0.312 ± 0.069 with our gap in the regression, positive in all 5 seasons (+0.55 / +0.24 / +0.11 / +0.51 / +0.23),
+  while our total's gap did not (+0.050 ± 0.062). Found as a reported item, not tested: hindsight on 2021–25, so only
+  2027 can judge it. A market-only signal: a candidate input for a future totals selection layer, never a rating-model
+  input.
+- **B1-total, frozen as run on 2026-11-18:** close_total = T_home + T_away + c, ridge α = 1, fit on earlier closing totals
+  (median of the CFBD books, Bovada where the median is missing; FBS-involved games), weighted as v5's ratings
+  (half-life 4 weeks of weeks played; last season at 0.5^(8/4) fading to 0 over 6 weeks), games before the week block's
+  first kickoff only. Computed daily in 2027 with the other paper models (plan-2027.md section 4).
+- **Games and line:** 2027 FBS-involved games with a bettable open total at bet time (first snapshot with 4+ books,
+  8+ hours after both teams' previous kickoff).
+- **Test (one judged run, after the 2027 regular season):** (actual total − bettable open total) = a·(B1-total −
+  bettable open total) + c. **Supported if a ≥ 1.96 × its season-week bootstrap SE (2,000) above zero.** (1.96 rather
+  than 1.645 because it is a second 2027 totals test beside H-TOT, which keeps its registered 1.645.)
+- **Reported, not judged:** a with our total's gap also in the regression; O/U at the bettable open on B1's 3+ gaps, with
+  ROI at bettable prices; by month; B1-total's line move (bet-time median → last pre-kickoff median).
+- **Then:** supported → a candidate input for a totals selection layer, registered for 2028; not supported → dropped.
+  Paper only: no 2027 bets or changes.
+
+### Totals "agree" tag, reported only (registered 2026-11-18, before any 2027 game; not judged, not in any count)
+- **Tag:** a 2027 totals pick (H-TOT's picks) is "agree" when our total and B1-total (frozen, as in H-TOT-B1) are on the
+  same side of the bettable open total at bet time, "disagree" when on opposite sides; games where B1-total sits
+  exactly on the number are left untagged.
+- **Shown beside H-TOT and H-TOT-B1 after the 2027 season:** O/U record and ROI at the bettable number and price, for
+  agree and disagree separately, with n and 95% intervals; line move (bet-time median → last pre-kickoff median) for
+  each. Nothing is decided by it.
+
+### CLV % definitions (note added 2026-11-18)
+Two definitions have been used; each test applied one of them to both models, so no verdict depends on the choice.
+- **B (moved only):** line moved toward us ÷ 3+ picks whose line moved. Used by the backtest view (`clv_win`, NULL when
+  the line didn't move), Test 4, the backtest page and every "~61%" figure through Round 1. v5 2021–25 at the Bovada
+  open: 61.22% (median close 60.89%).
+- **A (all picks):** line moved toward us ÷ all 3+ picks (no move = not toward). Used by T5a, T-OCDC, T5b and T2(b)
+  (2026-11-18). v5: 52.63% (median close 53.80%).
+- The gap is the 14.0% of 3+ picks whose Bovada line didn't move. Reports from now on name the definition or give both.
 
 ### Slope metric (added 2026-11-13; information only for past decisions)
 **What it measures.** The slope is a continuous measure of edge that uses every game, not just the 3+ ones.
