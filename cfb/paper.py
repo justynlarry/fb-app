@@ -14,6 +14,7 @@ import sys
 
 from cfb import benchmark
 from cfb import model
+from cfb import paper_features
 from cfb.db import connect
 from cfb.status import job_run
 
@@ -21,8 +22,12 @@ TZ = os.environ.get("TZ", "America/Denver")
 
 # Points-model versions on paper.  The live model (model.MODEL_VERSION) is skipped here, so at the 2027 freeze
 # MODEL_VERSION becomes "v6" and "v5" keeps running on paper with no change to this list.
-# "v6-ht4" and "v6-ht2b" are added when they are built (each needs its own code in cfb/model.py).
-POINTS_VERSIONS = ["v6", "v5"]
+# v6-ht4 and v6-ht2b need their own rows (ROW_BUILDERS); the others use the morning's rows as they are.
+POINTS_VERSIONS = ["v6", "v6-ht4", "v6-ht2b", "v5"]
+ROW_BUILDERS = {
+    "v6-ht4": paper_features.add_t4_columns,
+    "v6-ht2b": paper_features.state_space_rows,
+}
 
 
 def points_versions():
@@ -66,7 +71,9 @@ def run(season, rows=None):
         try:
             if rows is None:
                 rows = model.build_rows(season)
-            saved[version] = save(model.upcoming_predictions(rows, season, version), version)
+            build = ROW_BUILDERS.get(version)
+            version_rows = build(rows) if build else rows
+            saved[version] = save(model.upcoming_predictions(version_rows, season, version), version)
         except Exception as err:
             errors.append(f"{version}: {err!r}")
     try:

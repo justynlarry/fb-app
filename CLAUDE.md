@@ -706,7 +706,11 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `metrics_text`), `cfb/benchmark.py` (B1, matches research exactly). `model.build_rows` is built once in
   `daily_update` and shared; paper models run after the live prediction (jobs `paper_models`, `paper_check`, shown on
   /admin), so a paper failure can't touch v5. `/metrics` (Prometheus): only with `METRICS_TOKEN` in `.env`, bearer
-  token, refused through Cloudflare. v6-ht4 / v6-ht2b not built yet.
+  token, refused through Cloudflare. First run 2026-11-19 05:05: v6 131, b1-total 129, check OK; h2h confirmed (3
+  credits per league call). **v6-ht4 / v6-ht2b built 2026-11-19 (Claude typed them at the user's request, rule
+  unchanged):** `cfb/paper_features.py` (`add_t4_columns`: 8 cached advanced stats rated like v5; `state_space_rows`:
+  Kalman ratings at the frozen `STATE_PARAMS`, filter from 2016, T1 columns rebuilt), `paper.ROW_BUILDERS`,
+  `model.VERSION_FEATURES` entries; checked against the research scripts column for column.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.

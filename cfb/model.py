@@ -10,6 +10,7 @@ from psycopg.rows import dict_row
 from sklearn.linear_model import LinearRegression
 
 from cfb.db import connect
+from cfb.paper_features import T4_FEATURES
 from cfb.priors import season_priors
 from cfb.ratings import METRICS, ratings_as_of
 
@@ -44,6 +45,9 @@ COORDINATOR_FEATURES = ["pr_new_oc", "oppr_new_dc"]
 VERSION_FEATURES = {
     "v5": FEATURES,
     "v6": FEATURES + MATCH_FEATURES + COORDINATOR_FEATURES,
+    # 2027 paper models (cfb/paper.py builds their rows with cfb/paper_features.py; never a pick):
+    "v6-ht4": FEATURES + MATCH_FEATURES + COORDINATOR_FEATURES + T4_FEATURES,      # H-T4: + 8 cached advanced stats
+    "v6-ht2b": FEATURES + MATCH_FEATURES + COORDINATOR_FEATURES,                   # H-T2b: same columns, state-space ratings
 }
 
 # Which teams start this season with a new coordinator (coordinators.is_new; NULL = no previous season = not new)
