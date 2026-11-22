@@ -36,7 +36,7 @@
   </td>
   <td class="num score">
     {%- if state != 'pre' and g.away_score is not none -%}
-      {{ g.away_score }} – {{ g.home_score }}
+      <span>{{ g.away_score }}</span><span class="sep"> – </span><span>{{ g.home_score }}</span>
     {%- endif -%}
   </td>
   <td class="clock">
@@ -46,7 +46,7 @@
       <span class="final">{{ g.status_detail or 'Final' }}</span>
     {%- endif -%}
   </td>
-  <td class="possession">
+  <td class="possession" data-label="Ball:">
     {%- if state == 'in' -%}
       {%- if g.away_has_ball %}{{ team_name(g.away, league) }}{% elif g.home_has_ball %}{{ team_name(g.home, league) }}{% endif -%}
       {%- if g.down_distance %}<div class="muted small">{{ g.down_distance }}</div>{% endif -%}
