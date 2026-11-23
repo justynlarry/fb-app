@@ -799,6 +799,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   in `pick_results`; Results queries 9.1 s → 1.9 s. Indexes on (home_id/away_id, start_time) were tried and were slower.
   Remaining cost if needed: `pick_results_bettable` computes every model version before filtering (~0.8 s), and the
   page reads `pick_results` 6 times.
+  **2026-11-23: back to 22 s** (CPU-bound; RAM fine, DB 107 MB): Postgres folded `bet_time` into the join, running the
+  college previous-kickoff lookup twice per `pick_log` row instead of once per game, growing daily.
+  `034_pick_results_speed.sql` (Claude typed and applied it at the user's request, rule unchanged) = 022 with
+  `bet_time AS MATERIALIZED`; same rows (0 differ), view 2.8 s → 0.3 s, college Results queries 22 s → 3.0 s, NFL 5.8 → 2.4 s.
 - Schema changes: new numbered files in `db/init/` (runs only on a fresh volume), applied by
   hand to the live DB with `docker compose exec -T db psql -U fb-user -d football < file`.
   Never suggest `down -v` once real data is loaded. DB user is `fb-user`, DB is `football`.
