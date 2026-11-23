@@ -380,6 +380,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `/overrides?league=nfl`: this week's unstarted games, 5+ gaps (same line/gap as the NFL predictions page) open at
   the top; QBs show season dropbacks (100+ highlighted as the starter). "Check news" on the NFL predictions page
   links to it. Display only, never a model input (T-skill). Playoff weeks 19–22 match `games.week`.
+  **Starting-QB check (same day, user typed the SQL):** `NFL_INJURIES_SQL.is_model_starter` and
+  `NFL_PREDICTIONS_SQL.away_qb_status/home_qb_status` (nfl_starters × nfl_injuries by gsis_id): the model's QB listed
+  Out/Doubtful = red badge (predictions page, unstarted games) and that game first and open on the panel;
+  Questionable = amber "Q". Macro `qb_status_badge`.
 - **NFL line movement (loaded 2026-11-17; Claude typed `021_nfl_line_moves.sql` and `cfb/line_moves.py` at the user's
   request, rule unchanged).** Table `nfl_line_moves` (game_id, source, snapshot, home_spread, total, moneylines, flags),
   evaluation only. Load: `docker compose exec -T worker python -m cfb.line_moves picksfootball|sbro < reference/<file>.csv`

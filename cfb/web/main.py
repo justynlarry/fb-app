@@ -459,6 +459,7 @@ SELECT g.id AS game_id,
        mm.spread_miss, mm.total_miss,
        ln.spread AS market_spread, ln.over_under AS market_total,
        sa.qb_name AS away_qb, sh.qb_name AS home_qb,
+       ia.report_status AS away_qb_status, ih.report_status AS home_qb_status,
        COALESCE(l.state, CASE WHEN g.completed THEN 'post' END) AS state,
        COALESCE(l.away_score, g.away_points) AS away_score,
        COALESCE(l.home_score, g.home_points) AS home_score,
@@ -490,6 +491,10 @@ LEFT JOIN adjustments adj ON adj.game_id = g.id
 LEFT JOIN lines ln ON ln.game_id = g.id AND ln.provider = 'nflverse'
 LEFT JOIN nfl_starters sa ON sa.game_id = g.id AND sa.team_id = g.away_id
 LEFT JOIN nfl_starters sh ON sh.game_id = g.id AND sh.team_id = g.home_id
+LEFT JOIN nfl_injuries ia ON ia.season = g.season AND ia.week = g.week
+                         AND ia.team_id = g.away_id AND ia.gsis_id = sa.qb_id
+LEFT JOIN nfl_injuries ih ON ih.season = g.season AND ih.week = g.week
+                         AND ih.team_id = g.home_id AND ih.gsis_id = sh.qb_id
 LEFT JOIN live_scores l ON l.game_id = g.id
 LEFT JOIN pick_results r ON r.game_id = g.id
                         AND r.model_version = p.model_version
@@ -944,7 +949,12 @@ SELECT g.id AS game_id,
         FROM nfl_qb_games q
         JOIN games g2 ON g2.id = q.game_id
         WHERE q.qb_id = i.gsis_id
-          AND g2.season = i.season) AS season_dropbacks
+          AND g2.season = i.season) AS season_dropbacks,
+       EXISTS (SELECT 1
+               FROM nfl_starters s
+               WHERE s.game_id = g.id
+                 AND s.team_id = i.team_id
+                 AND s.qb_id = i.gsis_id) AS is_model_starter
 FROM nfl_injuries i
 JOIN games g ON g.league = 'nfl'
             AND g.season = i.season

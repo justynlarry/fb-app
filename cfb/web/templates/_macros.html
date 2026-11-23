@@ -179,3 +179,14 @@
     {%- endif -%}
   {%- endif -%}
 {%- endmacro -%}
+
+
+{#- The model's starting QB on this week's injury report (nflverse): Out/Doubtful = the model probably prices the
+    wrong QB; Questionable = most play, worth a look. NULL (not listed) shows nothing. -#}
+{%- macro qb_status_badge(status) -%}
+  {%- if status in ('Out', 'Doubtful') -%}
+    <span class="qb-alert qb-alert-red" title="Listed {{ status }} on the injury report, but the model's line assumes he starts">{{ status }}</span>
+  {%- elif status == 'Questionable' -%}
+    <span class="qb-alert qb-alert-amber" title="Listed Questionable on the injury report; the model's line assumes he starts">Q</span>
+  {%- endif -%}
+{%- endmacro -%}

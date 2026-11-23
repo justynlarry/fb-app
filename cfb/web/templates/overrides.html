@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Overrides{% endblock %}
-{% from "_macros.html" import league_tabs, line_text %}
+{% from "_macros.html" import league_tabs, line_text, qb_status_badge %}
 {% block content %}
 {%- set league = league | default('cfb') %}
 {%- set is_nfl = league == 'nfl' %}
@@ -31,7 +31,7 @@
   <ul class="inj-list">
     {%- for p in players %}
     {%- set starter_qb = p.position == 'QB' and (p.season_dropbacks or 0) >= 100 %}
-    <li class="inj {{ 'inj-key' if starter_qb }}">
+    <li class="inj {{ 'inj-key' if starter_qb or p.is_model_starter }} {{ 'inj-model-starter' if p.is_model_starter and p.report_status in ('Out', 'Doubtful') }}">
       <span class="inj-status inj-{{ p.report_status|lower }}">{{ p.report_status }}</span>
       <span class="inj-pos">{{ p.position or '' }}</span>
       <span class="inj-name">{{ p.full_name }}</span>
@@ -39,6 +39,7 @@
         {{- p.injury or '' }}
         {%- if p.practice_status %}{{ ' · ' if p.injury }}practice: {{ practice_short.get(p.practice_status, p.practice_status|lower) }}{% endif %}
         {%- if p.position == 'QB' %} · {{ p.season_dropbacks or 0 }} dropbacks this season{% endif %}
+        {%- if p.is_model_starter %} · <strong>the model's starting QB</strong>{% endif %}
       </span>
     </li>
     {%- endfor %}
@@ -54,10 +55,14 @@
   {%- set quest = players | selectattr('report_status', 'equalto', 'Questionable') | list | length %}
   {{- outs }} out{% if doubt %}, {{ doubt }} doubtful{% endif %}{% if quest %}, {{ quest }} questionable{% endif %}
 {%- endmacro %}
+{#- Top of the list: games whose model starting QB is Out/Doubtful (first), then 5+ point gaps, biggest first -#}
 {%- set ns = namespace(big=[], rest=[]) %}
 {%- for g in injury_games %}
   {%- set gap = ((g.spread|float - g.market_spread|float)|abs) if (g.spread is not none and g.market_spread is not none) else none %}
-  {%- if gap is not none and gap >= 5 %}{% set ns.big = ns.big + [(gap, g)] %}{% else %}{% set ns.rest = ns.rest + [(gap, g)] %}{% endif %}
+  {%- set qb_alert = g.away_qb_status in ('Out', 'Doubtful') or g.home_qb_status in ('Out', 'Doubtful') %}
+  {%- if qb_alert or (gap is not none and gap >= 5) %}
+    {%- set ns.big = ns.big + [((100 if qb_alert else 0) + (gap or 0), gap, g)] %}
+  {%- else %}{% set ns.rest = ns.rest + [(0, gap, g)] %}{% endif %}
 {%- endfor %}
 <section class="panel injury-panel" aria-labelledby="inj-title">
   <h2 id="inj-title">Injury reports</h2>
@@ -65,14 +70,15 @@
     From nflverse's copy of the official NFL reports, loaded each morning
     {%- if injuries %} (last load {{ injuries[0].loaded_at.astimezone(injury_games[0].local_start.tzinfo).strftime('%a %b %-d, %-I:%M %p') }}){% endif %}.
     Reports come out Wednesday to Friday (Monday/Tuesday for Thursday games), so early in the week this may still show last week's list or nothing.
-    Games 5+ points off the market line are open at the top: look here first. The model doesn't use this list;
+    At the top, open: games whose starting QB (the one the model uses) is listed Out or Doubtful, then games 5+ points off the market line. Look there first. The model doesn't use this list;
     if something matters, enter an adjustment.
   </p>
-  {%- for gap, g in (ns.big | sort(attribute='0', reverse=true)) + ns.rest %}
+  {%- for key, gap, g in (ns.big | sort(attribute='0', reverse=true)) + ns.rest %}
   {%- set flagged = gap is not none and gap >= 5 %}
+  {%- set qb_flag = g.away_qb_status in ('Out', 'Doubtful', 'Questionable') or g.home_qb_status in ('Out', 'Doubtful', 'Questionable') %}
   {%- set og = games | selectattr('game_id', 'equalto', g.game_id) | first %}
   {%- if og %}
-  <details class="inj-game {{ 'inj-flagged' if flagged }}" id="inj-{{ g.game_id }}" {{ 'open' if flagged or selected_game == g.game_id }}>
+  <details class="inj-game {{ 'inj-flagged' if flagged or key >= 100 }}" id="inj-{{ g.game_id }}" {{ 'open' if flagged or qb_flag or selected_game == g.game_id }}>
     <summary>
       <span class="inj-matchup"><strong>{{ g.away }} at {{ g.home }}</strong>
         <span class="muted small">{{ g.local_start.strftime('%a %-I:%M %p') }}</span></span>
@@ -81,6 +87,13 @@
         {%- if gap is not none %} · <strong>{{ '%.1f'|format(gap) }}</strong> apart{% endif %}
         {%- if flagged %} <span class="news-flag">Check news</span>{% endif %}
       </span>
+      {%- if qb_flag %}
+      <span class="inj-qb-warning small">Model's starting QB on the report:
+        {%- if g.away_qb_status %} {{ g.away_qb }} {{ qb_status_badge(g.away_qb_status) }}{% endif %}
+        {%- if g.home_qb_status %} {{ g.home_qb }} {{ qb_status_badge(g.home_qb_status) }}{% endif %}
+        {%- if key >= 100 %} · the line assumes he starts: check before using it{% endif %}
+      </span>
+      {%- endif %}
       <span class="inj-counts muted small">{{ g.away }}: {{ count_text(og.away_id, g.game_id) }} · {{ g.home }}: {{ count_text(og.home_id, g.game_id) }}</span>
     </summary>
     <div class="inj-teams">
