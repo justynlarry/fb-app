@@ -972,6 +972,68 @@ What isn't shown is that this turns into wins at the Monday price (slope +0.04 �
 consequence, NFL paper-tracking at the live Monday snapshot is built for 2027. The paper record, not these
 backtests, decides whether NFL picks are ever bet.
 
+### H-STAKES: late-season stakes mismatch (pre-registered 2026-11-23, approved by the user as written the same day; NOT run)
+From the exploratory look on 2026-11-16 (scratch `nfl_situations.py`, nflverse closes **1999–2025**): late in the
+season, a team at ≤ .350 playing one at .500+ covered 47.6% ± 4.6 (n = 445, −1.5 pts vs the close). The user decided
+the same day that this deserves a pre-registered test with a standings-based measure instead of the record proxy,
+judged on seasons that exploration didn't touch. Nothing below has been computed against a line or a result. Seen so
+far: only how many games each cut would give (counts from standings of earlier games, 2021–25, 2026-11-23).
+
+**Question.** In the last six weeks of the regular season, does a team that is effectively out of the playoff race do
+worse against the line than an opponent that is still in it? This is a question about the market, not about our model.
+
+**Judging seasons (decided by the user, 2026-11-23): both, and they must agree.**
+- *Stage 1:* 1978–1998, regular season, without 1982 and 1987 (strike seasons). These are the clean seasons: before
+  the exploration's 1999 start, with complete closing lines in `reference/spreadspoke_scores.csv` (224–240 games a
+  season). 19 seasons. Can be run this winter.
+- *Stage 2:* the live seasons 2026 (weeks 13–18) and 2027–28, same rule with the 7th seed, graded at the Monday
+  bet-time line (`pick_results` 'first' rule for NFL; the close reported beside it). Judged once, after the 2028
+  regular season. About 100 games: SE ≈ 1.3 pts, so it can't confirm the size; it guards against a sign flip.
+- Why both: the 1978–98 market may have been less efficient than today's, so a pass there alone doesn't show the
+  effect still exists.
+
+**Definitions (fixed now).**
+- *Late season:* the last six week numbers of each regular season (last week − 5 to last week; byes make the week
+  count differ from the game count: e.g. weeks 13–18 in 2026, weeks 11–16 in 1978–89).
+- *Standings* before each week's first kickoff, from final scores of earlier games only. Win share = (wins + ½ ties) /
+  games. GB(a, b) = ((W_b − W_a) + (L_a − L_b)) / 2, ties counted as half a win and half a loss.
+- *Playoff line:* the last playoff seed in the team's conference by win share, ignoring tiebreakers:
+  5th seed 1978–89, 6th 1990–98. Divisions and conferences per season from a hand-checked alignment table built before
+  anything is graded, cross-checked by the schedule (division rivals meet twice).
+- *Out:* GB to the last seed ≥ games left − 2, AND GB to the division leader ≥ games left − 2, AND GB to the last seed
+  ≥ 2. (In words: even winning out, it needs the teams ahead of it to collapse.)
+- *Alive:* GB to the last seed ≤ 1, AND it hasn't effectively clinched: its lead over the first team outside the
+  playoff line is less than games left. (A clinched team may rest starters; that is a different question.)
+- *Qualifying game:* one team Out, the other Alive. Neutral sites included; ties on the line (pushes) excluded.
+- *Line:* the spreadspoke closing spread. *Outcome:* the Out team's margin against the line (positive = it covered).
+
+**Stage 1 passes if both hold** (1978–98):
+1. The mean margin against the line of the Out team is below zero by at least **2.13 SE** (one-sided; user's choice:
+   the NFL judged family becomes 3 with N-TOT-B1 and nfl-v3-wk, which keep their registered 1.96). SE from the
+   game-level SD.
+2. Same sign in both halves of the window (1978–88 and 1989–98).
+
+**Supported only if Stage 2 agrees:** the live mean margin of Out teams at the Monday line, 2026–28 pooled, is below
+zero (sign only, no SE bar).
+
+**Reported, not judged:**
+- cover % with its ± (pushes out); the strict cut (GB > games left, division too) and the looser exploratory proxy
+  (≤ .350 vs ≥ .500) on the same seasons; by season; home vs away Out teams; totals (O/U) in the same games
+- *Live:* the same rule (7th seed since 2020) on 2026 weeks 13–18 and 2027–28 at the Monday bet-time line (`pick_results` 'first' rule) and
+  at the close, every season
+- expected n: about 25–30 games a season → about 500–550 (SE ≈ 0.55 pts, so −1.5 pts would be about 2.7 SE)
+
+**Then:**
+- *Stage 1 passes:* a "stakes" tag on the NFL predictions page for qualifying games, labelled provisional, tracked with
+  the NFL paper record. Not used for bet selection until Stage 2 agrees.
+- *Supported (both stages):* the tag becomes a bet-selection input for the NFL paper record (like Test L). It does not
+  enter nfl-v3; a model feature would need its own accuracy test.
+- *Stage 1 fails, or Stage 2 disagrees:* dropped. No variants after either result: no other cuts, weeks, eras or
+  seasons.
+
+**Count.** Two judged looks (Stage 1 once, Stage 2 once after 2028), 0 API calls, no paid data. Stage 1 writes nothing to
+the DB; Stage 2 needs the live tag, built only if Stage 1 passes.
+
 ## 10. Round 2, college (from `docs/model-plan-2026-11-17.md` §2.2)
 
 ### T5a: special-teams EPA as a rated metric (pre-registered 2026-11-18, approved by the user before running)
