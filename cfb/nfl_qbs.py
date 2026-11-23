@@ -120,3 +120,48 @@ def add_qb_features(rows, settings):
     opponent = rows[["game_id", "team_id", "qb_adj"]].rename(
         columns={"team_id": "opponent_id", "qb_adj": "opp_qb_adj"})
     return rows.merge(opponent, on=["game_id", "opponent_id"], how="left")
+
+
+POINTS_PER_EPA = 26     # points per 1.0 EPA/dropback of QB value: the points model's qb_adj coefficient (T-QB)
+
+
+def last_team(qbs, qb_id, order):
+    """The team a QB last played for before this week (None if he hasn't played)."""
+    games = qbs.by_qb.get(qb_id)
+    if games is None:
+        return None
+    before = games[games["order"] < order]      # games are in kickoff order (QB_GAMES_SQL)
+    return before["team_id"].iloc[-1] if len(before) > 0 else None
+
+
+def qb_out_suggestion(game_id, team_id, season, week):
+    """Suggested override for a team whose projected starter won't play: points added to (usually
+    taken off) its own score, from the starter's value vs. the backup's.  The backup is the team's
+    other QB with the most dropbacks this season who is still with it, i.e. whose last game was for
+    this team (replacement level if there is none).
+    Returns None if we don't know the starter."""
+    qbs = QBs()
+    starter = qbs.starters.get((game_id, team_id))
+    if starter is None:
+        return None
+    order = season * 100 + week
+
+    backup = None
+    team_games = qbs.by_team.get((team_id, season))
+    if team_games is not None:
+        others = team_games[(team_games["order"] < order) & (team_games["qb_id"] != starter)]
+        still_here = [q for q in others["qb_id"].unique() if last_team(qbs, q, order) == team_id]
+        others = others[others["qb_id"].isin(still_here)]
+        if len(others) > 0:
+            backup = others.groupby("qb_id")["dropbacks"].sum().idxmax()
+
+    starter_value = qbs.value(starter, order, season)
+    backup_value = qbs.value(backup, order, season) if backup else 0.0
+    points = POINTS_PER_EPA * (backup_value - starter_value)
+    return {
+        "starter_id": starter,
+        "backup_id": backup,
+        "starter_value": round(starter_value, 3),
+        "backup_value": round(backup_value, 3),
+        "points": round(points * 2) / 2,
+    }

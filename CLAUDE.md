@@ -384,6 +384,12 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `NFL_PREDICTIONS_SQL.away_qb_status/home_qb_status` (nfl_starters × nfl_injuries by gsis_id): the model's QB listed
   Out/Doubtful = red badge (predictions page, unstarted games) and that game first and open on the panel;
   Questionable = amber "Q". Macro `qb_status_badge`.
+  **QB-out suggestion (same day):** `nfl_qbs.qb_out_suggestion(game, team, season, week)` (user-typed; Claude added
+  `last_team` when checking it: a QB counts as the backup only if his last game was for this team, else traded QBs were
+  picked) = 26 × (backup value − starter value), half points, own score only; backup = most dropbacks this season still
+  on the team, else replacement (0). main.py imports it as `nfl_qb_out_suggestion` (`cfb.qbs.qb_out_suggestion` is the
+  college one). Computed in `overrides_page` only for model starters listed Out/Doubtful; "Use this" fills the form.
+  WR/TE/RB suggestions not built: T-skill values are ~0 (top +0.7–1.7) and need per-player EPA tables.
 - **NFL weather logging (built 2026-11-23; user typed 033, `cfb/nfl_venues.py`, the weather.py league switch and the
   worker job; Claude typed the `NFL_PREDICTIONS_SQL` weather part at the user's request, rule unchanged):**
   `venues.espn_id` (033). Job `nfl_weather` (start of `nfl_daily_update`, own try): `nfl_venues.sync_venues()` reads

@@ -810,3 +810,5 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .qb-alert-amber { color: var(--caution); background: var(--caution-bg); }
 .inj-qb-warning { flex-basis: 100%; }
 .inj-model-starter { background: var(--against-bg); }
+.inj-suggest { margin: 0.2rem 0 0.35rem 8.4rem; padding: 0.3rem 0.5rem; border-left: 3px solid var(--against); background: var(--surface); border-radius: 0 4px 4px 0; }
+@media (max-width: 640px) { .inj-suggest { margin-left: 0; } }

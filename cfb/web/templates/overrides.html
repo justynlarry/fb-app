@@ -41,6 +41,23 @@
         {%- if p.position == 'QB' %} · {{ p.season_dropbacks or 0 }} dropbacks this season{% endif %}
         {%- if p.is_model_starter %} · <strong>the model's starting QB</strong>{% endif %}
       </span>
+      {#- Suggested override (cfb/nfl_qbs.py qb_out_suggestion): starter's value vs. the backup's, own score only #}
+      {%- set sg = p.suggestion if p.suggestion is defined else none %}
+      {%- if sg %}
+      {%- set backup = sg.backup_name if sg.backup_id else 'a replacement-level QB' %}
+      <div class="inj-suggest small">
+        Suggested <strong>{{ '%+.1f'|format(sg.points) }}</strong> to this team's score if {{ backup }} starts
+        ({{ '%+.2f'|format(sg.backup_value) }} vs {{ '%+.2f'|format(sg.starter_value) }} EPA/dropback above replacement,
+        at 26 points per 1.0).
+        {%- if is_admin and sg.points != 0 %}
+        <button type="button" class="link-button inj-use" data-game="{{ game_id }}" data-team="{{ team }}"
+                data-points="{{ '%.1f'|format(sg.points) }}"
+                data-reason="QB {{ p.full_name }} {{ p.report_status|lower }}; {{ backup if sg.backup_id else 'backup' }} starts">Use this</button>
+        {%- endif %}
+        <div class="muted">The model adjusts for its own projected starter only. Check who actually starts; the opponent also
+          tends to score a little more against a weaker QB (not included).</div>
+      </div>
+      {%- endif %}
     </li>
     {%- endfor %}
   </ul>
@@ -303,6 +320,21 @@
       select.dispatchEvent(new Event("change"));
       document.getElementById("add-title").scrollIntoView({ behavior: "smooth", block: "start" });
       select.focus({ preventScroll: true });
+    });
+  });
+
+  // Injury panel: "Use this" fills the form with the suggested QB adjustment (the admin still presses Add)
+  document.querySelectorAll("button.inj-use").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var select = document.getElementById("game");
+      if (!select) return;
+      select.value = btn.dataset.game;
+      select.dispatchEvent(new Event("change"));
+      var radio = document.querySelector('input[name="team_id"][value="' + btn.dataset.team + '"]');
+      if (radio) { radio.checked = true; radio.dispatchEvent(new Event("change")); }
+      document.getElementById("points").value = btn.dataset.points;
+      document.getElementById("reason").value = btn.dataset.reason;
+      document.getElementById("add-title").scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
 

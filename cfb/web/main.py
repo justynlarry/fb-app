@@ -29,6 +29,7 @@ from cfb.auth import (
 from cfb.db import connect
 from cfb.model import MODEL_VERSION
 from cfb.nfl_model import MODEL_VERSION as NFL_MODEL_VERSION
+from cfb.nfl_qbs import qb_out_suggestion as nfl_qb_out_suggestion
 from cfb.picks import make_pick, recorded_pick
 from cfb.qbs import qb_out_suggestion
 from cfb.users import UserError, add_user, all_users, reset_password, set_active, set_admin
@@ -1586,6 +1587,17 @@ def overrides_page(request: Request, game_id: int | None = None, league: str = "
             injuries = conn.execute(
                 NFL_INJURIES_SQL, {"game_ids": [g["game_id"] for g in injury_games]}
             ).fetchall()
+            # Suggested points when the model's starting QB is listed Out or Doubtful (rare: ~1 s each)
+            for p in injuries:
+                if p["is_model_starter"] and p["report_status"] in ("Out", "Doubtful"):
+                    game = next(g for g in injury_games if g["game_id"] == p["game_id"])
+                    s = nfl_qb_out_suggestion(p["game_id"], p["team_id"],
+                                              game["view_season"], game["view_week"])
+                    if s and s["backup_id"]:
+                        row = conn.execute("SELECT qb_name FROM nfl_starters WHERE qb_id = %s LIMIT 1",
+                                           (s["backup_id"],)).fetchone()
+                        s["backup_name"] = row["qb_name"] if row else "his backup"
+                    p["suggestion"] = s
     for row in games + overrides + injury_games:                       # changed: + injury_games
         row["local_start"] = row["start_time"].astimezone(LOCAL_TZ)
     return templates.TemplateResponse(
