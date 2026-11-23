@@ -460,6 +460,7 @@ SELECT g.id AS game_id,
        ln.spread AS market_spread, ln.over_under AS market_total,
        sa.qb_name AS away_qb, sh.qb_name AS home_qb,
        ia.report_status AS away_qb_status, ih.report_status AS home_qb_status,
+       ven.dome, wf.temperature_f, wf.wind_mph, wf.gust_mph, wf.precip_in,
        COALESCE(l.state, CASE WHEN g.completed THEN 'post' END) AS state,
        COALESCE(l.away_score, g.away_points) AS away_score,
        COALESCE(l.home_score, g.home_points) AS home_score,
@@ -495,6 +496,14 @@ LEFT JOIN nfl_injuries ia ON ia.season = g.season AND ia.week = g.week
                          AND ia.team_id = g.away_id AND ia.gsis_id = sa.qb_id
 LEFT JOIN nfl_injuries ih ON ih.season = g.season AND ih.week = g.week
                          AND ih.team_id = g.home_id AND ih.gsis_id = sh.qb_id
+LEFT JOIN venues ven ON ven.id = g.venue_id
+LEFT JOIN LATERAL (     -- the latest forecast saved for this game (cfb/weather.py)
+    SELECT temperature_f, wind_mph, gust_mph, precip_in
+    FROM weather_forecasts f
+    WHERE f.game_id = g.id
+    ORDER BY f.forecast_date DESC
+    LIMIT 1
+) wf ON true
 LEFT JOIN live_scores l ON l.game_id = g.id
 LEFT JOIN pick_results r ON r.game_id = g.id
                         AND r.model_version = p.model_version

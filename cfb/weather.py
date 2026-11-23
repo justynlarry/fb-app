@@ -1,4 +1,5 @@
-"""Kickoff weather forecasts for upcoming open-air games, from Open-Meteo (free, no key, not CFBD).
+"""Kickoff weather forecasts for upcoming open-air games (college and NFL), from Open-Meteo
+(free, no key, not CFBD).
 
 Run once a day by the worker. Each run saves one forecast per game for that day, so the
 forecasts build up as history.
@@ -19,9 +20,9 @@ UPCOMING_GAMES_SQL = """
 SELECT g.id, g.start_time, v.id AS venue_id, v.latitude, v.longitude
 FROM games g
 JOIN venues v ON v.id = g.venue_id
-WHERE g.league = 'cfb'
-  AND g.start_time BETWEEN now() AND now() + make_interval(days => %s)
-  AND 'fbs' IN (g.home_classification, g.away_classification)
+WHERE g.league = %(league)s
+  AND g.start_time BETWEEN now() AND now() + make_interval(days => %(days)s)
+  AND (g.league <> 'cfb' OR 'fbs' IN (g.home_classification, g.away_classification))
   AND NOT v.dome
   AND v.latitude IS NOT NULL
 ORDER BY v.id, g.start_time
@@ -81,10 +82,11 @@ def kickoff_weather(hourly, kickoff):
     }
 
 
-def update_forecasts():
-    """Fetch and save today's forecast for every upcoming open-air game (one request per stadium)."""
+def update_forecasts(league="cfb"):
+    """Fetch and save today's forecast for every upcoming open-air game in one league
+    (one request per stadium)."""
     with connect() as conn:
-        games = conn.execute(UPCOMING_GAMES_SQL, (DAYS_AHEAD,)).fetchall()
+        games = conn.execute(UPCOMING_GAMES_SQL, {"league": league, "days": DAYS_AHEAD}).fetchall()
 
     # Group games by stadium so each stadium needs only one request
     by_venue = {}
@@ -127,5 +129,5 @@ def update_forecasts():
                 )
                 saved += 1
 
-    print(f"weather: {saved} game forecasts saved from {len(by_venue)} stadiums ({failed} failed)")
+    print(f"weather ({league}): {saved} game forecasts saved from {len(by_venue)} stadiums ({failed} failed)")
     return saved

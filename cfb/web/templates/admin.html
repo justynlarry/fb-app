@@ -49,13 +49,14 @@
         {%- set all_times = dict(st.settings.job_schedule, **st.settings.odds_schedule) %}
         {%- set paper_jobs = {'paper_models': 'Paper models (v6, B1…), never picks', 'paper_check': 'Paper-model check: every version wrote its rows',
                               'paper_models_nfl': 'NFL paper models (nfl-v3 raw, nfl-v2)', 'paper_check_nfl': 'NFL paper-model check',
-                              'nfl_injuries': 'NFL injury reports (nflverse), for Overrides'} %}
-        {%- for job in ['coach_watch', 'coordinator_watch', 'daily_update', 'paper_models', 'paper_check', 'nfl_injuries', 'nfl_daily_update', 'paper_models_nfl', 'paper_check_nfl', 'odds_snapshot'] %}
+                              'nfl_injuries': 'NFL injury reports (nflverse), for Overrides',
+                              'nfl_weather': 'NFL stadiums (ESPN) and kickoff weather (Open-Meteo)'} %}
+        {%- for job in ['coach_watch', 'coordinator_watch', 'daily_update', 'paper_models', 'paper_check', 'nfl_injuries', 'nfl_weather', 'nfl_daily_update', 'paper_models_nfl', 'paper_check_nfl', 'odds_snapshot'] %}
         {%- set r = st.jobs.get(job) %}
         <tr>
           <td class="label">{{ paper_jobs[job] if job in paper_jobs else st.job_labels[job] }}</td>
           <td class="muted small">
-            {%- if job == 'nfl_injuries' %}at the start of the NFL update
+            {%- if job in ('nfl_injuries', 'nfl_weather') %}at the start of the NFL update
             {%- elif job in paper_jobs %}after the {{ 'NFL' if job.endswith('_nfl') else 'college' }} update
             {%- else %}{{ schedule_text(all_times[job]) }}{% endif %}
             {%- if job == 'daily_update' %}<br>retries: {{ schedule_text(all_times['daily_retry']) }}{% endif %}</td>

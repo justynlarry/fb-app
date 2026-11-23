@@ -109,6 +109,7 @@
         <th>Starting QBs</th>
         <th>Our line</th>
         <th>Our O/U</th>
+        <th>Weather</th>
         <th class="market" title="The nflverse line: the current line before kickoff, the closing line after">Line</th>
         <th class="market">O/U</th>
         <th class="market">Pick</th>
@@ -119,7 +120,7 @@
       {%- for g in games %}
       {%- set day = g.local_start.strftime('%A, %B %-d') %}
       {%- if day != ns.day %}{% set ns.day = day %}
-      <tr class="day-break"><th colspan="9" scope="colgroup">{{ day }}</th></tr>
+      <tr class="day-break"><th colspan="10" scope="colgroup">{{ day }}</th></tr>
       {%- endif %}
       {%- set state = g.state or 'pre' %}
       {%- set is_final = state == 'post' and g.away_score is not none %}
@@ -189,6 +190,24 @@
             {%- if g.total_miss is not none %} <span class="band">±{{ '%.0f'|format(g.total_miss|float) }}</span>{% endif -%}
             {%- if g.adjustment_notes %}<div class="muted small">model: {{ '%.1f'|format(g.model_total|float) }}</div>{% endif -%}
           {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+        {#- ---- Weather: latest forecast before kickoff (Open-Meteo, logged daily since 2026-11-23). Same ⚠ cut as
+             college (gusts 25+ / rain 0.1+ in), but its effect on NFL totals hasn't been measured: that's the 2027 test. #}
+        {%- set has_wx = g.wind_mph is not none %}
+        {%- set gust = g.gust_mph|float if g.gust_mph is not none else 0 %}
+        {%- set rain = g.precip_in|float if g.precip_in is not none else 0 %}
+        {%- set rough = has_wx and (gust >= 25 or rain >= 0.1) %}
+        <td class="weather {{ 'rough' if rough }}" data-label="Weather">
+          {%- if g.dome -%}
+            <span class="muted">Indoors</span>
+          {%- elif has_wx -%}
+            {%- if rough %}<span class="wx-flag" title="Strong gusts or rain. Not yet measured for the NFL: logged for a 2027 test of weather and totals">⚠</span> {% endif -%}
+            {{ '%.0f'|format(g.temperature_f|float) }}°F · wind {{ '%.0f'|format(g.wind_mph|float) }}
+            {%- if g.gust_mph is not none %} <span class="muted">(gusts {{ '%.0f'|format(gust) }})</span>{% endif %}
+            {%- if rain >= 0.01 %}<div class="small">rain {{ '%.2f'|format(rain) }} in</div>{% endif -%}
+          {%- else -%}
+            <span class="muted">–</span>
+          {%- endif -%}
         </td>
         <td class="market line" data-label="Line">
           {%- if has_market -%}{{ line_text(g.market_spread, g.home, g.away) }}{%- else -%}<span class="muted">–</span>{%- endif -%}
@@ -272,7 +291,7 @@
         </td>
       </tr>
       {%- else %}
-      <tr><td colspan="9" class="empty">No NFL games for this week.</td></tr>
+      <tr><td colspan="10" class="empty">No NFL games for this week.</td></tr>
       {%- endfor %}
     </tbody>
   </table>
@@ -297,6 +316,11 @@
     the full record is on the <a href="/results?league=nfl">Results</a> page. Games before the first save (Nov 18, 2026)
     are checked against the nflverse line, without units. <span class="lean-badge win">✓ right side</span> /
     <span class="lean-badge loss">✗ wrong side</span> grades a Pass lean (not a pick) against the same line.
+  </p>
+  <p class="muted small">
+    Weather: forecast at kickoff for open-air stadiums (Open-Meteo, updated each morning from Tuesday of game week;
+    "Indoors" covers domes and retractable roofs). ⚠ = gusts 25+ mph or 0.1+ in. of rain, the same cut as college.
+    Neither our model nor this flag has been tested on NFL weather yet: the forecasts are being logged for a 2027 test.
   </p>
 </div>
 

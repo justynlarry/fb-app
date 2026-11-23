@@ -15,7 +15,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from cfb import coach_watch, coordinators, espn, nfl_injuries, nfl_model, nflverse, schedule
+from cfb import coach_watch, coordinators, espn, nfl_injuries, nfl_model, nfl_venues, nflverse, schedule
 from cfb import settings as app_settings
 from cfb.backfill import refresh_recent_qbs
 from cfb.db import connect
@@ -134,11 +134,27 @@ def nfl_injuries_job(season):
             run.fail(repr(err))
 
 
+def nfl_weather_job():
+    """NFL stadiums from ESPN, then kickoff forecasts for open-air NFL games (job 'nfl_weather').
+    Runs on its own, so a failure here never stops the NFL predictions."""
+    with job_run("nfl_weather") as run:
+        try:
+            linked, missing = nfl_venues.sync_venues()
+            saved = update_forecasts("nfl")
+            run.message = f"{linked} games linked to stadiums, {saved} forecasts"
+            if missing:
+                run.message += f", {missing} without stadium coordinates"
+        except Exception as err:
+            print(f"NFL weather FAILED: {err!r}")
+            run.fail(repr(err))
+
+
 def nfl_daily_update():
     """Reload this NFL season from nflverse (free, no API key) and re-predict upcoming games."""
     season = current_season()
     if games_near(season, "nfl"):
         nfl_injuries_job(season)        # first and on its own
+        nfl_weather_job()
     with job_run("nfl_daily_update") as run:
         if not games_near(season, "nfl"):
             print(f"NFL daily update: no {season} games this week or next, skipping")

@@ -384,6 +384,15 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `NFL_PREDICTIONS_SQL.away_qb_status/home_qb_status` (nfl_starters × nfl_injuries by gsis_id): the model's QB listed
   Out/Doubtful = red badge (predictions page, unstarted games) and that game first and open on the panel;
   Questionable = amber "Q". Macro `qb_status_badge`.
+- **NFL weather logging (built 2026-11-23; user typed 033, `cfb/nfl_venues.py`, the weather.py league switch and the
+  worker job; Claude typed the `NFL_PREDICTIONS_SQL` weather part at the user's request, rule unchanged):**
+  `venues.espn_id` (033). Job `nfl_weather` (start of `nfl_daily_update`, own try): `nfl_venues.sync_venues()` reads
+  ESPN's current-week NFL scoreboard (stadium, city, `indoor`), locates new stadiums once (ESPN core venue ZIP →
+  Open-Meteo geocoder with countryCode=US; city name abroad), links `games.venue_id`; then
+  `weather.update_forecasts("nfl")` into `weather_forecasts`. ESPN shows one week at a time, so games collect forecasts
+  from ~Tuesday of game week. ESPN marks retractable roofs indoor (skipped). Weather column on the NFL predictions
+  page, same ⚠ cut as college but labelled untested for the NFL. Purpose: an honest out-of-sample NFL weather/totals
+  test in 2027 (not registered yet). nflverse games.csv also has observed `temp`/`wind`/`roof` for past games.
 - **NFL line movement (loaded 2026-11-17; Claude typed `021_nfl_line_moves.sql` and `cfb/line_moves.py` at the user's
   request, rule unchanged).** Table `nfl_line_moves` (game_id, source, snapshot, home_spread, total, moneylines, flags),
   evaluation only. Load: `docker compose exec -T worker python -m cfb.line_moves picksfootball|sbro < reference/<file>.csv`
