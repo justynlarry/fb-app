@@ -11,10 +11,11 @@ overrides it where they differ.
   Claude must not create or edit those files. Instead, Claude:
   - explains what the next file/function needs to do and why,
   - gives the code in chat in small, typeable chunks (one function or one table at a time),
-  - reviews what the user typed (read the file, point out bugs, suggest fixes in chat),
-  - when the user asks Claude to "check and correct" a file, fixes the errors in place
-    (bugs, typos, indentation, style), without adding new features, and explains each fix
-    so the user learns from it,
+  - reviews what the user typed (read the file, point out bugs),
+  - **when the user asks Claude to check, review or look at something they typed (any wording,
+    e.g. "it's in", "check it", "check and correct"), Claude also fixes the errors in place**
+    (bugs, typos, indentation, style), without adding new features or changing the design, and
+    explains each fix so the user learns from it (user, 2026-11-23),
   - runs it/tests it when asked and explains errors.
   The goal is that the user writes and understands the backend. Prefer clear, plain code
   over clever code in anything Claude suggests for the user to type.
@@ -372,6 +373,13 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   T-LOOK still needs timed lookahead lines (The Odds API history, paid, ask first).
   T-QB2 rejected 2026-11-16 (QB value from full careers, faded, draft-slot prior): miss 10.268 → 10.268 on
   2011–25, n=3,827. The simple QB adjustment already captures it; don't retry without new information.
+- **NFL injury panel (built 2026-11-23; user typed 032, `cfb/nfl_injuries.py`, the worker job and the main.py part):**
+  `032_nfl_injuries.sql` (one row per season, week, team, gsis_id; upserted, history kept); nflverse
+  `injuries_{season}.csv` (free, nflverse refreshes it ~00:00 MT; no timestamps in the file). Worker job
+  `nfl_injuries` runs first in `nfl_daily_update`, in its own try. `NFL_INJURIES_SQL` → panel on
+  `/overrides?league=nfl`: this week's unstarted games, 5+ gaps (same line/gap as the NFL predictions page) open at
+  the top; QBs show season dropbacks (100+ highlighted as the starter). "Check news" on the NFL predictions page
+  links to it. Display only, never a model input (T-skill). Playoff weeks 19–22 match `games.week`.
 - **NFL line movement (loaded 2026-11-17; Claude typed `021_nfl_line_moves.sql` and `cfb/line_moves.py` at the user's
   request, rule unchanged).** Table `nfl_line_moves` (game_id, source, snapshot, home_spread, total, moneylines, flags),
   evaluation only. Load: `docker compose exec -T worker python -m cfb.line_moves picksfootball|sbro < reference/<file>.csv`

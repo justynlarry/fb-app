@@ -928,6 +928,39 @@ ORDER BY g.start_time, a.school
 """
 
 
+# This week's NFL injury reports (nflverse, loaded daily by cfb/nfl_injuries.py) for the panel on
+# /overrides?league=nfl: players listed Out, Doubtful or Questionable for the given games.
+# season_dropbacks is filled only for QBs: it shows whether an injured QB is the usual starter.
+NFL_INJURIES_SQL = """
+SELECT g.id AS game_id,
+       i.team_id,
+       i.full_name,
+       i.position,
+       i.report_status,
+       i.injury,
+       i.practice_status,
+       i.loaded_at,
+       (SELECT sum(q.dropbacks)
+        FROM nfl_qb_games q
+        JOIN games g2 ON g2.id = q.game_id
+        WHERE q.qb_id = i.gsis_id
+          AND g2.season = i.season) AS season_dropbacks
+FROM nfl_injuries i
+JOIN games g ON g.league = 'nfl'
+            AND g.season = i.season
+            AND g.week = i.week
+            AND i.team_id IN (g.home_id, g.away_id)
+WHERE g.id = ANY(%(game_ids)s)
+  AND i.report_status IS NOT NULL
+ORDER BY g.id,
+         i.team_id,
+         CASE i.report_status WHEN 'Out' THEN 1 WHEN 'Doubtful' THEN 2 ELSE 3 END,
+         array_position(ARRAY['QB', 'WR', 'TE', 'RB', 'FB', 'T', 'G', 'C',
+                              'DE', 'DT', 'LB', 'CB', 'S', 'K', 'P', 'LS'], i.position),
+         i.full_name
+"""
+
+
 class OverrideIn(BaseModel):
     """What the overrides form sends."""
     game_id: int
@@ -1522,17 +1555,26 @@ def bets_page(request: Request, user: str | None = None):
 def overrides_page(request: Request, game_id: int | None = None, league: str = "cfb"):
     """Add or remove manual adjustments for this week's games (?league=nfl for the NFL)."""
     league = pick_league(league)
+    injury_games, injuries = [], []                                     # new
     with connect() as conn:
         conn.row_factory = dict_row
         games = conn.execute(OVERRIDE_GAMES_SQL, {"league": league}).fetchall()
         overrides = conn.execute(ACTIVE_OVERRIDES_SQL, {"league": league}).fetchall()
-    for row in games + overrides:
+        if league == "nfl":                                             # new: injury panel
+            params = {"version": NFL_MODEL_VERSION, "season": None, "week": None, "season_type": None}
+            injury_games = [g for g in conn.execute(NFL_PREDICTIONS_SQL, params).fetchall()
+                            if not g["started"]]
+            injuries = conn.execute(
+                NFL_INJURIES_SQL, {"game_ids": [g["game_id"] for g in injury_games]}
+            ).fetchall()
+    for row in games + overrides + injury_games:                       # changed: + injury_games
         row["local_start"] = row["start_time"].astimezone(LOCAL_TZ)
     return templates.TemplateResponse(
         request,
         "overrides.html",
         {"games": games, "overrides": overrides, "selected_game": game_id,
-         "active": "overrides", "league": league},
+         "active": "overrides", "league": league,
+         "injury_games": injury_games, "injuries": injuries},          # new
     )
 
 

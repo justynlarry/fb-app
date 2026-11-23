@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Overrides{% endblock %}
-{% from "_macros.html" import league_tabs %}
+{% from "_macros.html" import league_tabs, line_text %}
 {% block content %}
 {%- set league = league | default('cfb') %}
 {%- set is_nfl = league == 'nfl' %}
@@ -19,6 +19,89 @@
 {%- endif %}
 
 {%- set is_admin = request.state.user is defined and request.state.user.is_admin %}
+
+{#- ---- NFL injury reports: this week's games that haven't kicked off, 5+ point gaps first and open.
+     Gap = our line (overrides included) vs the nflverse line, the same numbers as the NFL predictions page. #}
+{%- if is_nfl and injury_games %}
+{%- set practice_short = {'Did Not Participate In Practice': 'DNP', 'Limited Participation in Practice': 'limited',
+                          'Full Participation in Practice': 'full'} %}
+{%- macro injury_list(team, game_id) -%}
+  {%- set players = injuries | selectattr('game_id', 'equalto', game_id) | selectattr('team_id', 'equalto', team) | list %}
+  {%- if players %}
+  <ul class="inj-list">
+    {%- for p in players %}
+    {%- set starter_qb = p.position == 'QB' and (p.season_dropbacks or 0) >= 100 %}
+    <li class="inj {{ 'inj-key' if starter_qb }}">
+      <span class="inj-status inj-{{ p.report_status|lower }}">{{ p.report_status }}</span>
+      <span class="inj-pos">{{ p.position or '' }}</span>
+      <span class="inj-name">{{ p.full_name }}</span>
+      <span class="muted small">
+        {{- p.injury or '' }}
+        {%- if p.practice_status %}{{ ' · ' if p.injury }}practice: {{ practice_short.get(p.practice_status, p.practice_status|lower) }}{% endif %}
+        {%- if p.position == 'QB' %} · {{ p.season_dropbacks or 0 }} dropbacks this season{% endif %}
+      </span>
+    </li>
+    {%- endfor %}
+  </ul>
+  {%- else %}
+  <p class="muted small">Nobody listed.</p>
+  {%- endif %}
+{%- endmacro %}
+{%- macro count_text(team, game_id) -%}
+  {%- set players = injuries | selectattr('game_id', 'equalto', game_id) | selectattr('team_id', 'equalto', team) | list %}
+  {%- set outs = players | selectattr('report_status', 'equalto', 'Out') | list | length %}
+  {%- set doubt = players | selectattr('report_status', 'equalto', 'Doubtful') | list | length %}
+  {%- set quest = players | selectattr('report_status', 'equalto', 'Questionable') | list | length %}
+  {{- outs }} out{% if doubt %}, {{ doubt }} doubtful{% endif %}{% if quest %}, {{ quest }} questionable{% endif %}
+{%- endmacro %}
+{%- set ns = namespace(big=[], rest=[]) %}
+{%- for g in injury_games %}
+  {%- set gap = ((g.spread|float - g.market_spread|float)|abs) if (g.spread is not none and g.market_spread is not none) else none %}
+  {%- if gap is not none and gap >= 5 %}{% set ns.big = ns.big + [(gap, g)] %}{% else %}{% set ns.rest = ns.rest + [(gap, g)] %}{% endif %}
+{%- endfor %}
+<section class="panel injury-panel" aria-labelledby="inj-title">
+  <h2 id="inj-title">Injury reports</h2>
+  <p class="muted small">
+    From nflverse's copy of the official NFL reports, loaded each morning
+    {%- if injuries %} (last load {{ injuries[0].loaded_at.astimezone(injury_games[0].local_start.tzinfo).strftime('%a %b %-d, %-I:%M %p') }}){% endif %}.
+    Reports come out Wednesday to Friday (Monday/Tuesday for Thursday games), so early in the week this may still show last week's list or nothing.
+    Games 5+ points off the market line are open at the top: look here first. The model doesn't use this list;
+    if something matters, enter an adjustment.
+  </p>
+  {%- for gap, g in (ns.big | sort(attribute='0', reverse=true)) + ns.rest %}
+  {%- set flagged = gap is not none and gap >= 5 %}
+  {%- set og = games | selectattr('game_id', 'equalto', g.game_id) | first %}
+  {%- if og %}
+  <details class="inj-game {{ 'inj-flagged' if flagged }}" id="inj-{{ g.game_id }}" {{ 'open' if flagged or selected_game == g.game_id }}>
+    <summary>
+      <span class="inj-matchup"><strong>{{ g.away }} at {{ g.home }}</strong>
+        <span class="muted small">{{ g.local_start.strftime('%a %-I:%M %p') }}</span></span>
+      <span class="inj-lines small">
+        ours {{ line_text(g.spread, g.home, g.away) }} · line {{ line_text(g.market_spread, g.home, g.away) }}
+        {%- if gap is not none %} · <strong>{{ '%.1f'|format(gap) }}</strong> apart{% endif %}
+        {%- if flagged %} <span class="news-flag">Check news</span>{% endif %}
+      </span>
+      <span class="inj-counts muted small">{{ g.away }}: {{ count_text(og.away_id, g.game_id) }} · {{ g.home }}: {{ count_text(og.home_id, g.game_id) }}</span>
+    </summary>
+    <div class="inj-teams">
+      <div>
+        <h3 class="inj-team">{{ g.away }} <span class="muted small">(visitor{% if g.away_qb %}, QB {{ g.away_qb }}{% endif %})</span></h3>
+        {{ injury_list(og.away_id, g.game_id) }}
+      </div>
+      <div>
+        <h3 class="inj-team">{{ g.home }} <span class="muted small">(home{% if g.home_qb %}, QB {{ g.home_qb }}{% endif %})</span></h3>
+        {{ injury_list(og.home_id, g.game_id) }}
+      </div>
+    </div>
+    {%- if is_admin %}
+    <button type="button" class="link-button inj-adjust" data-game="{{ g.game_id }}">Add an adjustment for this game</button>
+    {%- endif %}
+  </details>
+  {%- endif %}
+  {%- endfor %}
+</section>
+{%- endif %}
+
 {%- if is_admin %}
 <section class="panel" aria-labelledby="add-title">
   <h2 id="add-title">Add an adjustment</h2>
@@ -197,6 +280,18 @@
       }).catch(function () { show("Couldn't reach the server.", true); });
     });
   }
+
+  // Injury panel: "Add an adjustment for this game" picks the game in the form and moves to it
+  document.querySelectorAll("button.inj-adjust").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var select = document.getElementById("game");
+      if (!select) return;
+      select.value = btn.dataset.game;
+      select.dispatchEvent(new Event("change"));
+      document.getElementById("add-title").scrollIntoView({ behavior: "smooth", block: "start" });
+      select.focus({ preventScroll: true });
+    });
+  });
 
   // Remove: first click asks to confirm, second click removes
   document.querySelectorAll("button.remove").forEach(function (btn) {

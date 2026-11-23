@@ -15,7 +15,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from cfb import coach_watch, coordinators, espn, nfl_model, nflverse, schedule
+from cfb import coach_watch, coordinators, espn, nfl_injuries, nfl_model, nflverse, schedule
 from cfb import settings as app_settings
 from cfb.backfill import refresh_recent_qbs
 from cfb.db import connect
@@ -122,9 +122,23 @@ def daily_retry():
         daily_update()
 
 
+def nfl_injuries_job(season):
+    """Today's nflverse injury reports for the Overrides page (job 'nfl_injuries').  Runs on its own,
+    so a failure here doesn't stop the NFL predictions."""
+    with job_run("nfl_injuries") as run:
+        try:
+            saved = nfl_injuries.load_injuries(season)
+            run.message = f"{saved} injury rows"
+        except Exception as err:
+            print(f"NFL injuries FAILED: {err!r}")
+            run.fail(repr(err))
+
+
 def nfl_daily_update():
     """Reload this NFL season from nflverse (free, no API key) and re-predict upcoming games."""
     season = current_season()
+    if games_near(season, "nfl"):
+        nfl_injuries_job(season)        # first and on its own
     with job_run("nfl_daily_update") as run:
         if not games_near(season, "nfl"):
             print(f"NFL daily update: no {season} games this week or next, skipping")

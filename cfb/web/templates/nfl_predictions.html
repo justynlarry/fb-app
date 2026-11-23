@@ -232,7 +232,7 @@
             {%- if not g.started and gap >= 5 %}
             <div class="news-check small">
               <span class="news-flag" title="Big NFL gaps are often QB or injury news the model doesn't have">Check news</span>
-              injuries / QB before trusting this
+              <a href="/overrides?league=nfl&amp;game_id={{ g.game_id }}#inj-{{ g.game_id }}">injury report</a> before trusting this
             </div>
             {%- endif %}
             <div class="muted small">{{ '%.1f'|format(gap) }} pts off the line</div>

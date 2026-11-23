@@ -748,3 +748,47 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .pending-coaches td.actions { white-space: nowrap; }
 .pending-coaches td.actions .link-button { margin-left: 0.6rem; }
 .coach-date { font: inherit; font-size: 0.85rem; padding: 0.3rem 0.4rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+
+/* NFL injury panel (Overrides page) */
+.injury-panel > p { margin-top: 0; }
+.inj-game { border-top: 1px solid var(--border); padding: 0.5rem 0; }
+.inj-game > summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 1rem;
+  list-style-position: outside;
+}
+.inj-game > summary::marker { color: var(--muted); }
+.inj-flagged > summary .inj-matchup strong { color: var(--caution); }
+.inj-lines { font-variant-numeric: tabular-nums; }
+.inj-counts { flex-basis: 100%; }
+.inj-teams {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0.5rem 1.5rem;
+  margin: 0.5rem 0 0.25rem;
+}
+.inj-team { font-size: 0.9rem; margin: 0.25rem 0; }
+.inj-list { list-style: none; margin: 0; padding: 0; }
+.inj { padding: 0.15rem 0; line-height: 1.35; }
+.inj-key { background: var(--caution-bg); border-radius: 4px; padding-left: 0.3rem; }
+.inj-status {
+  display: inline-block;
+  min-width: 6.2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.inj-out { color: var(--against); }
+.inj-doubtful { color: var(--caution); }
+.inj-questionable { color: var(--muted); }
+.inj-pos { display: inline-block; min-width: 2rem; font-weight: 600; color: var(--muted); font-size: 0.8rem; }
+.inj-name { font-weight: 600; }
+.inj-adjust { margin-top: 0.25rem; }
+@media (max-width: 640px) {
+  .inj-teams { grid-template-columns: 1fr; }
+  .inj-status { min-width: 5.4rem; }
+}
