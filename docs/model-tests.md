@@ -972,7 +972,7 @@ What isn't shown is that this turns into wins at the Monday price (slope +0.04 �
 consequence, NFL paper-tracking at the live Monday snapshot is built for 2027. The paper record, not these
 backtests, decides whether NFL picks are ever bet.
 
-### H-STAKES: late-season stakes mismatch (pre-registered 2026-11-23, approved by the user as written the same day; NOT run)
+### H-STAKES: late-season stakes mismatch (pre-registered 2026-11-23, approved by the user as written the same day; Stage 1 run the same day: failed)
 From the exploratory look on 2026-11-16 (scratch `nfl_situations.py`, nflverse closes **1999–2025**): late in the
 season, a team at ≤ .350 playing one at .500+ covered 47.6% ± 4.6 (n = 445, −1.5 pts vs the close). The user decided
 the same day that this deserves a pre-registered test with a standings-based measure instead of the record proxy,
@@ -1033,6 +1033,21 @@ zero (sign only, no SE bar).
 
 **Count.** Two judged looks (Stage 1 once, Stage 2 once after 2028), 0 API calls, no paid data. Stage 1 writes nothing to
 the DB; Stage 2 needs the live tag, built only if Stage 1 passes.
+
+### H-STAKES Stage 1 result (run 2026-11-23, scratch `hstakes/stage1.py`, under 1 s, nothing written to the DB, 0 calls): **fails → dropped**
+- *Alignment first (step A, before grading):* hand table of pre-2002 divisions by franchise (CAR, JAX from 1995; BAL
+  replaces CLE in 1996), checked against every schedule: 0 problems (all teams 16 games; every pair of division rivals
+  met exactly twice; every favourite id is one of the game's two teams). 30 non-division pairs also met twice (the old
+  fifth-place schedule), which is why divisions can't be inferred from the schedule alone.
+- **Judged:** n = 462 Out-vs-Alive games (10 pushes out). Out team's mean margin against the close **+0.41 ± 0.60
+  (+0.68 SE; bar −2.13)**. Halves: 1978–88 +0.63, 1989–98 +0.18. Both conditions fail; the sign is the opposite of the
+  hypothesis.
+- **Reported:** Out teams covered 53.9% ± 4.5. Strict cut (n = 197) +0.47 ± 0.93; the exploratory proxy (≤ .350 vs
+  ≥ .500, n = 391) −0.06 ± 0.68; Out at home +1.07 ± 0.85, away −0.30 ± 0.84. Totals in these games: actual − O/U
+  +1.43 ± 0.69, over 53.4% (information only). By season the mean ranged from −5.4 to +7.8 (n = 16–31 a season).
+- **Reading.** On 19 seasons nobody had looked at, teams out of the race did not do worse against the line than teams
+  still in it. The −1.5 pts seen in the 1999–2025 exploration was most likely selection noise. Per the registration:
+  dropped, no variants, no Stage 2, no stakes tag.
 
 ## 10. Round 2, college (from `docs/model-plan-2026-11-17.md` §2.2)
 

@@ -423,7 +423,8 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   standings-based "games left vs playoff position" measure instead of the record proxy, judged on later seasons, not
   these. **Registered 2026-11-23 as H-STAKES** (model-tests.md §9): Out (GB ≥ games left − 2 to the last seed and division
   leader) vs Alive, last 6 weeks; Stage 1 on 1978–98 spreadspoke closes at 2.13 SE (user's choice: clean earlier seasons,
-  ~550 games), Stage 2 = same sign on 2026–28 at the Monday line. Approved as written 2026-11-23; not run. Division games and head-to-head: parked (not steady by era; head-to-head repeats college Test 4). Resting
+  ~550 games), Stage 2 = same sign on 2026–28 at the Monday line. Approved as written 2026-11-23. **Stage 1 FAILED the
+  same day:** Out teams +0.41 ± 0.60 vs the close (n = 462, opposite sign; covered 53.9%) → dropped, no variants. Division games and head-to-head: parked (not steady by era; head-to-head repeats college Test 4). Resting
   starters: covered by T-QB.
 - **Year-rollover watch list (noted 2026-11-16):**
   1. `cfb/model.py backtest()` defaults to `last_season=2025`. **Never backtest a season that has live predictions
