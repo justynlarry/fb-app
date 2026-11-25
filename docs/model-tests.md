@@ -390,6 +390,27 @@ rejected a current-season bias correction, and nothing new has turned up. No new
   agree and disagree separately, with n and 95% intervals; line move (bet-time median → last pre-kickoff median) for
   each. Nothing is decided by it.
 
+### H-LEAN: Pass-tier leans, reported only (registered 2026-11-25 by the user, before any 2027 game; not judged, not in any count)
+- **Why it's written down:** in 2026 v5's Late Pass leans went 50–38 (56.8%, ±10.3 at 95%, +8.20 units, 3 weeks of
+  games, Nov 12–24) while the same games' Early leans went 44–47 (48.4%, −6.44). Most of the Late gain came from 20 games
+  whose lean flipped between Early and Late because the line moved past our number (Late 14–6, Early 6–14); same-side
+  games went 32–27. The backtest Pass rate at the Bovada open is 51.0% (n = 1,999, 2021–25), and 2–3 point gaps went 49%.
+  Found by looking at the Results page (hindsight, the best of ~10 cells), so 2026 can't confirm it and isn't used as a
+  holdout.
+- **Lean:** a game whose spread pick is tier Pass (gap under `play_gap`), graded on the side of the market our line is on
+  (`pick_results.side`, as the Results page does). Games where our line equals the number have no lean and are left out.
+- **Reported after the 2027 regular season, frozen v6 (bowls reported separately):**
+  1. Early (bet time, `pick_results` 'first'): the one that counts if this ever becomes a bet. Record, units, n and 95%
+     interval at the bettable number and price (`pick_results_bettable`), best-anywhere beside it.
+  2. Late (last save before kickoff, 'last'), same measures.
+  3. Late split by **flipped** (Early lean on the other side: the line moved past our number between bet time and the
+     last save) vs **same side**, each with n and 95% interval.
+  4. Compared with break-even at the median bettable price and with the backtest Pass rate at the open (51.0%).
+- **Nothing is decided by it.** At most, an Early lean record clearly above break-even (95% interval above it) would be
+  a reason to pre-register a judged 2028 test, with its own bar, before any 2028 game. Leans are never bet in 2027.
+- **To build before week 0:** add the four measures to `cfb/report_2027.py` (read-only; user types it). The data is
+  already logged: every Pass pick is saved in `pick_log`.
+
 ### CLV % definitions (note added 2026-11-18)
 Two definitions have been used; each test applied one of them to both models, so no verdict depends on the choice.
 - **B (moved only):** line moved toward us ÷ 3+ picks whose line moved. Used by the backtest view (`clv_win`, NULL when

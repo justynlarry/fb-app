@@ -106,6 +106,8 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    the kickoff cell (as of page load; no auto-refresh). Results: "Pass (lean side, not bets)" card, and Pass games in
    "Picks, last 3 weeks" graded on our lean (`RECENT_PICKS_SQL` now takes every row with a `side`). Claude typed the
    three `main.py` SQL lines at the user's request (rule unchanged).
+   **H-LEAN registered 2026-11-25 (reported only, 2027; model-tests.md):** 2026 Late Pass leans 50–38 but Early 44–47 on
+   the same games, backtest Pass at open 51.0% (n = 1,999): noise so far, not bet. Measures go in `report_2027.py`.
 
 ## Model
 
