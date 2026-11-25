@@ -812,3 +812,11 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .inj-model-starter { background: var(--against-bg); }
 .inj-suggest { margin: 0.2rem 0 0.35rem 8.4rem; padding: 0.3rem 0.5rem; border-left: 3px solid var(--against); background: var(--surface); border-radius: 0 4px 4px 0; }
 @media (max-width: 640px) { .inj-suggest { margin-left: 0; } }
+
+/* Predictions: score and clock of a game in progress (kickoff cell) */
+.live-score { font-weight: 700; font-variant-numeric: tabular-nums; }
+.live-clock { display: block; color: var(--muted); font-size: 0.8em; }
+
+/* Results: Pass rows in "Picks, last 3 weeks" show our lean, not a bet */
+.results-picks tr.pick-pass .pick-main strong { font-weight: 600; color: var(--muted); }
+.lean-result { color: var(--muted); font-size: 0.85em; }

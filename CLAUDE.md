@@ -102,6 +102,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    NFL page and the NFL pick logger (`picks.UPCOMING_SQL`) show the same line. Phones/tablets (≤1024 px) show NFL
    nicknames only (`team_name` macro, `.team-city`). Claude typed the `main.py` part at the user's request (rule
    unchanged).
+5. **Live score + Pass leans (2026-11-25):** predictions pages show the live score and ESPN clock (`status_detail`) in
+   the kickoff cell (as of page load; no auto-refresh). Results: "Pass (lean side, not bets)" card, and Pass games in
+   "Picks, last 3 weeks" graded on our lean (`RECENT_PICKS_SQL` now takes every row with a `side`). Claude typed the
+   three `main.py` SQL lines at the user's request (rule unchanged).
 
 ## Model
 

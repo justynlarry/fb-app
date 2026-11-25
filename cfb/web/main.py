@@ -307,6 +307,7 @@ SELECT g.id AS game_id,
        COALESCE(l.state, CASE WHEN g.completed THEN 'post' END) AS state,
        COALESCE(l.away_score, g.away_points) AS away_score,
        COALESCE(l.home_score, g.home_points) AS home_score,
+       l.status_detail,
        l.away_rank, l.home_rank,
        l.away_record, l.home_record,
        l.away_conf_record, l.home_conf_record,
@@ -465,6 +466,7 @@ SELECT g.id AS game_id,
        COALESCE(l.state, CASE WHEN g.completed THEN 'post' END) AS state,
        COALESCE(l.away_score, g.away_points) AS away_score,
        COALESCE(l.home_score, g.home_points) AS home_score,
+       l.status_detail,
        l.away_record, l.home_record,
        r.tier AS rec_tier, r.side AS rec_side,
        r.our_spread AS rec_our_spread, r.market_spread AS rec_market_spread,
@@ -694,7 +696,7 @@ JOIN teams a ON a.id = g.away_id
 JOIN teams h ON h.id = g.home_id
 WHERE r.model_version = %(version)s
   AND r.taken = 'last'
-  AND (r.tier IN ('play', 'caution') OR r.total_side IS NOT NULL)
+  AND (r.side IS NOT NULL OR r.total_side IS NOT NULL)   -- Pass picks too (graded on our lean)
   AND r.start_time > now() - interval '21 days'
 ORDER BY r.start_time DESC, a.school
 """

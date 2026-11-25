@@ -54,8 +54,9 @@
   {{ league_tabs('/results', league) }}
 </div>
 
+{#- Pass = games our line was too close to the market to bet; graded on the side we leaned to (not bets) -#}
 <section class="cards" aria-label="Summary">
-  {%- for tier, label in spread_tiers %}
+  {%- for tier, label in spread_tiers[:-1] + [('pass', 'Pass (lean side, not bets)'), spread_tiers[-1]] %}
   {%- set r = by.get(('last', tier)) %}
   <div class="card {{ 'highlight' if tier == 'play' and r and r.graded and r.units|float > 0 }}">
     <div class="card-label">{{ label }} · last before kickoff</div>
@@ -118,6 +119,10 @@
     </tbody>
   </table>
 </div>
+<p class="muted small"><strong>Pass (lean side)</strong> = games where our line was too close to the market to bet
+  (under {{ '%g'|format(rules.play_gap|float) if rules is defined and rules.play_gap is defined else 3 }} points apart), graded as if we'd taken
+  the side our line leaned to. Example: we say Team X −3.2, the market says Team X −3.5, so we lean to the other team +3.5.
+  These are not bets and aren't in the Play record.</p>
 
 {#- The same picks graded at the books the user can actually bet (view pick_results_bettable, the Nov 17 rule) -#}
 {%- set bt = {} %}
@@ -336,7 +341,7 @@
         <th>Kickoff</th>
         <th>Visitor</th>
         <th>Home</th>
-        <th>Pick (last before kickoff)</th>
+        <th>Pick or lean (last before kickoff)</th>
         <th>Our line</th>
         <th>Final</th>
         <th>Result</th>
@@ -346,7 +351,8 @@
       {%- for p in recent %}
       {%- set pick_home = p.side == 'home' %}
       {%- set is_bet = p.tier in ('play', 'caution') %}
-      <tr class="{{ 'pick-play' if p.tier == 'play' }}">
+      {%- set is_lean = p.tier == 'pass' and p.side and p.bet_spread is not none %}
+      <tr class="{{ 'pick-play' if p.tier == 'play' }}{{ 'pick-pass' if is_lean }}">
         <td class="kickoff">{{ p.local_start.strftime('%a %b %-d') }}<div class="muted small">{{ p.local_start.strftime('%-I:%M %p') }}</div></td>
         {{ team_cell(p.away, p.away_espn_id, none, none, none, league=league) }}
         {{ team_cell(p.home, p.home_espn_id, none, none, none, league=league) }}
@@ -354,6 +360,14 @@
           {%- if is_bet and p.bet_spread is not none %}
           <div class="pick-main">
             <span class="tier tier-{{ p.tier }}">{{ p.tier|capitalize }}</span>
+            <strong>{{ p.home if pick_home else p.away }} {{ side_number(p.bet_spread, pick_home) }}</strong>
+            <span class="price">{{ price_text(p.bet_price) }}</span>
+            <span class="book">{{ book_name(p.bet_book) }}</span>
+          </div>
+          {%- elif is_lean %}
+          <div class="pick-main" title="Too close to the market to bet: graded on the side our line leaned to">
+            <span class="tier tier-pass">Pass</span>
+            <span class="muted small">lean</span>
             <strong>{{ p.home if pick_home else p.away }} {{ side_number(p.bet_spread, pick_home) }}</strong>
             <span class="price">{{ price_text(p.bet_price) }}</span>
             <span class="book">{{ book_name(p.bet_book) }}</span>
@@ -374,7 +388,8 @@
           {%- if p.completed -%}{{ p.away_points }}–{{ p.home_points }}{%- else -%}<span class="muted">–</span>{%- endif -%}
         </td>
         <td class="result">
-          {%- if is_bet %}<div>{{ outcome_badge(p.spread_outcome, p.spread_units) }}</div>{% endif -%}
+          {%- if is_bet %}<div>{{ outcome_badge(p.spread_outcome, p.spread_units) }}</div>
+          {%- elif is_lean %}<div class="lean-result">Lean {{ outcome_badge(p.spread_outcome, p.spread_units) }}</div>{% endif -%}
           {%- if p.total_side %}<div class="small">{{ 'O/U ' }}{{ outcome_badge(p.total_outcome, p.total_units) }}</div>{% endif -%}
         </td>
       </tr>

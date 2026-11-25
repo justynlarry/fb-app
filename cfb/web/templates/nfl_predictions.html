@@ -152,6 +152,8 @@
             <span class="final">Final {{ g.away_score }}–{{ g.home_score }}</span>
           {%- elif state == 'in' -%}
             <span class="live-dot"></span>Live
+            {%- if g.away_score is not none %} <span class="live-score">{{ g.away_score }}–{{ g.home_score }}</span>{% endif %}
+            {%- if g.status_detail is defined and g.status_detail %}<span class="live-clock">{{ g.status_detail }}</span>{% endif -%}
           {%- elif g.start_time_tbd -%}TBD
           {%- else -%}{{ g.local_start.strftime('%-I:%M %p') }}
           {%- endif -%}
