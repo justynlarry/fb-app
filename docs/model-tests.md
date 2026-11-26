@@ -1070,6 +1070,62 @@ the DB; Stage 2 needs the live tag, built only if Stage 1 passes.
   still in it. The −1.5 pts seen in the 1999–2025 exploration was most likely selection noise. Per the registration:
   dropped, no variants, no Stage 2, no stakes tag.
 
+### nfl-v3-wk: centred weeks-played interactions (pre-registered 2026-11-25, approved by the user; before any nfl-v3-wk result)
+- **Why:** nfl-v3 is too steep with 0–2 weeks of data (0.75 on 2006–16) and flatter late, because one set of rating
+  weights serves the whole season. T-WEEK tried weights that change with weeks played and failed because the ratings
+  include the regression intercept, so p × rating was nearly p (r ≈ 0.99). Centring both fixes that (built and checked
+  2026-11-25: |r| of each new column with its own rating ≤ 0.12). New idea, so T-WEEK's rejection doesn't block it.
+- **Model (fixed, as built in `cfb/nfl_model.py`):** nfl-v3 + `progress` = min(weeks played, 17)/17 − 0.5, + 28 columns
+  = (rating − mean of that rating over every team rated at the same cutoff) × progress, for **all 28** of nfl-v3's
+  ratings (offense, opponent defense, own defense, opponent offense; user's choice 2026-11-25). QB and home columns not
+  interacted. Frozen SETTINGS, LinearRegression, walk-forward, 2020 out of training. All columns kept (pairs ≥ 0.95
+  reported, never dropped).
+- **Calibration error (CE):** weeks-played buckets b ∈ {0–2, 3–5, 6–9, 10+}; cal_b = OLS slope of the actual margin on
+  our spread in bucket b; CE = Σ_b n_b (cal_b − 1)² / Σ_b n_b (as EARLY-1). Paired season-week bootstrap, 2,000.
+- **Stage 1, a gate on the clean seasons (one run, not a judged pass):** pre-2016 nflverse data rebuilt in scratch only
+  (never loaded into the DB: `nfl_qbs.py` reads every `nfl_qb_games` row), training from 1999, judged 2006–2016, both
+  models on the same rows. Rebuild check before anything is graded: replay of 2016–25 vs stored nfl-v3 backtest, mean
+  |diff| < 0.01; season stats checked as in T-HIST (a broken season is dropped before results). **Goes on to 2027 if
+  both hold:** (a) CE lower by ≥ 1 paired SE; (b) spread MAE not worse by more than 1 paired SE. Reported: cal_b by
+  bucket, MAE by bucket, total MAE, slope at the close, line SD, by season. **Fails → dropped before 2027**, removed
+  from `paper.NFL_VERSIONS`, the NFL family drops to 1 (N-TOT-B1 keeps its registered 1.96). No variants.
+- **Stage 2, judged over 2027–28 (registered family, bar 1.96):** paper rows from `paper_predictions`, the last row
+  saved before the NFL bet time (first Monday 6:00 AM MT of game week), every 2027–28 game with a final score.
+  **Supported** if (1) CE lower than nfl-v3's by ≥ 1.96 paired SE, and (2) spread MAE not worse by more than 1 paired SE.
+  Reported: Δ line-move slope (Monday → close), total MAE, cal_b. Supported → candidate to replace nfl-v3 for accuracy
+  and calibration (NFL picks stay paper unless decided separately). Not supported → dropped for good.
+- **Power, stated now:** T-MATCH's calibration gain on 2006–16 had SE 0.063; two live seasons (~570 games) give roughly
+  2.3× that. Only a large calibration fix can pass Stage 2.
+
+### nfl-v3-ss: state-space (Kalman) ratings for the NFL (pre-registered 2026-11-25, approved by the user as written; NOT run)
+- **Why:** college's T2(b) was the most accurate model tested (spread MAE −0.094, 5 of 5 seasons; late calibration
+  1.06 → 0.98) and failed only the fixed betting bars. NFL results are accuracy-only anyway (no bettable opener in the
+  history), and nfl-v3's problems are calibration by weeks and a noisy early rating, which a filter addresses directly
+  (it learns the weight on old games and on last season per metric instead of one half-life).
+- **Model, per metric (all 7 of nfl-v3's, from the same play-by-play metrics), copied from T2(b) without FCS terms:**
+  y = μ + o[team] + d[opponent] + h·home + e, noise variance r × (mean plays ÷ this game's plays); state o, d for all
+  32 teams plus μ, h, updated jointly game by game in kickoff order (full covariance); weekly drift + q per team rating,
+  globals q/100; between seasons o, d → ρ × end value, variance → ρ² × end variance + p₀. Ratings at each week's cutoff
+  = filtered means from games before it, off = μ + o, def = μ + d, same column names, so nfl-v3's points model (28
+  ratings + QB + home) is unchanged except for its inputs. 2020 rated but not used to train the points model.
+- **Parameters:** y scaled by each metric's SD, r = 1; per metric q ∈ {0.001, 0.005, 0.02}, p₀ ∈ {0.05, 0.15, 0.4},
+  ρ ∈ {0.4, 0.6, 0.8}, chosen by the smallest one-step-ahead squared error of the metric itself on **2001–2005**
+  (1999–2000 burn-in). No score, spread or line of 2006 on is used to choose anything. Edge values reported, not re-run.
+- **Stage 1, judged once on 2006–2016 (bar 2.13: the NFL family becomes 3 with N-TOT-B1 and nfl-v3-wk, which keep
+  1.96, as H-STAKES did):** same scratch rebuild and replay check as nfl-v3-wk, points model trained from 2000 on
+  earlier seasons only, baseline nfl-v3 on the same rows. **Passes** if all hold: (a) spread MAE lower by ≥ 2.13 paired
+  SE (season-week bootstrap, 2,000); (b) CE (as nfl-v3-wk) not worse by more than 1 paired SE; (c) slope at the close
+  not down by more than 1 paired SE; (d) total MAE not worse by more than 1 paired SE. Reported: chosen parameters,
+  one-step-ahead error vs nfl-v3's ridge ratings on 2001–05, MAE by weeks bucket and by season, line SD, 3+ gaps at the
+  close. Fail → state-space ratings on the NFL don't-retry list.
+- **Stage 2, 2027–28 (sign check):** pass → paper version `nfl-v3-ss` from 2027 week 1 with the Stage 1 parameters
+  frozen; supported if spread MAE is lower than nfl-v3's over 2027–28 at the Monday bet-time rows, and Δ line-move slope
+  (Monday → close) ≥ −1 paired SE. Supported → candidate to replace nfl-v3 for accuracy; otherwise dropped.
+- **Expected before the run:** MAE −0.03 to −0.10 (college −0.094; NFL SE on 2006–16 ≈ 0.03, so a college-sized gain is
+  ≈ 3 SE), late calibration closer to 1, early calibration unchanged.
+- **Effort:** scratch research build (shares nfl-v3-wk's 1999–2015 rebuild; college's `paper_features.state_space_rows`
+  as the template), nothing in the app until Stage 1 passes; then an NFL row builder in `paper.py`.
+
 ## 10. Round 2, college (from `docs/model-plan-2026-11-17.md` §2.2)
 
 ### T5a: special-teams EPA as a rated metric (pre-registered 2026-11-18, approved by the user before running)

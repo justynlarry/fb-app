@@ -25,10 +25,21 @@ NO_CROWD_SEASONS = {2020}   # used for ratings, but not to train the points mode
 V1_FEATURES = ["off_" + m for m in METRICS] + ["oppdef_" + m for m in METRICS] + ["home"]
 QB_FEATURES = ["qb_adj", "opp_qb_adj"]      # starting-QB adjustment (T-QB, model-tests.md section 9)
 FEATURES = V1_FEATURES + QB_FEATURES + MATCH_FEATURES
+
+# nfl-v3-wk (plan-2027 section 8.3): rating weights that change with weeks played, the centred version of T-WEEK.
+# progress = min(weeks played, 17) / 17 - 0.5 (fixed numbers, no data).  Each rating is centred on the mean over
+# every team rated at the same cutoff (known before kickoff), then multiplied by progress.  T-WEEK multiplied
+# uncentred ratings (they include the regression intercept), so p x rating was almost p itself (r = 0.99).
+WEEK_FULL = 17
+WEEK_CENTRE = 0.5
+WEEK_RATING_COLS = [prefix + m for prefix in ("off_", "oppdef_", "def_", "oppoff_") for m in METRICS]
+WEEK_FEATURES = ["progress"] + ["wk_" + c for c in WEEK_RATING_COLS]
+
 # Paper models (plan-2027 section 8.3): each version's columns.  nfl-v2 = nfl-v3 without the matchup rows (reported).
 VERSION_FEATURES = {
     "nfl-v3": FEATURES,
     "nfl-v2": V1_FEATURES + QB_FEATURES,
+    "nfl-v3-wk": FEATURES + WEEK_FEATURES,
 }
 # Chosen 2026-11-16 by choose_settings() on 2017-19 (model-tests.md section 9). Frozen: don't re-tune.
 SETTINGS = {"half_life": 6, "last_weight": 0.5, "prior_weeks": 12}
@@ -65,8 +76,11 @@ def rating_args(settings):
     }
 
 
-def side_row(game, team, opponent, home, points, ratings, weeks_played):
-    """One team's row:  its offense and defense ratings, and the opponent's defense and offense ratings."""
+def side_row(game, team, opponent, home, points, ratings, weeks_played, centre):
+    """One team's row:  its offense and defense ratings, and the opponent's defense and offense ratings.
+
+    centre = the mean of every rating column over all teams rated at this cutoff (for nfl-v3-wk's columns).
+    """
     row = {
         "game_id": game["game_id"],
         "season": game["season"],
@@ -83,6 +97,12 @@ def side_row(game, team, opponent, home, points, ratings, weeks_played):
         row["oppdef_" + m] = ratings.at[opponent, "def_" + m]
         row["def_" + m] = ratings.at[team, "def_" + m]          # this team's own defense
         row["oppoff_" + m] = ratings.at[opponent, "off_" + m]   # this opponent's offense
+
+    # nfl-v3-wk:  centred rating x centred progress (other versions ignore these columns)
+    row["progress"] = min(weeks_played, WEEK_FULL) / WEEK_FULL - WEEK_CENTRE
+    for col in WEEK_RATING_COLS:
+        source = col.removeprefix("opp")        # oppdef_x is a def_x rating, oppoff_x an off_x rating
+        row["wk_" + col] = (row[col] - centre[source]) * row["progress"]
     return row
 
 
@@ -99,14 +119,15 @@ def season_rows(season, settings):
         if season == FIRST_SEASON and cutoff == games["start_time"].min():
             continue    # First week of our data:  nothing to rate teams on yet
         ratings, weeks_played = ratings_as_of(season, cutoff, **rating_args(settings))
+        centre = ratings.mean()     # every team rated at this cutoff, so a bye doesn't move it
         for _, g in week_games.iterrows():
             if g["home_id"] not in ratings.index or g["away_id"] not in ratings.index:
                 continue        # a team with no games to rate yet
             home_flag = 0 if g["neutral_site"] else 1
             rows.append(side_row(g, g["home_id"], g["away_id"], home_flag,
-                                 g["home_points"], ratings, weeks_played))
+                                 g["home_points"], ratings, weeks_played, centre))
             rows.append(side_row(g, g["away_id"], g["home_id"], -home_flag,
-                                 g["away_points"], ratings, weeks_played))
+                                 g["away_points"], ratings, weeks_played, centre))
     return pd.DataFrame(rows)
 
 

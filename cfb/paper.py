@@ -47,8 +47,8 @@ def all_versions():
     return points_versions() + [benchmark.VERSION]
 
 
-# NFL (plan-2027 section 8.3): the champion's raw line (nfl-v3) and nfl-v2.  nfl-v3-wk is added when it's built.
-NFL_VERSIONS = ["nfl-v3", "nfl-v2"]
+# NFL (plan-2027 section 8.3): the champion's raw line (nfl-v3), nfl-v2 (reported) and nfl-v3-wk (judged 2027-28).
+NFL_VERSIONS = ["nfl-v3", "nfl-v2", "nfl-v3-wk"]
 
 
 def nfl_versions():
