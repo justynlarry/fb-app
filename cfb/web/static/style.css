@@ -878,6 +878,10 @@ a.team-link:hover, a.team-link:focus-visible { text-decoration: underline; }
 .history td.h-date { white-space: nowrap; }
 .history td.h-line, .history td.h-ours, .history td.h-miss, .history td.h-total { font-variant-numeric: tabular-nums; }
 .history .outcome { margin-left: 0.1rem; }
+.history td.h-result, .history .h-score { white-space: nowrap; }   /* "W 38–41" stays on one line */
+.history td.h-final-total { font-variant-numeric: tabular-nums; }
+.history td.h-final-total .small { display: block; }
+@media (max-width: 760px) { .history td.h-picks { grid-column: 1 / -1; } }   /* 9 cells: picks takes the last row */
 .hist-tag {
   display: inline-block;
   padding: 0 0.35em;

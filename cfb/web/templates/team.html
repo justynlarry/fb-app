@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import team_href, team_num %}
 {% block title %}{{ team.school }}{% endblock %}
+{% block body_class %}wide{% endblock %}
 
 {#- W / L / P (or T) as a small badge; nothing when the game isn't graded -#}
 {%- macro wl(v) -%}
@@ -90,6 +91,7 @@
         <th>Our line</th>
         <th>Miss: ours / market</th>
         <th>O/U: market · ours</th>
+        <th>Final total</th>
         <th>Our picks</th>
       </tr>
     </thead>
@@ -117,9 +119,9 @@
         </td>
         <td class="h-result" data-label="Result">
           {%- if g.final -%}
-            {{ wl(g.result) }} <strong>{{ g.us }}–{{ g.them }}</strong>
+            {{ wl(g.result) }} <strong class="h-score">{{ g.us }}–{{ g.them }}</strong>
           {%- elif g.state == 'in' -%}
-            <span class="live-dot"></span>Live {% if g.us is not none %}<strong>{{ g.us }}–{{ g.them }}</strong>{% endif %}
+            <span class="live-dot"></span>Live {% if g.us is not none %}<strong class="h-score">{{ g.us }}–{{ g.them }}</strong>{% endif %}
             {%- if g.status_detail %}<span class="live-clock">{{ g.status_detail }}</span>{% endif -%}
           {%- else -%}<span class="muted">not played</span>{%- endif -%}
         </td>
@@ -154,7 +156,16 @@
             {{ '%.1f'|format(g.market_total|float) }}
           {%- else -%}<span class="muted">–</span>{%- endif -%}
           {%- if g.our_total is not none %} · <strong>{{ '%.1f'|format(g.our_total|float) }}</strong>{% endif -%}
-          {%- if g.final %} <span class="muted small">(scored {{ g.us + g.them }})</span>{% endif -%}
+        </td>
+        <td class="h-final-total" data-label="Final total">
+          {%- if g.final -%}
+            {%- set pts = g.us + g.them %}
+            <strong>{{ pts }}</strong>
+            {%- if g.market_total is not none %}
+              {%- set mt = g.market_total|float %}
+              <span class="muted small">{{ 'over' if pts > mt else ('under' if pts < mt else 'push') }} by {{ '%.1f'|format((pts - mt)|abs) }}</span>
+            {%- endif -%}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
         </td>
         <td class="h-picks" data-label="Our picks">
           {%- if g.tier -%}
@@ -179,7 +190,7 @@
         </td>
       </tr>
       {%- else %}
-      <tr><td colspan="8" class="empty">No games stored for {{ team.school }}{{ ' in ' ~ season if season }}.</td></tr>
+      <tr><td colspan="9" class="empty">No games stored for {{ team.school }}{{ ' in ' ~ season if season }}.</td></tr>
       {%- endfor %}
     </tbody>
   </table>
@@ -187,7 +198,7 @@
 
 <p class="muted small legend">
   Lines are from {{ team.school }}'s side: −3.0 = {{ team.school }} favored by 3. W/L beside the market line = did
-  {{ team.school }} cover it. "Miss" = how far each line was from the final margin (green when ours was closer).
+  {{ team.school }} cover it. "Miss" = how far each line was from the final margin (green when ours was closer). "Final total" = points scored, and how far over or under the closing total.
   {% if is_nfl %}The NFL open is the books' median from Monday 6 AM of game week (Nov 17, 2026 on); earlier closes are nflverse's line.
   {% else %}The open is Bovada's opener (2019 on); the close is the average of the stored books, or our odds feed's median from Nov 2026.{% endif %}
   "Our picks" shows the pick saved before kickoff with its official result (2026 on); for other games, which side our
