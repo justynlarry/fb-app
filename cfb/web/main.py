@@ -470,6 +470,10 @@ SELECT g.id AS game_id,
        COALESCE(mn.total, ln.over_under) AS market_total,
        mn.books AS books_count,
        op.spread AS open_spread, op.total AS open_total,
+       mn.best_home_book, mn.best_home_spread, mn.best_home_price,     -- best number per side, for make_pick()
+       mn.best_away_book, mn.best_away_spread, mn.best_away_price,
+       mn.best_over_book, mn.best_over_total, mn.best_over_price,
+       mn.best_under_book, mn.best_under_total, mn.best_under_price,
        sa.qb_name AS away_qb, sh.qb_name AS home_qb,
        ia.report_status AS away_qb_status, ih.report_status AS home_qb_status,
        ven.dome, wf.temperature_f, wf.wind_mph, wf.gust_mph, wf.precip_in,
@@ -1574,9 +1578,14 @@ def nfl_predictions_page(request, season, week, season_type):
         rates = conn.execute(NFL_PICK_RATES_SQL, {"version": NFL_MODEL_VERSION, **rules}).fetchall()
     for g in games:
         g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
-        # Started games with a saved pick show that pick and its official result; the others work it
-        # out on the page from our line and the nflverse line.
-        g["recorded"] = recorded_pick(g) if g["started"] and g["rec_tier"] is not None else None
+        # Same pick as the worker records (picks.record_picks): make_pick() with no opener, so no Caution tier
+        # for the NFL. Started games with a saved pick show that pick and its official result instead.
+        if g["started"] and g["rec_tier"] is not None:
+            g["pick"] = recorded_pick(g)
+        elif g["spread"] is not None:
+            g["pick"] = make_pick({**g, "open_spread": None}, rules)
+        else:
+            g["pick"] = make_pick({}, rules)        # no prediction yet: an empty pick
     return templates.TemplateResponse(
         request,
         "nfl_predictions.html",

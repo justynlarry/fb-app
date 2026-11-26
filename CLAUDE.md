@@ -114,6 +114,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    look, and those rules had stacked NFL Line + O/U into one grid cell). `NFL_PREDICTIONS_SQL`: now = `market_now` book
    median (nflverse before Nov 17), open = first 4+-book save from Monday 6 AM MT of game week (CTE `week_open`, user typed).
    NFL saved picks show the O/U lean under 3 off, like college. Bump `style.css?v=` in base.html on every CSS change.
+   **Same day (Claude typed it at the user's request, rule unchanged):** `kickoff_cell` and `pick_cell` are shared too (with
+   `result_badge`, `provisional_outcome`, `rate_text` in `_macros.html`); the NFL page's pick now comes from `make_pick()`
+   (main.py, `open_spread` = None like `record_picks`, so no NFL Caution) using `market_now` best_* columns in
+   `NFL_PREDICTIONS_SQL`: all 15 unstarted NFL picks matched `pick_log`. College rows render identically (139 rows checked).
 7. **Team history page (2026-11-26, Claude typed the Python/SQL at the user's request, rule unchanged):** `/team?league=&name=
    [&season=]` (`TEAM_GAMES_SQL`, `TEAM_SEASONS_SQL`, `add_team_side`, `team_summary`, `team.html`); every `team_cell`
    name links there (`team_href`). Our line = live prediction if any, else the current version's backtest replay (tagged

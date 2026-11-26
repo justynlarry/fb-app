@@ -1,52 +1,12 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, lean_badge, bet_button, bet_dialog, qb_status_badge,
-    market_line_cell, market_total_cell, weather_cell %}
+{% from "_macros.html" import team_cell, line_text, bet_dialog, qb_status_badge,
+    market_line_cell, market_total_cell, weather_cell, kickoff_cell, pick_cell %}
 {% block title %}NFL Predictions{% endblock %}
 {% block body_class %}full{% endblock %}
 
 {#- Link to one week of the NFL predictions page; key = (season, week, season_type) -#}
 {%- macro week_href(key) -%}/predictions?league=nfl&season={{ key[0] }}&week={{ key[1] }}{% if key[2] != 'regular' %}&season_type={{ key[2] }}{% endif %}{%- endmacro -%}
 {%- macro week_label(key) -%}{{ 'Playoffs, week ' ~ key[1] if key[2] == 'postseason' else 'Week ' ~ key[1] }}{%- endmacro -%}
-
-{#- Backtest record for a tier, graded at the closing line (the only NFL line we have history for) -#}
-{%- macro rate_text(r) -%}
-  {%- if r -%}<span class="rate" title="How this kind of NFL game went in our backtest (2021–25), graded at the closing line">{%- set w = (r.win_rate|float * r.games)|round|int -%}
-  {{ '%.0f'|format(100 * r.win_rate|float) }}% <span class="muted">in backtest ({{ '{:,}'.format(w) }}–{{ '{:,}'.format(r.games - w) }})</span></span>{%- endif -%}
-{%- endmacro -%}
-
-{#- W / L / P against the market line shown, once the game is final -#}
-{%- macro result_badge(g, side, number, kind) -%}
-  {%- if number is not none and g.away_score is not none -%}
-    {%- set n = number|float -%}
-    {%- set v = (g.away_score - g.home_score) if kind == 'spread' else (g.away_score + g.home_score) -%}
-    {%- if v == n -%}<span class="outcome push">P</span>
-    {%- elif (side == 'home' and v < n) or (side == 'away' and v > n) or (side == 'over' and v > n) or (side == 'under' and v < n) -%}<span class="outcome win">W</span>
-    {%- else -%}<span class="outcome loss">L</span>
-    {%- endif -%}
-  {%- endif -%}
-{%- endmacro -%}
-
-{#- 'win' / 'loss' / 'push' for a side we leaned to but didn't pick, once the game is final -#}
-{%- macro lean_outcome(g, side, number, kind) -%}
-  {%- if side and number is not none and g.away_score is not none -%}
-    {%- set n = number|float -%}
-    {%- set v = (g.away_score - g.home_score) if kind == 'spread' else (g.away_score + g.home_score) -%}
-    {%- if v == n -%}push
-    {%- elif (side == 'home' and v < n) or (side == 'away' and v > n) or (side == 'over' and v > n) or (side == 'under' and v < n) -%}win
-    {%- else -%}loss
-    {%- endif -%}
-  {%- endif -%}
-{%- endmacro -%}
-
-{#- Official W / L / P with units, from pick_results (the pick saved before kickoff, graded at its book's
-    number and price). Until the game is marked completed, fall back to the check from the score. -#}
-{%- macro official_badge(outcome, units, g, side, number, kind) -%}
-  {%- if outcome == 'win' -%}<span class="outcome win">W</span> <span class="units pos">{{ '%+.2f'|format(units|float) }}</span>
-  {%- elif outcome == 'loss' -%}<span class="outcome loss">L</span> <span class="units neg">−1.00</span>
-  {%- elif outcome == 'push' -%}<span class="outcome push">P</span>
-  {%- else -%}{{ result_badge(g, side, number, kind) }}
-  {%- endif -%}
-{%- endmacro -%}
 
 {% block content %}
 {%- set nav = week_nav if week_nav is defined else none %}
@@ -124,51 +84,21 @@
       <tr class="day-break"><th colspan="10" scope="colgroup">{{ day }}</th></tr>
       {%- endif %}
       {%- set state = g.state or 'pre' %}
-      {%- set is_final = state == 'post' and g.away_score is not none %}
       {%- set has_ours = g.spread is not none %}
-      {%- set has_market = g.market_spread is not none %}
+      {#- Pick: make_pick() with no opener (main.py), the same as the worker records; the saved pick once started #}
+      {%- set pk = g.pick %}
+      {%- set tier = pk.tier %}
+      {%- set has_mtotal = has_ours and g.market_total is not none %}
+      {%- set tdiff = (g.total|float - g.market_total|float) if has_mtotal else 0 %}
 
-      {#- ---- Tier: same 3-point rule as college. No Caution: that needs an opening line, and we have none for the NFL. #}
-      {%- set diff = (g.spread|float - g.market_spread|float) if (has_ours and has_market) else none %}
-      {%- set gap = diff|abs if diff is not none else none %}
-      {%- set tier = none if gap is none else ('play' if gap >= rules.play_gap else 'pass') %}
-      {%- set side = none if (diff is none or diff == 0) else ('home' if diff < 0 else 'away') %}
-      {%- set pick_team = g.home if side == 'home' else g.away %}
-      {%- set tdiff = (g.total|float - g.market_total|float) if (has_ours and g.market_total is not none) else none %}
-      {#- Started games with a saved pick show that pick (Odds API books), not one worked out from the nflverse line #}
-      {%- set rec = g.recorded if g.recorded is defined else none %}
-      {%- set tier = rec.tier if rec else tier %}
-      {%- set gap = (rec.gap|float if rec.gap is not none else 0) if rec else gap %}
-
-      <tr class="game {{ 'pick-' ~ tier if tier }} {{ 'big-gap' if tier == 'play' and gap >= 5 }} {{ 'started' if g.started }}"
+      <tr class="game {{ 'pick-' ~ tier if tier }} {{ 'big-gap' if tier == 'play' and pk.gap is not none and pk.gap|float >= 5 }} {{ 'started' if g.started }}"
           data-order="{{ loop.index }}" data-away="{{ g.away }}" data-home="{{ g.home }}"
-          data-tier="{{ {'play': 0, 'pass': 2}.get(tier, '') }}"
-          data-gap="{{ gap if gap is not none else '' }}"
-          data-tgap="{{ (rec.total_gap if (rec and rec.total_gap is not none) else (tdiff|abs if tdiff is not none else '')) }}">
+          data-tier="{{ {'play': 0, 'caution': 1, 'pass': 2}.get(tier, '') }}"
+          data-gap="{{ pk.gap if pk.gap is not none else '' }}"
+          data-tgap="{{ pk.total_gap if pk.total_gap is not none else (tdiff|abs if has_mtotal else '') }}">
         {{ team_cell(g.away, g.away_espn_id, none, g.away_record, none, league='nfl') }}
         {{ team_cell(g.home, g.home_espn_id, none, g.home_record, none, league='nfl') }}
-        <td class="kickoff" data-label="Kickoff">
-          <span class="sort-day">{{ g.local_start.strftime('%a %-m/%-d') }} · </span>
-          {%- if is_final -%}
-            <span class="final">Final {{ g.away_score }}–{{ g.home_score }}</span>
-          {%- elif state == 'in' -%}
-            <span class="live-dot"></span>Live
-            {%- if g.away_score is not none %} <span class="live-score">{{ g.away_score }}–{{ g.home_score }}</span>{% endif %}
-            {%- if g.status_detail is defined and g.status_detail %}<span class="live-clock">{{ g.status_detail }}</span>{% endif -%}
-          {%- elif g.start_time_tbd -%}TBD
-          {%- else -%}{{ g.local_start.strftime('%-I:%M %p') }}
-          {%- endif -%}
-          {%- if g.game_id and state == 'pre' and not g.started %} <a class="adjust-link" href="/overrides?league=nfl&game_id={{ g.game_id }}">Adjust</a>{% endif -%}
-          {%- if g.game_id and not is_final %}
-            {%- set rec_play = rec and rec.tier == 'play' and rec.bet_spread is not none %}
-            {{ bet_button(g.game_id, 'nfl', g.away, g.home, rec.side if rec else side,
-                          rec.bet_spread if rec_play else g.market_spread,
-                          rec.bet_price if rec_play else none, rec.bet_book if rec_play else none,
-                          (rec.total_side if (rec and rec.total_side) else none) or ((('over' if tdiff > 0 else 'under')) if tdiff is not none else none),
-                          rec.bet_total if (rec and rec.bet_total is not none) else g.market_total,
-                          rec.total_price if rec else none, rec.total_book if rec else none, g.started) }}
-          {%- endif %}
-        </td>
+        {{ kickoff_cell(g, state, pk, 'nfl') }}
         <td class="qbs" data-label="Starting QBs">
           {%- if g.away_qb or g.home_qb -%}
             <div class="qb-line">{{ g.away_qb or '?' }}{% if not g.started %} {{ qb_status_badge(g.away_qb_status) }}{% endif %}</div>
@@ -203,89 +133,7 @@
         {{ market_line_cell(g.spread, g.market_spread, g.get('open_spread'), g.home, g.away, g.get('books_count'), g.started) }}
         {{ market_total_cell(g.market_total, g.get('open_total')) }}
 
-        <td class="market pick" data-label="Pick">
-          {%- if rec %}
-          {%- set rec_home = rec.side == 'home' %}
-          {%- set rec_team = g.home if rec_home else g.away %}
-          {%- if rec.tier == 'play' and rec.bet_spread is not none -%}
-            <div class="pick-main">
-              <span class="tier tier-play" title="{{ '%g'|format(rules.play_gap) }}+ points off the market line. Paper pick, not proven for the NFL.">Play</span>
-              <strong>{{ rec_team }} {{ side_number(rec.bet_spread, rec_home) }}</strong>
-              <span class="price">{{ price_text(rec.bet_price) }}</span>
-              <span class="book">{{ book_name(rec.bet_book) }}</span>
-              {{ official_badge(rec.outcome, rec.units, g, rec.side, rec.bet_spread, 'spread') }}
-            </div>
-            <div class="muted small">saved before kickoff · {{ '%.1f'|format(gap) }} pts off the line</div>
-          {%- else -%}
-            <div class="pick-main"><span class="tier tier-pass">Pass</span></div>
-            <div class="muted small">
-              {%- if rec.side and gap >= 0.5 -%}lean {{ rec_team }}, only {{ '%.1f'|format(gap) }} off{%- else -%}we agreed{%- endif %} · saved before kickoff
-              {%- if rec.side and gap >= 0.5 and is_final %} {{ lean_badge(lean_outcome(g, rec.side, g.market_spread, 'spread')) }}{% endif %}
-            </div>
-          {%- endif %}
-          {%- if rec.total_side and rec.bet_total is not none %}
-            <div class="pick-total">
-              <span class="tier tier-info">Info</span>
-              {{ rec.total_side|capitalize }} {{ '%g'|format(rec.bet_total|float) }} {{ price_text(rec.total_price) }} {{ book_name(rec.total_book) }}
-              {%- if rec.total_gap is not none %} · {{ '%.1f'|format(rec.total_gap|float) }} off{% endif %}
-              {{ official_badge(rec.total_outcome, rec.total_units, g, rec.total_side, rec.bet_total, 'total') }}
-            </div>
-          {%- elif rec.total_gap is not none %}
-            {#- Under the Info cut: the O/U lean at the save, graded like college's (a lean, not a pick) -#}
-            {%- if rec.total_gap >= 0.5 %}
-            {%- set rec_lean = 'over' if g.rec_our_total > g.rec_market_total else 'under' %}
-            <div class="pick-total small">O/U lean {{ rec_lean|capitalize }} {{ '%g'|format(g.rec_market_total|float) }} · {{ '%.1f'|format(rec.total_gap) }} off
-              {%- if is_final %} {{ lean_badge(lean_outcome(g, rec_lean, g.rec_market_total, 'total')) }}{% endif -%}
-            </div>
-            {%- else %}
-            <div class="pick-total small">O/U {{ '%g'|format(g.rec_market_total|float) }}: we agreed</div>
-            {%- endif %}
-          {%- endif %}
-          {%- else %}
-          {%- if tier == 'play' -%}
-            <div class="pick-main">
-              <span class="tier tier-play" title="{{ '%g'|format(rules.play_gap) }}+ points off the market line. Not proven for the NFL.">Play</span>
-              <strong>{{ pick_team }} {{ side_number(g.market_spread, side == 'home') }}</strong>
-              {%- if is_final %} {{ result_badge(g, side, g.market_spread, 'spread') }}
-              {%- elif not g.started %} {{ rate_text(rates.get('play')) }}{% endif %}
-            </div>
-            {%- if not g.started and gap >= 5 %}
-            <div class="news-check small">
-              <span class="news-flag" title="Big NFL gaps are often QB or injury news the model doesn't have">Check news</span>
-              <a href="/overrides?league=nfl&amp;game_id={{ g.game_id }}#inj-{{ g.game_id }}">injury report</a> before trusting this
-            </div>
-            {%- endif %}
-            <div class="muted small">{{ '%.1f'|format(gap) }} pts off the line</div>
-          {%- elif tier == 'pass' -%}
-            <div class="pick-main">
-              <span class="tier tier-pass">Pass</span>
-              {%- if not g.started %} {{ rate_text(rates.get('pass')) }}{% endif %}
-            </div>
-            <div class="muted small">
-              {%- if gap >= 0.5 -%}lean {{ pick_team }}, only {{ '%.1f'|format(gap) }} off
-                {%- if is_final %} {{ lean_badge(lean_outcome(g, side, g.market_spread, 'spread')) }}{% endif -%}
-              {%- else -%}we agree{%- endif -%}
-            </div>
-          {%- else -%}<span class="muted">–</span>
-          {%- endif %}
-
-          {%- if tdiff is not none %}
-            {%- set total_side = 'over' if tdiff > 0 else 'under' %}
-            {%- if tdiff|abs >= rules.total_gap %}
-            <div class="pick-total">
-              <span class="tier tier-info">Info</span>
-              {{ total_side|capitalize }} {{ '%g'|format(g.market_total|float) }} · {{ '%.1f'|format(tdiff|abs) }} off
-              {%- if is_final %} {{ result_badge(g, total_side, g.market_total, 'total') }}
-              {%- elif not g.started %} {{ rate_text(rates.get(total_side)) }}{% endif %}
-            </div>
-            {%- elif tdiff|abs >= 0.5 %}
-            <div class="pick-total small">O/U lean {{ total_side|capitalize }} {{ '%g'|format(g.market_total|float) }} · {{ '%.1f'|format(tdiff|abs) }} off
-              {%- if is_final %} {{ lean_badge(lean_outcome(g, total_side, g.market_total, 'total')) }}{% endif -%}
-            </div>
-            {%- endif %}
-          {%- endif %}
-          {%- endif %}
-        </td>
+        {{ pick_cell(g, pk, state, pick_rates if pick_rates is defined else {}, rules, 'nfl', track_from='Nov 18') }}
       </tr>
       {%- else %}
       <tr><td colspan="10" class="empty">No NFL games for this week.</td></tr>
@@ -311,8 +159,8 @@
     Once a game starts, the Pick column shows the paper pick saved before kickoff instead: the best number and price
     across the books in our odds feed, graded W/L with units (risking 1). These picks are a record for testing, not bets;
     the full record is on the <a href="/results?league=nfl">Results</a> page. Games before the first save (Nov 18, 2026)
-    are checked against the nflverse line, without units. <span class="lean-badge win">✓ right side</span> /
-    <span class="lean-badge loss">✗ wrong side</span> grades a Pass lean (not a pick) against the same line.
+    show "not tracked" and are checked against the closing line, without units. <span class="lean-badge win">✓ right side</span> /
+    <span class="lean-badge loss">✗ wrong side</span> grades a lean (not a pick) against the closing line.
   </p>
   <p class="muted small">
     Weather: forecast at kickoff for open-air stadiums (Open-Meteo, updated each morning from Tuesday of game week;
