@@ -114,6 +114,11 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    look, and those rules had stacked NFL Line + O/U into one grid cell). `NFL_PREDICTIONS_SQL`: now = `market_now` book
    median (nflverse before Nov 17), open = first 4+-book save from Monday 6 AM MT of game week (CTE `week_open`, user typed).
    NFL saved picks show the O/U lean under 3 off, like college. Bump `style.css?v=` in base.html on every CSS change.
+7. **Team history page (2026-11-26, Claude typed the Python/SQL at the user's request, rule unchanged):** `/team?league=&name=
+   [&season=]` (`TEAM_GAMES_SQL`, `TEAM_SEASONS_SQL`, `add_team_side`, `team_summary`, `team.html`); every `team_cell`
+   name links there (`team_href`). Our line = live prediction if any, else the current version's backtest replay (tagged
+   "backtest"); raw model, no overrides. Close = market_now else average of `lines`; open = Bovada (college) / Monday save
+   (NFL). Alabama 2021 grades match `backtest_games` (5–10, O/U 6–9).
 
 ## Model
 

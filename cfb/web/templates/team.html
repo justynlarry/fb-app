@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% from "_macros.html" import team_href, team_num %}
+{% block title %}{{ team.school }}{% endblock %}
+
+{#- W / L / P (or T) as a small badge; nothing when the game isn't graded -#}
+{%- macro wl(v) -%}
+  {%- if v == 'W' -%}<span class="outcome win">W</span>
+  {%- elif v == 'L' -%}<span class="outcome loss">L</span>
+  {%- elif v in ('P', 'T') -%}<span class="outcome push">{{ v }}</span>
+  {%- endif -%}
+{%- endmacro -%}
+
+{%- macro record(w, l, p=0) -%}{{ w }}–{{ l }}{% if p %}–{{ p }}{% endif %}{%- endmacro -%}
+
+{% block content %}
+{%- set is_nfl = league == 'nfl' %}
+{%- set s = summary %}
+<div class="page-head-row">
+  <div class="team-head">
+    {%- if team.espn_id %}
+    <img class="logo team-head-logo" alt="" width="48" height="48"
+         src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/{{ 'nfl' if is_nfl else 'ncaa' }}/500/{{ team.espn_id }}.png&h=96&w=96"
+         onerror="this.style.visibility='hidden'">
+    {%- endif %}
+    <div>
+      <h1>{{ team.school }}{% if season %} <span class="week-title">· {{ season }}</span>{% endif %}</h1>
+      <p class="muted small">{{ 'NFL' if is_nfl else (team.conference or team.classification or 'College') }}
+        · times in Mountain · our numbers are the raw model (overrides not applied)</p>
+    </div>
+  </div>
+  {%- if seasons %}
+  <div class="head-actions">
+    <label class="sort-control">Season
+      <select id="season-select">
+        {%- for y in seasons %}
+        <option value="{{ team_href(team.school, league) }}&amp;season={{ y }}" {{ 'selected' if y == season }}>{{ y }}</option>
+        {%- endfor %}
+      </select>
+    </label>
+  </div>
+  {%- endif %}
+</div>
+
+{%- if games %}
+<div class="cards">
+  <div class="card">
+    <div class="card-label">Record</div>
+    <div class="card-value">{{ record(s.wins, s.losses, s.ties) }}</div>
+    <div class="card-sub">games played</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Against the spread</div>
+    <div class="card-value">{{ record(s.ats_w, s.ats_l, s.ats_p) }}</div>
+    <div class="card-sub">{{ team.school }} vs the closing line</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Our side vs the close</div>
+    <div class="card-value">{{ record(s.side_w, s.side_l, s.side_p) }}</div>
+    <div class="card-sub">whichever team our line favored more · O/U {{ record(s.tot_w, s.tot_l) }}</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Average miss</div>
+    <div class="card-value">{% if s.our_miss is not none %}{{ '%.1f'|format(s.our_miss) }}{% else %}–{% endif %}</div>
+    <div class="card-sub">{% if s.market_miss is not none %}market {{ '%.1f'|format(s.market_miss) }} · {{ s.compared }} games{% else %}no games to compare{% endif %}</div>
+  </div>
+</div>
+<p class="muted small team-note">
+  {%- if s.backtest_games and s.live_games -%}
+    {{ s.live_games }} of our lines were made before kickoff (live); {{ s.backtest_games }} are backtest replays.
+  {%- elif s.backtest_games -%}
+    Our lines this season are <strong>backtest replays</strong> ({{ version }}): walk-forward, each made only from games
+    before it, but not predictions we actually made at the time. One season of one team is a small sample.
+  {%- elif s.live_games -%}
+    Our lines are the predictions made before each kickoff.
+  {%- endif %}
+  {%- if not is_nfl and season == 2020 %} 2020 (COVID) is left out of the backtest's judging.{% endif %}
+  {%- if is_nfl and season == 2020 %} 2020 had no crowds (home field ≈ 0).{% endif %}
+  {%- if not is_nfl %} Only games involving an FBS team are stored.{% endif %}
+</p>
+{%- endif %}
+
+<div class="table-wrap">
+  <table class="predictions history show-market">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Opponent</th>
+        <th>Result</th>
+        <th>Line: open → close</th>
+        <th>Our line</th>
+        <th>Miss: ours / market</th>
+        <th>O/U: market · ours</th>
+        <th>Our picks</th>
+      </tr>
+    </thead>
+    <tbody>
+      {%- for g in games %}
+      <tr class="game {{ 'is-final' if g.final }}">
+        <td class="h-date" data-label="Date">
+          {{ g.local_start.strftime('%a %b %-d') }}
+          <div class="muted small">
+            {%- if g.season_type == 'postseason' %}{{ 'Playoffs' if is_nfl else 'Bowl / playoff' }}{% else %}Week {{ g.week }}{% endif -%}
+            {%- if not g.final and not g.state == 'in' and not g.start_time_tbd %} · {{ g.local_start.strftime('%-I:%M %p') }}{% endif -%}
+          </div>
+        </td>
+        <td class="h-opp" data-label="Opponent">
+          <div class="team-cell">
+            {%- if g.opponent_espn_id %}
+            <img class="logo" alt="" loading="lazy" width="24" height="24"
+                 src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/{{ 'nfl' if is_nfl else 'ncaa' }}/500/{{ g.opponent_espn_id }}.png&h=48&w=48"
+                 onerror="this.style.visibility='hidden'">
+            {%- endif %}
+            <span><span class="muted">{{ 'vs' if (g.is_home or g.neutral_site) else '@' }}</span>
+              <a class="team-link" href="{{ team_href(g.opponent, league) }}&amp;season={{ g.season }}">{{ g.opponent }}</a>
+              {%- if g.neutral_site %} <span class="muted small">(neutral)</span>{% endif %}</span>
+          </div>
+        </td>
+        <td class="h-result" data-label="Result">
+          {%- if g.final -%}
+            {{ wl(g.result) }} <strong>{{ g.us }}–{{ g.them }}</strong>
+          {%- elif g.state == 'in' -%}
+            <span class="live-dot"></span>Live {% if g.us is not none %}<strong>{{ g.us }}–{{ g.them }}</strong>{% endif %}
+            {%- if g.status_detail %}<span class="live-clock">{{ g.status_detail }}</span>{% endif -%}
+          {%- else -%}<span class="muted">not played</span>{%- endif -%}
+        </td>
+        <td class="h-line" data-label="Line: open → close">
+          {%- if g.team_market is not none -%}
+            {%- if g.team_open is not none and (g.team_open - g.team_market)|abs >= 0.5 -%}
+              <span class="muted">{{ team_num(g.team_open) }} →</span>
+            {% endif -%}
+            {{ team_num(g.team_market) }}
+            {%- if g.final %} {{ wl(g.ats) }}{% endif -%}
+            {%- if g.books_count %} <span class="muted small">({{ g.books_count }} books)</span>{% endif -%}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+        <td class="h-ours" data-label="Our line">
+          {%- if g.team_ours is not none -%}
+            <strong>{{ team_num(g.team_ours) }}</strong>
+            {%- if g.is_backtest %} <span class="hist-tag" title="Backtest replay ({{ g.model_version }}): walk-forward, but not a prediction made at the time">backtest</span>
+            {%- elif g.model_version != version %} <span class="adj-badge" title="Predicted before kickoff by {{ g.model_version }}">{{ g.model_version }}</span>{% endif -%}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+        <td class="h-miss" data-label="Miss: ours / market">
+          {%- if g.our_miss is not none and g.market_miss is not none -%}
+            <span class="{{ 'good-text' if g.our_miss < g.market_miss }}">{{ '%.1f'|format(g.our_miss) }}</span>
+            <span class="muted">/ {{ '%.1f'|format(g.market_miss) }}</span>
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+        <td class="h-total" data-label="O/U: market · ours">
+          {%- if g.market_total is not none -%}
+            {%- if g.open_total is not none and (g.open_total|float - g.market_total|float)|abs >= 0.5 -%}
+              <span class="muted">{{ '%.1f'|format(g.open_total|float) }} →</span>
+            {% endif -%}
+            {{ '%.1f'|format(g.market_total|float) }}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+          {%- if g.our_total is not none %} · <strong>{{ '%.1f'|format(g.our_total|float) }}</strong>{% endif -%}
+          {%- if g.final %} <span class="muted small">(scored {{ g.us + g.them }})</span>{% endif -%}
+        </td>
+        <td class="h-picks" data-label="Our picks">
+          {%- if g.tier -%}
+            {#- A pick saved before kickoff (live, 2026 on): its official result -#}
+            {%- set pick_team = team.school if (g.side == 'home') == g.is_home else g.opponent %}
+            <div><span class="tier tier-{{ g.tier }}">{{ g.tier|capitalize }}</span>
+              {%- if g.tier in ('play', 'caution') and g.bet_spread is not none %} {{ pick_team }} {{ team_num(g.bet_spread|float * (1 if g.side == 'home' else -1)) }}
+                {%- if g.spread_outcome %} {{ wl({'win': 'W', 'loss': 'L', 'push': 'P'}[g.spread_outcome]) }}{% endif -%}
+              {%- elif g.side %} <span class="muted small">lean {{ pick_team }}</span>{% endif -%}
+            </div>
+            {%- if g.total_side and g.bet_total is not none %}
+            <div class="small">{{ g.total_side|capitalize }} {{ '%g'|format(g.bet_total|float) }}
+              {%- if g.total_outcome %} {{ wl({'win': 'W', 'loss': 'L', 'push': 'P'}[g.total_outcome]) }}{% endif -%}
+            </div>
+            {%- endif %}
+          {%- elif g.our_side_result -%}
+            {#- No saved pick: our side vs the close, graded (backtest-style, not a bet) -#}
+            {%- set side_team = team.school if g.our_side == 'team' else g.opponent %}
+            <div class="muted small">side {{ side_team }} {{ wl(g.our_side_result) }}</div>
+            {%- if g.total_result %}<div class="muted small">{{ g.total_side|capitalize }} {{ wl(g.total_result) }}</div>{% endif -%}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+      </tr>
+      {%- else %}
+      <tr><td colspan="8" class="empty">No games stored for {{ team.school }}{{ ' in ' ~ season if season }}.</td></tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="muted small legend">
+  Lines are from {{ team.school }}'s side: −3.0 = {{ team.school }} favored by 3. W/L beside the market line = did
+  {{ team.school }} cover it. "Miss" = how far each line was from the final margin (green when ours was closer).
+  {% if is_nfl %}The NFL open is the books' median from Monday 6 AM of game week (Nov 17, 2026 on); earlier closes are nflverse's line.
+  {% else %}The open is Bovada's opener (2019 on); the close is the average of the stored books, or our odds feed's median from Nov 2026.{% endif %}
+  "Our picks" shows the pick saved before kickoff with its official result (2026 on); for other games, which side our
+  line was on against the close and whether it won (not a bet).
+</p>
+
+<script>
+  document.getElementById('season-select')?.addEventListener('change', e => { window.location = e.target.value; });
+</script>
+{% endblock %}

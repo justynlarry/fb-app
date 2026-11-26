@@ -539,6 +539,92 @@ WHERE g.league = 'nfl'
 ORDER BY g.start_time, a.school
 """
 
+# Team history page: one team's games in one season, with the final score, the market line and our line.
+# Market close = median of our odds feed before kickoff (market_now, since Nov 2026), else the average of the
+# stored lines (CFBD providers for college, nflverse for the NFL), the same close the backtest grades at.
+# Open = Bovada's opener for college (as on the predictions page); for the NFL, the books' median in the first
+# 4+-book save from Monday 6 AM Mountain of game week (odds feed only, Nov 17, 2026 on).
+# Our line = the live pre-game prediction if there is one (any version, newest first), else the backtest replay
+# of the current version. Raw model numbers: overrides are not applied here.
+TEAM_GAMES_SQL = """
+WITH tg AS (
+    SELECT g.*
+    FROM games g
+    WHERE g.league = %(league)s
+      AND g.season = %(season)s
+      AND %(team_id)s IN (g.home_id, g.away_id)
+),
+market AS (
+    SELECT l.game_id,
+           avg(l.spread) AS close_spread,
+           avg(l.over_under) AS close_total,
+           avg(l.spread_open) FILTER (WHERE l.provider = 'Bovada') AS open_spread,
+           avg(l.over_under_open) FILTER (WHERE l.provider = 'Bovada') AS open_total
+    FROM lines l
+    JOIN tg ON tg.id = l.game_id
+    GROUP BY l.game_id
+)
+SELECT tg.id AS game_id, tg.season, tg.week, tg.season_type, tg.start_time, tg.start_time_tbd,
+       tg.neutral_site, tg.completed,
+       tg.home_id = %(team_id)s AS is_home,
+       opp.school AS opponent, opp.espn_id AS opponent_espn_id,
+       tg.home_points, tg.away_points,
+       l.state, l.away_score AS live_away_score, l.home_score AS live_home_score, l.status_detail,
+       COALESCE(mn.spread, m.close_spread) AS market_spread,
+       COALESCE(mn.total, m.close_total) AS market_total,
+       mn.books AS books_count,
+       COALESCE(m.open_spread, op.spread) AS open_spread,
+       COALESCE(m.open_total, op.total) AS open_total,
+       p.spread AS our_spread, p.total AS our_total, p.model_version, p.is_backtest,
+       r.tier, r.side, r.bet_spread, r.spread_outcome, r.spread_units,
+       r.total_side, r.bet_total, r.total_outcome, r.total_units
+FROM tg
+JOIN teams opp ON opp.id = CASE WHEN tg.home_id = %(team_id)s THEN tg.away_id ELSE tg.home_id END
+LEFT JOIN market m ON m.game_id = tg.id
+LEFT JOIN market_now mn ON mn.game_id = tg.id
+LEFT JOIN LATERAL (     -- NFL open: first 4+-book save from Monday 6 AM Mountain of game week, before kickoff
+    SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY s.spread::float) AS spread,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY s.total::float) AS total
+    FROM odds_snapshots s
+    WHERE tg.league = 'nfl'
+      AND s.game_id = tg.id
+      AND s.fetched_at < tg.start_time
+      AND s.fetched_at >= (
+            SELECT (date_trunc('week', min(w.start_time) AT TIME ZONE 'America/Denver') + interval '6 hours')
+                     AT TIME ZONE 'America/Denver'
+            FROM games w
+            WHERE w.league = tg.league AND w.season = tg.season
+              AND w.week = tg.week AND w.season_type = tg.season_type
+          )
+    GROUP BY s.fetched_at
+    HAVING count(s.spread) >= 4
+    ORDER BY s.fetched_at
+    LIMIT 1
+) op ON true
+LEFT JOIN LATERAL (     -- live pre-game prediction if any, else this version's backtest replay
+    SELECT pr.spread, pr.total, pr.model_version, pr.is_backtest
+    FROM predictions pr
+    WHERE pr.game_id = tg.id
+      AND (NOT pr.is_backtest OR pr.model_version = %(version)s)
+    ORDER BY pr.is_backtest, pr.model_version = %(version)s DESC, pr.created_at DESC
+    LIMIT 1
+) p ON true
+LEFT JOIN live_scores l ON l.game_id = tg.id
+LEFT JOIN pick_results r ON r.game_id = tg.id
+                        AND r.model_version = p.model_version
+                        AND r.taken = 'last'
+ORDER BY tg.start_time
+"""
+
+# Seasons we have games for, for one team (newest first): the team page's season picker.
+TEAM_SEASONS_SQL = """
+SELECT DISTINCT season
+FROM games
+WHERE league = %(league)s
+  AND %(team_id)s IN (home_id, away_id)
+ORDER BY season DESC
+"""
+
 # How each NFL tier did in the NFL backtest (2021-25), graded at the CLOSING line: there are no NFL
 # opening lines yet, so this is the only grade we have. Same play_gap / total_gap settings as the college page.
 NFL_PICK_RATES_SQL = """
@@ -1498,6 +1584,117 @@ def nfl_predictions_page(request, season, week, season_type):
          "bettable_books": rules["bettable_books"], "rules": rules,
          "pick_rates": {r["tier"]: r for r in rates},
          "week_nav": make_week_nav(games, weeks, current, season, week, season_type)},
+    )
+
+
+def grade(value, line):
+    """'W' if value is above line, 'L' if below, 'P' on a push; None when either is missing."""
+    if value is None or line is None:
+        return None
+    if value > line:
+        return "W"
+    if value < line:
+        return "L"
+    return "P"
+
+
+def add_team_side(g):
+    """Fill in one TEAM_GAMES_SQL row from the team's side: score, result, both lines as the team's
+    number (-3 = the team favored by 3), and how the market and our line did.
+    Spreads in the DB are home-side numbers (-7 = home by 7), so the away team's number is the opposite."""
+    g["local_start"] = g["start_time"].astimezone(LOCAL_TZ)
+    sign = 1 if g["is_home"] else -1
+
+    # Score from the team's side: final from games, or the live score while it's being played
+    if g["completed"] and g["home_points"] is not None:
+        home, away = g["home_points"], g["away_points"]
+    elif g["state"] == "in":
+        home, away = g["live_home_score"], g["live_away_score"]
+    else:
+        home, away = None, None
+    g["us"] = home if g["is_home"] else away
+    g["them"] = away if g["is_home"] else home
+    final = g["completed"] and home is not None
+    g["final"] = final
+
+    g["team_market"] = float(g["market_spread"]) * sign if g["market_spread"] is not None else None
+    g["team_open"] = float(g["open_spread"]) * sign if g["open_spread"] is not None else None
+    g["team_ours"] = float(g["our_spread"]) * sign if g["our_spread"] is not None else None
+
+    g["result"] = g["ats"] = g["our_side"] = g["our_side_result"] = None
+    g["our_miss"] = g["market_miss"] = g["total_side"] = g["total_result"] = None
+    if final:
+        margin = g["us"] - g["them"]
+        g["result"] = grade(margin, 0).replace("P", "T")
+        g["ats"] = grade(margin + g["team_market"], 0) if g["team_market"] is not None else None
+        if g["team_market"] is not None:
+            g["market_miss"] = abs(margin + g["team_market"])
+        if g["team_ours"] is not None:
+            g["our_miss"] = abs(margin + g["team_ours"])
+        # Our side against the market: the team if our number for it is lower (more favored) than the market's
+        if g["team_ours"] is not None and g["team_market"] is not None and g["team_ours"] != g["team_market"]:
+            g["our_side"] = "team" if g["team_ours"] < g["team_market"] else "opponent"
+            team_ats = g["ats"]
+            g["our_side_result"] = team_ats if g["our_side"] == "team" else {"W": "L", "L": "W", "P": "P"}[team_ats]
+        # Our O/U side against the market total
+        if g["our_total"] is not None and g["market_total"] is not None and g["our_total"] != g["market_total"]:
+            g["total_side"] = "over" if g["our_total"] > g["market_total"] else "under"
+            total_result = grade(home + away, float(g["market_total"]))
+            if g["total_side"] == "under" and total_result != "P":
+                total_result = "W" if total_result == "L" else "L"
+            g["total_result"] = total_result
+    return g
+
+
+def team_summary(games):
+    """Season totals for the team page: record, cover record vs the market, our side's record, average misses."""
+    def count(key, value):
+        return sum(1 for g in games if g[key] == value)
+
+    both = [g for g in games if g["our_miss"] is not None and g["market_miss"] is not None]
+    return {
+        "wins": count("result", "W"), "losses": count("result", "L"), "ties": count("result", "T"),
+        "ats_w": count("ats", "W"), "ats_l": count("ats", "L"), "ats_p": count("ats", "P"),
+        "side_w": count("our_side_result", "W"), "side_l": count("our_side_result", "L"),
+        "side_p": count("our_side_result", "P"),
+        "tot_w": count("total_result", "W"), "tot_l": count("total_result", "L"),
+        "compared": len(both),
+        "our_miss": sum(g["our_miss"] for g in both) / len(both) if both else None,
+        "market_miss": sum(g["market_miss"] for g in both) / len(both) if both else None,
+        "backtest_games": sum(1 for g in games if g["is_backtest"]),
+        "live_games": sum(1 for g in games if g["is_backtest"] is False),
+    }
+
+
+@app.get("/team")
+def team_page(request: Request, name: str, league: str = "cfb", season: int | None = None):
+    """One team's games for a season: final score, market line (open -> close), our line, and how each did."""
+    league = pick_league(league)
+    version = NFL_MODEL_VERSION if league == "nfl" else MODEL_VERSION
+    with connect() as conn:
+        conn.row_factory = dict_row
+        team = conn.execute(
+            "SELECT id, school, espn_id, conference, classification FROM teams WHERE league = %s AND school = %s",
+            (league, name),
+        ).fetchone()
+        if team is None:
+            raise HTTPException(status_code=404, detail="No such team")
+        seasons = [r["season"] for r in conn.execute(
+            TEAM_SEASONS_SQL, {"league": league, "team_id": team["id"]}).fetchall()]
+        if season not in seasons:
+            season = seasons[0] if seasons else None
+        games = []
+        if season is not None:
+            games = conn.execute(
+                TEAM_GAMES_SQL,
+                {"league": league, "season": season, "team_id": team["id"], "version": version},
+            ).fetchall()
+    games = [add_team_side(g) for g in games]
+    return templates.TemplateResponse(
+        request,
+        "team.html",
+        {"team": team, "league": league, "season": season, "seasons": seasons, "games": games,
+         "summary": team_summary(games), "version": version, "active": "predictions"},
     )
 
 

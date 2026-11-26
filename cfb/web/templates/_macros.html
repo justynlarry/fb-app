@@ -17,6 +17,14 @@
   {%- else -%}{{ name }}{%- endif -%}
 {%- endmacro -%}
 
+{#- Link to a team's history page (/team): by league and name, which are unique together. -#}
+{%- macro team_href(name, league='cfb') -%}/team?league={{ league }}&amp;name={{ name|urlencode }}{%- endmacro -%}
+
+{#- A team's own number (-3.0 = that team favored by 3), signed; PK near zero -#}
+{%- macro team_num(n) -%}
+  {%- if n is none -%}–{%- elif n|abs < 0.05 -%}PK{%- else -%}{{ '%+.1f'|format(n) }}{%- endif -%}
+{%- endmacro -%}
+
 {%- macro team_cell(name, espn_id, rank, record, conf_record, has_ball=false, won=false, league='cfb') -%}
   <td class="team {{ 'winner' if won }}"{% if league == 'nfl' %} title="{{ name }}"{% endif %}>
     <div class="team-cell">
@@ -28,7 +36,7 @@
       <div>
         <div class="team-name">
           {%- if rank %}<span class="rank">{{ rank }}</span>{% endif -%}
-          {{ team_name(name, league) }}
+          <a class="team-link" href="{{ team_href(name, league) }}">{{ team_name(name, league) }}</a>
           {%- if has_ball %} <span class="ball" title="Has the ball">🏈</span>{% endif -%}
         </div>
         {%- if record %}

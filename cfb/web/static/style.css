@@ -854,3 +854,28 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .results-picks tr.pick-pass .pick-main strong { font-weight: 600; color: var(--muted); }
 .lean-result { color: var(--muted); font-size: 0.85em; }
 
+/* ---------- Team history page (/team) ---------- */
+/* Team names link to their history page; they keep the text colour so tables don't turn blue */
+a.team-link { color: inherit; text-decoration: none; }
+a.team-link:hover, a.team-link:focus-visible { text-decoration: underline; }
+.team-head { display: flex; align-items: center; gap: 0.75rem; }
+.team-head h1 { margin: 0; }
+.team-head p { margin: 0.15rem 0 0; }
+.team-head-logo { width: 48px; height: 48px; }
+.team-note { margin: 0.5rem 0 1rem; }
+.history td { white-space: normal; vertical-align: top; }
+.history td.h-date { white-space: nowrap; }
+.history td.h-line, .history td.h-ours, .history td.h-miss, .history td.h-total { font-variant-numeric: tabular-nums; }
+.history .outcome { margin-left: 0.1rem; }
+.hist-tag {
+  display: inline-block;
+  padding: 0 0.35em;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.7em;
+  font-weight: 600;
+  text-transform: uppercase;
+  vertical-align: 0.15em;
+  cursor: help;
+}
