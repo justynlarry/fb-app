@@ -761,6 +761,16 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `paper_models_nfl`, `paper_check_nfl`); `benchmark.nfl_predictions`; `report_2027.nfl_tot_b1`. `/metrics` gauges now
   carry a `league` label (`sports_in_season{league=…}`). **nfl-v3-wk built 2026-11-25** (Claude-typed at the user's
   request, rule unchanged): centred ratings × centred progress (`nfl_model.WEEK_FEATURES`), paper version; plan-2027 §8.5.
+  **nflverse EPA re-release (found 2026-11-25):** nflverse republished play-by-play 2001–2026 on 2026-11-25 with a changed
+  EPA model (vs the DB's 2016–25: EPA r 0.995, +0.01; explosiveness −0.2, r ≈ 0.94; play counts identical). The 2026
+  file was already on the new model, so live nfl-v3 has been trained on old-model 2016–25 stats and fed new-model 2026
+  stats (≈ −0.7 pts per team, ≈ −1.4 on NFL totals; spreads mostly cancel). **Reloaded 2016–2025 the same evening**
+  (user ran `python -m cfb.nflverse 2016-2025`): on the 108 upcoming games nfl-v3's total +1.15 (+0.49 to +1.61), spread
+  mean |change| 0.38 (max 1.23), spread SD 5.92 → 5.70. Stored nfl-v3/v2/v1 backtest rows stay as the old-data record. 1999–2000 files were NOT yet
+  republished (still 2025 files, old scale): **Stage 1 of nfl-v3-wk / nfl-v3-ss waits until they are**, so all
+  1999–2025 seasons share one EPA model. Rebuild: `research/nflhist/hist.py` (in-memory, patches the five DB readers; run
+  in the worker: `cat hist.py <script>.py | docker compose exec -T worker python -`). Replay vs a fresh run on the reloaded
+  DB, 2017–25: mean |diff| 0.0072 (bar 0.01), max 0.11: passed.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.
