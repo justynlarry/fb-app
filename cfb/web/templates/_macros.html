@@ -13,7 +13,7 @@
 {%- macro team_name(name, league='cfb') -%}
   {%- if league == 'nfl' and name and ' ' in name -%}
     {%- set parts = name.rsplit(' ', 1) -%}
-    <span class="team-city">{{ parts[0] }} </span>{{ parts[1] }}
+    <span class="team-city">{{ parts[0] }}</span> {{ parts[1] }}
   {%- else -%}{{ name }}{%- endif -%}
 {%- endmacro -%}
 

@@ -600,6 +600,21 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 .head-actions .league-tabs { margin-bottom: 0; }
 /* NFL predictions */
 .qbs { font-size: 0.85rem; line-height: 1.35; }
+/* NFL predictions: the QBs, full team names and weather wrap when space is tight, so the table fits the window
+   at 100% zoom like the college one (every cell is nowrap by default). The city stays on one line. */
+.predictions.nfl td.team, .predictions.nfl td.qbs, .predictions.nfl td.weather { white-space: normal; }
+.predictions.nfl .team-city { white-space: nowrap; }
+.predictions.nfl .qb-line { white-space: nowrap; }
+.predictions.nfl td.weather { min-width: 7rem; }
+/* The NFL table has one more column (Starting QBs) than college, so its text is a little smaller and its cells a
+   little tighter; the kickoff cell stays on one line so Bet sits beside the time. Pick a bit narrower than 17rem. */
+@media (min-width: 761px) {      /* desktop table only; phones use the card layout below */
+  .predictions.nfl { font-size: 0.9rem; }
+  .predictions.nfl th, .predictions.nfl td { padding: 0.5rem 0.6rem; }
+  .predictions.nfl th { font-size: 0.7rem; }
+  .predictions.nfl .qbs { font-size: 0.8rem; }
+  .predictions.nfl td.pick { min-width: 14rem; }
+}
 .qbs .at { color: var(--muted); }
 .nfl-note { margin: -0.25rem 0 1rem; }
 .diff { color: var(--muted); font-size: 0.8em; font-variant-numeric: tabular-nums; }
