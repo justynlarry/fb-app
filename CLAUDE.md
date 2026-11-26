@@ -118,6 +118,7 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    `result_badge`, `provisional_outcome`, `rate_text` in `_macros.html`); the NFL page's pick now comes from `make_pick()`
    (main.py, `open_spread` = None like `record_picks`, so no NFL Caution) using `market_now` best_* columns in
    `NFL_PREDICTIONS_SQL`: all 15 unstarted NFL picks matched `pick_log`. College rows render identically (139 rows checked).
+   Desktop (≥761 px): headers, our line, weather, teams and kickoff may wrap, so both tables fit a 1440 px window.
 7. **Team history page (2026-11-26, Claude typed the Python/SQL at the user's request, rule unchanged):** `/team?league=&name=
    [&season=]` (`TEAM_GAMES_SQL`, `TEAM_SEASONS_SQL`, `add_team_side`, `team_summary`, `team.html`); every `team_cell`
    name links there (`team_href`). Our line = live prediction if any, else the current version's backtest replay (tagged
