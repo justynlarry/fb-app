@@ -185,6 +185,8 @@ tbody tr:last-child td { border-bottom: none; }
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 
 /* Scores on phones and portrait tablets: each game is a card, nothing scrolls sideways.
+   The predictions tables also carry .scores (for the desktop table look), so these rules skip them
+   (:not(.predictions)): they have their own card layout at 760px and below.
      away team   | away score
      home team   | home score
      kickoff / clock          line / timeouts
@@ -192,11 +194,11 @@ tbody tr:last-child td { border-bottom: none; }
 .scores .score .sep { color: var(--muted); font-weight: 400; }
 @media (max-width: 900px) {
   .scores-wrap { overflow: visible; background: none; border: none; }
-  .scores, .scores tbody { display: block; }
-  .scores thead { display: none; }
-  .scores tr.day-break, .scores tr.day-break th { display: block; border-radius: 6px; margin: 0.75rem 0 0.4rem; }
-  .scores tbody tr.day-break:first-child th { margin-top: 0; }
-  .scores tr[class^="state-"] {
+  .scores:not(.predictions), .scores:not(.predictions) tbody { display: block; }
+  .scores:not(.predictions) thead { display: none; }
+  .scores:not(.predictions) tr.day-break, .scores:not(.predictions) tr.day-break th { display: block; border-radius: 6px; margin: 0.75rem 0 0.4rem; }
+  .scores:not(.predictions) tbody tr.day-break:first-child th { margin-top: 0; }
+  .scores:not(.predictions) tr[class^="state-"] {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.35rem 0.75rem;
@@ -207,28 +209,28 @@ tbody tr:last-child td { border-bottom: none; }
     border: 1px solid var(--border);
     border-radius: 8px;
   }
-  .scores tr.state-in { background: var(--accent-soft); }
-  .scores tr[class^="state-"] > td { display: block; padding: 0; border: none; min-width: 0; white-space: normal; }
-  .scores tr[class^="state-"] > td:empty { display: none; }
-  .scores td.team:nth-child(1) { grid-column: 1; grid-row: 1; }
-  .scores td.team:nth-child(2) { grid-column: 1; grid-row: 2; }
+  .scores:not(.predictions) tr.state-in { background: var(--accent-soft); }
+  .scores:not(.predictions) tr[class^="state-"] > td { display: block; padding: 0; border: none; min-width: 0; white-space: normal; }
+  .scores:not(.predictions) tr[class^="state-"] > td:empty { display: none; }
+  .scores:not(.predictions) td.team:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .scores:not(.predictions) td.team:nth-child(2) { grid-column: 1; grid-row: 2; }
   /* Same selector strength as the "> td { display: block }" rule above, so this one wins */
-  .scores tr[class^="state-"] > td.score {
+  .scores:not(.predictions) tr[class^="state-"] > td.score {
     grid-column: 2; grid-row: 1 / 3;
     display: grid; grid-template-rows: 1fr 1fr; grid-template-rows: subgrid;
     text-align: right; font-size: 1.15em;
   }
-  .scores td.score .sep { display: none; }
-  .scores td.score > span { align-self: center; }
-  .scores td.kickoff, .scores td.clock { grid-column: 1; grid-row: 3; font-size: 0.85rem; }
-  .scores td.line, .scores td.timeouts { grid-column: 2; grid-row: 3; text-align: right; font-size: 0.85rem; }
-  .scores td.line > div { display: inline; }
-  .scores td.line > div + div { margin-left: 0.5em; }
-  .scores td.possession { grid-column: 1 / -1; grid-row: 4; font-size: 0.85rem; }
-  .scores td.possession > div { display: inline; margin-left: 0.4em; }
-  .scores td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-size: 0.75rem; }
-  .scores td.team .record { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .scores .empty { display: block; }
+  .scores:not(.predictions) td.score .sep { display: none; }
+  .scores:not(.predictions) td.score > span { align-self: center; }
+  .scores:not(.predictions) td.kickoff, .scores:not(.predictions) td.clock { grid-column: 1; grid-row: 3; font-size: 0.85rem; }
+  .scores:not(.predictions) td.line, .scores:not(.predictions) td.timeouts { grid-column: 2; grid-row: 3; text-align: right; font-size: 0.85rem; }
+  .scores:not(.predictions) td.line > div { display: inline; }
+  .scores:not(.predictions) td.line > div + div { margin-left: 0.5em; }
+  .scores:not(.predictions) td.possession { grid-column: 1 / -1; grid-row: 4; font-size: 0.85rem; }
+  .scores:not(.predictions) td.possession > div { display: inline; margin-left: 0.4em; }
+  .scores:not(.predictions) td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-size: 0.75rem; }
+  .scores:not(.predictions) td.team .record { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scores:not(.predictions) .empty { display: block; }
 }
 
 /* ---------- Predictions ---------- */
@@ -504,7 +506,22 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
     text-transform: uppercase;
     color: var(--muted);
   }
-  .predictions td.kickoff, .predictions td.weather, .predictions td.pick { grid-column: 1 / -1; }
+  /* One card layout for every league (college, NFL):
+       Visitor          | Our line
+       Home             | Our O/U
+       Kickoff (Adjust, Bet)
+       Starting QBs (NFL)
+       Weather
+       Line             | O/U
+       Pick
+     Teams and our numbers are placed; everything else flows in order, full width or in pairs.
+     A hidden cell (market off, no QB column) takes no space. */
+  .predictions tr.game > td.team:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .predictions tr.game > td.team:nth-child(2) { grid-column: 1; grid-row: 2; }
+  .predictions tr.game > td.our-line { grid-column: 2; grid-row: 1; }
+  .predictions tr.game > td.our-total { grid-column: 2; grid-row: 2; }
+  .predictions td.kickoff, .predictions td.qbs, .predictions td.weather, .predictions td.pick { grid-column: 1 / -1; }
+  .predictions td.line-move, .predictions td.total-move { min-width: 0; }
   .show-market tr.pick-play > td:first-child, .show-market tr.pick-caution > td:first-child { box-shadow: none; }
   .show-market tr.pick-play { box-shadow: inset 4px 0 0 var(--pick); }
   .show-market tr.pick-caution { box-shadow: inset 4px 0 0 var(--caution); }
@@ -614,6 +631,7 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
   .predictions.nfl th { font-size: 0.7rem; }
   .predictions.nfl .qbs { font-size: 0.8rem; }
   .predictions.nfl td.pick { min-width: 14rem; }
+  .predictions.nfl td.line-move { min-width: 10rem; }   /* a little narrower than college (one more column) */
 }
 .qbs .at { color: var(--muted); }
 .nfl-note { margin: -0.25rem 0 1rem; }
@@ -835,3 +853,4 @@ body.full main { max-width: none; padding: 1rem 1.5rem; }
 /* Results: Pass rows in "Picks, last 3 weeks" show our lean, not a bet */
 .results-picks tr.pick-pass .pick-main strong { font-weight: 600; color: var(--muted); }
 .lean-result { color: var(--muted); font-size: 0.85em; }
+

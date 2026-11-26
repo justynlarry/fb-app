@@ -108,6 +108,12 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    three `main.py` SQL lines at the user's request (rule unchanged).
    **H-LEAN registered 2026-11-25 (reported only, 2027; model-tests.md):** 2026 Late Pass leans 50–38 but Early 44–47 on
    the same games, backtest Pass at open 51.0% (n = 1,999): noise so far, not bet. Measures go in `report_2027.py`.
+6. **Shared game cells + NFL open → now (2026-11-26):** both predictions pages use `_macros.html`
+   `market_line_cell` / `market_total_cell` / `weather_cell` and one phone-card layout (`.predictions tr.game`, ≤760 px);
+   the scores page's card rules are `.scores:not(.predictions)` (both predictions tables carry `.scores` for the desktop
+   look, and those rules had stacked NFL Line + O/U into one grid cell). `NFL_PREDICTIONS_SQL`: now = `market_now` book
+   median (nflverse before Nov 17), open = first 4+-book save from Monday 6 AM MT of game week (CTE `week_open`, user typed).
+   NFL saved picks show the O/U lean under 3 off, like college. Bump `style.css?v=` in base.html on every CSS change.
 
 ## Model
 

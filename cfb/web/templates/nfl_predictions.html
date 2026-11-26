@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, lean_badge, bet_button, bet_dialog, qb_status_badge %}
+{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, lean_badge, bet_button, bet_dialog, qb_status_badge,
+    market_line_cell, market_total_cell, weather_cell %}
 {% block title %}NFL Predictions{% endblock %}
 {% block body_class %}full{% endblock %}
 
@@ -110,8 +111,8 @@
         <th>Our line</th>
         <th>Our O/U</th>
         <th>Weather</th>
-        <th class="market" title="The nflverse line: the current line before kickoff, the closing line after">Line</th>
-        <th class="market">O/U</th>
+        <th class="market" title="Median of the books in our odds feed: from Monday 6 AM of game week → now (the close after kickoff). Before Nov 17, 2026: the nflverse line">Line: open → now</th>
+        <th class="market">O/U: open → now</th>
         <th class="market">Pick</th>
       </tr>
     </thead>
@@ -195,28 +196,12 @@
         </td>
         {#- ---- Weather: latest forecast before kickoff (Open-Meteo, logged daily since 2026-11-23). Same ⚠ cut as
              college (gusts 25+ / rain 0.1+ in), but its effect on NFL totals hasn't been measured: that's the 2027 test. #}
-        {%- set has_wx = g.wind_mph is not none %}
-        {%- set gust = g.gust_mph|float if g.gust_mph is not none else 0 %}
-        {%- set rain = g.precip_in|float if g.precip_in is not none else 0 %}
-        {%- set rough = has_wx and (gust >= 25 or rain >= 0.1) %}
-        <td class="weather {{ 'rough' if rough }}" data-label="Weather">
-          {%- if g.dome -%}
-            <span class="muted">Indoors</span>
-          {%- elif has_wx -%}
-            {%- if rough %}<span class="wx-flag" title="Strong gusts or rain. Not yet measured for the NFL: logged for a 2027 test of weather and totals">⚠</span> {% endif -%}
-            {{ '%.0f'|format(g.temperature_f|float) }}°F · wind {{ '%.0f'|format(g.wind_mph|float) }}
-            {%- if g.gust_mph is not none %} <span class="muted">(gusts {{ '%.0f'|format(gust) }})</span>{% endif %}
-            {%- if rain >= 0.01 %}<div class="small">rain {{ '%.2f'|format(rain) }} in</div>{% endif -%}
-          {%- else -%}
-            <span class="muted">–</span>
-          {%- endif -%}
-        </td>
-        <td class="market line" data-label="Line">
-          {%- if has_market -%}{{ line_text(g.market_spread, g.home, g.away) }}{%- else -%}<span class="muted">–</span>{%- endif -%}
-        </td>
-        <td class="market line" data-label="O/U">
-          {%- if g.market_total is not none -%}{{ '%g'|format(g.market_total|float) }}{%- else -%}<span class="muted">–</span>{%- endif -%}
-        </td>
+        {{ weather_cell(g, 'Indoors', "Strong gusts or rain. Not yet measured for the NFL: logged for a 2027 test of weather and totals") }}
+        {#- Market line and total: the same cells as college. "Open" = the books' median in the first 4+-book save from
+             Monday 6 AM Mountain of game week (the Early pick's save); "now" = market_now. Games before the odds feed
+             (Nov 17, 2026) have only the nflverse line, so they show it without an open. #}
+        {{ market_line_cell(g.spread, g.market_spread, g.get('open_spread'), g.home, g.away, g.get('books_count'), g.started) }}
+        {{ market_total_cell(g.market_total, g.get('open_total')) }}
 
         <td class="market pick" data-label="Pick">
           {%- if rec %}
@@ -245,6 +230,16 @@
               {%- if rec.total_gap is not none %} · {{ '%.1f'|format(rec.total_gap|float) }} off{% endif %}
               {{ official_badge(rec.total_outcome, rec.total_units, g, rec.total_side, rec.bet_total, 'total') }}
             </div>
+          {%- elif rec.total_gap is not none %}
+            {#- Under the Info cut: the O/U lean at the save, graded like college's (a lean, not a pick) -#}
+            {%- if rec.total_gap >= 0.5 %}
+            {%- set rec_lean = 'over' if g.rec_our_total > g.rec_market_total else 'under' %}
+            <div class="pick-total small">O/U lean {{ rec_lean|capitalize }} {{ '%g'|format(g.rec_market_total|float) }} · {{ '%.1f'|format(rec.total_gap) }} off
+              {%- if is_final %} {{ lean_badge(lean_outcome(g, rec_lean, g.rec_market_total, 'total')) }}{% endif -%}
+            </div>
+            {%- else %}
+            <div class="pick-total small">O/U {{ '%g'|format(g.rec_market_total|float) }}: we agreed</div>
+            {%- endif %}
           {%- endif %}
           {%- else %}
           {%- if tier == 'play' -%}
@@ -306,11 +301,11 @@
     <span class="tier tier-pass">Pass</span> under {{ '%g'|format(rules.play_gap) }} points.
     <span class="tier tier-info">Info</span> totals {{ '%g'|format(rules.total_gap) }}+ apart, for display only.
     There's no <span class="tier tier-caution">Caution</span> tier for the NFL: it needs the line's movement since it
-    opened, and we have no NFL opening lines yet.
+    opened, and the NFL backtest has no opening lines to measure it on (the open shown here starts Nov 17, 2026).
   </p>
   <p class="muted small">
     "52% in backtest (1,115–1,017)" is how that kind of game went in our NFL backtest (2021–25), graded at the
-    <strong>closing</strong> line, with its win–loss record (pushes left out). Break-even at −110 is 52.4%. The market line is nflverse's (one consensus number, no prices or books).
+    <strong>closing</strong> line, with its win–loss record (pushes left out). Break-even at −110 is 52.4%. The market line is the median of the books in our odds feed (nflverse's consensus line for games before Nov 17, 2026).
   </p>
   <p class="muted small">
     Once a game starts, the Pick column shows the paper pick saved before kickoff instead: the best number and price

@@ -190,3 +190,69 @@
     <span class="qb-alert qb-alert-amber" title="Listed Questionable on the injury report; the model's line assumes he starts">Q</span>
   {%- endif -%}
 {%- endmacro -%}
+
+
+{#- ---------- Predictions game rows (college and NFL share these cells, so a fix to one is a fix to both) ---------- #}
+
+{#- Market spread cell: "open → now" once the line has moved 0.5+, the book count, and a chip for how the move
+    relates to our number. open_spread none (the NFL has no opener yet) shows the current line only.
+    label = the card label on phones (the desktop column header is in each page's <thead>). -#}
+{%- macro market_line_cell(our_spread, market_spread, open_spread, home, away, n_books=none, started=false, label='Line: open → now') -%}
+  {%- set has_market = market_spread is not none %}
+  {%- set has_open = open_spread is not none %}
+  {%- set odiff = (our_spread|float - open_spread|float) if (has_open and our_spread is not none) else 0 %}
+  {%- set move = (market_spread|float - open_spread|float) if (has_open and has_market) else 0 %}
+  {%- set toward = (move < 0 and odiff < 0) or (move > 0 and odiff > 0) %}
+        <td class="market line-move" data-label="{{ label }}">
+          {%- if has_market -%}
+            {%- if has_open and move|abs >= 0.5 -%}
+              <span class="muted">{{ line_text(open_spread, home, away) }} →</span>
+            {%- endif %}
+            {{ line_text(market_spread, home, away) }}
+            {%- if n_books %} <span class="muted small" title="Median of {{ n_books }} sportsbooks' lines">({{ 'close, ' if started }}{{ n_books }} books)</span>{% endif -%}
+            {%- if has_open and move|abs >= 0.5 -%}
+              {%- if odiff|abs >= 0.5 %}
+              <span class="chip {{ 'chip-toward' if toward else 'chip-against' }}" title="How far the line has moved since it opened, relative to our number">
+                {{- '▲' if toward else '▼' }} {{ '%.1f'|format(move|abs) }} {{ 'our way' if toward else 'against' -}}
+              </span>
+              {%- else %}
+              <span class="chip chip-neutral">moved {{ '%.1f'|format(move|abs) }}</span>
+              {%- endif -%}
+            {%- elif has_open %} <span class="muted small">no move</span>
+            {%- endif -%}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+{%- endmacro -%}
+
+{#- Market total cell: "open → now" once it has moved 0.5+; open_total none shows the current total only. -#}
+{%- macro market_total_cell(market_total, open_total, label='O/U: open → now') -%}
+        <td class="market total-move" data-label="{{ label }}">
+          {%- if market_total is not none -%}
+            {%- if open_total is not none and (market_total|float - open_total|float)|abs >= 0.5 -%}
+              <span class="muted">{{ '%g'|format(open_total|float) }} →</span>
+            {%- endif %}
+            {{ '%g'|format(market_total|float) }}
+          {%- else -%}<span class="muted">–</span>{%- endif -%}
+        </td>
+{%- endmacro -%}
+
+{#- Weather cell: latest forecast before kickoff. ⚠ = gusts 25+ mph or rain 0.1+ in (flag_title says what it means
+    for that league). indoor_label: "Dome" (college) / "Indoors" (NFL). -#}
+{%- macro weather_cell(g, indoor_label, flag_title) -%}
+  {%- set has_wx = g.wind_mph is defined and g.wind_mph is not none %}
+  {%- set gust = g.gust_mph|float if (g.gust_mph is defined and g.gust_mph is not none) else 0 %}
+  {%- set rain = g.precip_in|float if (g.precip_in is defined and g.precip_in is not none) else 0 %}
+  {%- set rough = has_wx and (gust >= 25 or rain >= 0.1) %}
+        <td class="weather {{ 'rough' if rough }}" data-label="Weather">
+          {%- if g.dome -%}
+            <span class="muted">{{ indoor_label }}</span>
+          {%- elif has_wx -%}
+            {%- if rough %}<span class="wx-flag" title="{{ flag_title }}">⚠</span> {% endif -%}
+            {{ '%.0f'|format(g.temperature_f|float) }}°F · wind {{ '%.0f'|format(g.wind_mph|float) }}
+            {%- if g.gust_mph is not none %} <span class="muted">(gusts {{ '%.0f'|format(gust) }})</span>{% endif %}
+            {%- if rain >= 0.01 %}<div class="small">rain {{ '%.2f'|format(rain) }} in</div>{% endif -%}
+          {%- else -%}
+            <span class="muted">–</span>
+          {%- endif -%}
+        </td>
+{%- endmacro -%}

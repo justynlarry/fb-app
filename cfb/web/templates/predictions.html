@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, lean_badge, bet_button, bet_dialog %}
+{% from "_macros.html" import team_cell, line_text, side_number, book_name, price_text, lean_badge, bet_button, bet_dialog,
+    market_line_cell, market_total_cell, weather_cell %}
 {% block title %}Predictions{% endblock %}
 {% block body_class %}full{% endblock %}
 
@@ -187,52 +188,12 @@
           {%- if g.total_miss is not none %} <span class="band">±{{ '%.0f'|format(g.total_miss|float) }}</span>{% endif %}
           {%- if g.adjustment_notes %}<div class="muted small">model: {{ '%.1f'|format(g.model_total|float) }}</div>{% endif -%}
         </td>
-        {%- set has_wx = g.wind_mph is defined and g.wind_mph is not none %}
-        {%- set gust = g.gust_mph|float if (g.gust_mph is defined and g.gust_mph is not none) else 0 %}
-        {%- set rain = g.precip_in|float if (g.precip_in is defined and g.precip_in is not none) else 0 %}
-        {%- set rough = gust >= 25 or rain >= 0.1 %}
-        <td class="weather {{ 'rough' if rough }}" data-label="Weather">
-          {%- if g.dome -%}
-            <span class="muted">Dome</span>
-          {%- elif has_wx -%}
-            {%- if rough %}<span class="wx-flag" title="Strong gusts or rain: the model doesn't know about weather and tends to over-predict totals in games like this">⚠</span> {% endif -%}
-            {{ '%.0f'|format(g.temperature_f|float) }}°F · wind {{ '%.0f'|format(g.wind_mph|float) }}
-            {%- if g.gust_mph is not none %} <span class="muted">(gusts {{ '%.0f'|format(gust) }})</span>{% endif %}
-            {%- if rain >= 0.01 %}<div class="small">rain {{ '%.2f'|format(rain) }} in</div>{% endif -%}
-          {%- else -%}
-            <span class="muted">–</span>
-          {%- endif -%}
-        </td>
+        {{ weather_cell(g, 'Dome', "Strong gusts or rain: the model doesn't know about weather and tends to over-predict totals in games like this") }}
 
-        {#- Market line: open → now, with a chip for how it moved relative to our number #}
-        <td class="market line-move" data-label="Line: open → now">
-          {%- if has_market -%}
-            {%- if has_open and move|abs >= 0.5 -%}
-              <span class="muted">{{ line_text(g.open_spread, g.home, g.away) }} →</span>
-            {%- endif %}
-            {{ line_text(g.market_spread, g.home, g.away) }}
-            {%- if n_books %} <span class="muted small" title="Median of {{ n_books }} sportsbooks' lines">({{ 'close, ' if g.started is defined and g.started }}{{ n_books }} books)</span>{% endif -%}
-            {%- if has_open and move|abs >= 0.5 -%}
-              {%- if odiff|abs >= 0.5 %}
-              <span class="chip {{ 'chip-toward' if toward else 'chip-against' }}" title="How far the line has moved since it opened, relative to our number">
-                {{- '▲' if toward else '▼' }} {{ '%.1f'|format(move|abs) }} {{ 'our way' if toward else 'against' -}}
-              </span>
-              {%- else %}
-              <span class="chip chip-neutral">moved {{ '%.1f'|format(move|abs) }}</span>
-              {%- endif -%}
-            {%- elif has_open %} <span class="muted small">no move</span>
-            {%- endif -%}
-          {%- else -%}<span class="muted">–</span>{%- endif -%}
-        </td>
-
-        <td class="market total-move" data-label="O/U: open → now">
-          {%- if has_mtotal -%}
-            {%- if has_otot and (g.market_total|float - g.open_total|float)|abs >= 0.5 -%}
-              <span class="muted">{{ '%g'|format(g.open_total|float) }} →</span>
-            {%- endif %}
-            {{ '%g'|format(g.market_total|float) }}
-          {%- else -%}<span class="muted">–</span>{%- endif -%}
-        </td>
+        {#- Market line and total: open → now, with a chip for how the line moved relative to our number #}
+        {{ market_line_cell(g.spread, g.market_spread, g.open_spread if has_open else none, g.home, g.away,
+                            n_books, g.started is defined and g.started) }}
+        {{ market_total_cell(g.market_total, g.open_total if has_otot else none) }}
 
         {#- Summary: which side, how sure (backtest record for this kind of pick).
              Games that have started show the pick as it was recorded before kickoff, with its result. #}

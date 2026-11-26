@@ -445,6 +445,13 @@ adjustments AS (        -- active overrides, same as the college page
     JOIN teams t ON t.id = o.team_id
     WHERE o.active
     GROUP BY o.game_id
+),
+week_open AS (              -- the NFL "open" time: Monday 6:00 AM Mountain of game week (the Early pick's save)
+    SELECT (date_trunc('week', min(g.start_time) AT TIME ZONE 'America/Denver') + interval '6 hours')
+             AT TIME ZONE 'America/Denver' AS open_from
+    FROM games g
+    JOIN current_week w ON w.season = g.season AND w.week = g.week AND w.season_type = g.season_type
+    WHERE g.league = 'nfl'
 )
 SELECT g.id AS game_id,
        a.school AS away, h.school AS home,
@@ -459,7 +466,10 @@ SELECT g.id AS game_id,
        adj.notes AS adjustment_notes,
        p.weeks_played, p.model_version,
        mm.spread_miss, mm.total_miss,
-       ln.spread AS market_spread, ln.over_under AS market_total,
+       COALESCE(mn.spread, ln.spread) AS market_spread,
+       COALESCE(mn.total, ln.over_under) AS market_total,
+       mn.books AS books_count,
+       op.spread AS open_spread, op.total AS open_total,
        sa.qb_name AS away_qb, sh.qb_name AS home_qb,
        ia.report_status AS away_qb_status, ih.report_status AS home_qb_status,
        ven.dome, wf.temperature_f, wf.wind_mph, wf.gust_mph, wf.precip_in,
@@ -493,6 +503,20 @@ LEFT JOIN LATERAL (     -- this version's pre-game prediction, or else the lates
 LEFT JOIN model_miss mm ON mm.bucket = LEAST(p.weeks_played, 6)
 LEFT JOIN adjustments adj ON adj.game_id = g.id
 LEFT JOIN lines ln ON ln.game_id = g.id AND ln.provider = 'nflverse'
+LEFT JOIN market_now mn ON mn.game_id = g.id
+CROSS JOIN week_open wo
+LEFT JOIN LATERAL (     -- books' median in the first snapshot from Monday 6 AM with 4+ books, before kickoff
+    SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY s.spread::float) AS spread,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY s.total::float) AS total
+    FROM odds_snapshots s
+    WHERE s.game_id = g.id
+      AND s.fetched_at >= wo.open_from
+      AND s.fetched_at < g.start_time
+    GROUP BY s.fetched_at
+    HAVING count(s.spread) >= 4
+    ORDER BY s.fetched_at
+    LIMIT 1
+) op ON true
 LEFT JOIN nfl_starters sa ON sa.game_id = g.id AND sa.team_id = g.away_id
 LEFT JOIN nfl_starters sh ON sh.game_id = g.id AND sh.team_id = g.home_id
 LEFT JOIN nfl_injuries ia ON ia.season = g.season AND ia.week = g.week
