@@ -787,6 +787,17 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   1999–2025 seasons share one EPA model. Rebuild: `research/nflhist/hist.py` (in-memory, patches the five DB readers; run
   in the worker: `cat hist.py <script>.py | docker compose exec -T worker python -`). Replay vs a fresh run on the reloaded
   DB, 2017–25: mean |diff| 0.0072 (bar 0.01), max 0.11: passed.
+- **Literature review + challengers (2026-11-26/27, `docs/literature.md`, plan-2027 §9; user approved and registered
+  2026-11-27, model-tests.md):** 16 college / 23 NFL / 6 method entries (most abstract-only; the NFL literature since 2015
+  is thin, mostly theses). Judged: **C-CENS** (Arscott 2023, read in full: over when censoring biasTotals > 1.00; Stage 1
+  once on 2018–25 CFBD closes after Dec 7), **C-WX** (forecast gusts ≥ 25 / rain ≥ 0.1 → total move after bet time),
+  **N-WX** (NFL wind ≥ 15 / gusts ≥ 25 / rain → Monday → close total move). Reported: C-G5ATS, C-HOLD, reversal check
+  (Moskowitz: ~half of an NFL open → close move reverses; line move, bet-time result and reversal stay separate
+  scorecards). **Bars: college family 2.54 (9 slots incl. v6-cc), NFL family 2.24 (4), every judged item re-registered.**
+  NFL forecasts before the Monday 6 AM bet time built the same day (user typed it): `espn.fetch_scoreboard(week,
+  season_type)`, `nfl_venues.sync_venues(days)` links next week's games, `weather.NFL_DAYS_AHEAD = 9`. First check:
+  Nov 30 5:30 AM run. Collect next: TV network per game (ESPN `broadcasts`), the final AP poll in January (1 CFBD call),
+  nflverse `div_game` / rest / roof columns.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.

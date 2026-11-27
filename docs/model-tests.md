@@ -291,6 +291,7 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 - **Games:** 2027 FBS-involved games with a Bovada open and close.
 - **Supported** if the paired Δ result slope at the **close** (median close of books) is ≥ 1.96 paired SE
   **Amended 2026-11-19 (user, before any 2027 game): bar 2.39 instead of 1.96.** See "2027 college family" below.
+  **Amended 2026-11-27 (user, before any 2027 game): bar 2.54 (college family of 9).** See "2027 college family" below.
   (season-week bootstrap, 2,000). Reported beside it: Δ line-move slope, Δ result slope at the open, ATS 3+ at the open.
 - **Then:** supported → a candidate for 2028 under the accuracy rule plus this result; not supported → dropped for good.
 - One judged run, after the 2027 regular season.
@@ -335,6 +336,7 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 
 ### H-TOT: totals Play tier as a 2027 paper hypothesis (pre-registered 2026-11-18, before any 2027 game; registered because B1-totals was supported, plan-2026-11-18.md)
   **Amended 2026-11-19 (user, before any 2027 game): main test bar 2.39 instead of 1.645 (now one family with the other college items).** See "2027 college family" below.
+  **Amended 2026-11-27 (user, before any 2027 game): bar 2.54 (college family of 9).** See "2027 college family" below.
 - **Pick:** over or under when |our total − the bettable open total| ≥ `total_gap` (3.0 unless changed before the freeze
   with a logged reason), at the spreads' bet time (first snapshot with 4+ books, 8+ hours after both teams' previous
   kickoff; `pick_results` 'first').
@@ -349,6 +351,7 @@ rejected a current-season bias correction, and nothing new has turned up. No new
 
 ### H-TOT-B1: B1-total's gap predicts total results at the bettable open, as a 2027 paper hypothesis (pre-registered 2026-11-18, before any 2027 game)
   **Amended 2026-11-19 (user, before any 2027 game): bar 2.39 instead of 1.96.** See "2027 college family" below.
+  **Amended 2026-11-27 (user, before any 2027 game): bar 2.54 (college family of 9).** See "2027 college family" below.
 - **Why:** in the B1 run (plan-2026-11-18.md), B1-total's own gap predicted results: (result − open) on (B1 − open) =
   +0.312 ± 0.069 with our gap in the regression, positive in all 5 seasons (+0.55 / +0.24 / +0.11 / +0.51 / +0.23),
   while our total's gap did not (+0.050 ± 0.062). Found as a reported item, not tested: hindsight on 2021–25, so only
@@ -375,12 +378,18 @@ rejected a current-season bias correction, and nothing new has turned up. No new
   carried (1.96 / 1.645); allowed because none has seen a 2027 game.
 - **v6-pts, the floor (registered 2026-11-19):** v6's non-rating columns (home, FCS, coach change, preseason inputs,
   new coordinators) plus only the points ratings (`off_`, `oppdef_`, `def_`, `oppoff_` points), same points model,
-  daily paper model. **Supported** (v6 beats the floor) if paired ΔMAE (v6-pts − v6) ≥ 2.39 SE on all 2027 games with a
+  daily paper model. **Supported** (v6 beats the floor) if paired ΔMAE (v6-pts − v6) ≥ 2.39 SE (2.54 from 2026-11-27) on all 2027 games with a
   closing line, season-week bootstrap 2,000. Power: the two lines differ by ~1.9 pts on average (2026 dry run), so the
   one-season SE is ≈ 0.08; it detects a floor about 0.2 pts or more worse. Not supported → the per-play metrics aren't
   shown to earn their place live: review before 2028 (no automatic change).
 - **Reported only, no decision:** v6-noT1 (v5 + T-OCDC: T1's live contribution), EARLY-1 (v6 × bucket multipliers fixed at
   the freeze from the v6 backtest 2018–25, 2020 out), v5. v6-hl3 dropped (undetectable even over two seasons).
+- **Amended 2026-11-27 (user, before any 2027 game; literature shortlist, plan-2027.md section 9):** the family adds
+  **C-WX** and **C-CENS Stage 1** (registered below) and keeps a slot for **v6-cc** (5A, Dec 7) = **9 → bar 2.54** for
+  every "≥ k SE" test: H-T4, H-TOT, H-TOT-B1, v6-pts, C-WX, C-CENS Stage 1 (and v6-cc's rule, if added). The bar stays
+  2.54 if v6-cc is not added (it is never lowered after this date). H-T2b and H-AVG keep their accuracy conditions
+  (paired ΔMAE ≥ 1 SE, no-harm checks ≥ −1 SE). Family-wise error: 9 × Φ(−2.54) = 5.0%; keeping the six at 2.39 would
+  have made it 6.3%. Allowed because no item has seen a 2027 game and C-CENS Stage 1 hasn't been run.
 
 ### Totals "agree" tag, reported only (registered 2026-11-18, before any 2027 game; not judged, not in any count)
 - **Tag:** a 2027 totals pick (H-TOT's picks) is "agree" when our total and B1-total (frozen, as in H-TOT-B1) are on the
@@ -410,6 +419,107 @@ rejected a current-season bias correction, and nothing new has turned up. No new
   a reason to pre-register a judged 2028 test, with its own bar, before any 2028 game. Leans are never bet in 2027.
 - **To build before week 0:** add the four measures to `cfb/report_2027.py` (read-only; user types it). The data is
   already logged: every Pass pick is saved in `pick_log`.
+
+### C-CENS: Arscott's censoring rule for college totals (pre-registered 2026-11-27, approved by the user; NOT run)
+- **Source:** Arscott (2023), *Journal of Sports Economics* 24(5), read in full as SSRN 4197428 (`docs/literature.md`
+  C3).
+  - Data: Goldsheet closing lines, totals 1996–2017, 13,276 games.
+  - The over on biasTotals > 1.00 won 55.72% of 691 bets in-sample (p = 0.079 against 52.38%).
+  - Random-fold cross-validation: 51.7–58.1%. Never tested on later seasons.
+- **Rule (frozen, the paper's numbers):**
+  - S = |spread|, T = total; d = (T − S)/2, f = d + S.
+  - bias(μ, σ) = σ·φ(μ/σ) − μ·Φ(−μ/σ); biasTotals = bias(f, 11.941) + bias(d, 11.280).
+  - **Bet the over when biasTotals > 1.00.**
+  - Games with spread 0 are left out (no underdog); pushes are excluded.
+  - It uses market lines only, so it is a rule (kind b), never a model feature.
+- **Stage 1, run once after 2026-12-07 (bar 2.54, college family):**
+  - Games: every game with an FBS team, 2018–2025, regular season and postseason (2020 included and flagged).
+  - Close: the mean over CFBD `/lines` providers of spread and total (the backtest's close).
+  - p = the over's win rate. **Supported** if (p − 0.5) / √(0.25/n) ≥ 2.54.
+  - Reported:
+    - p against 52.38%; n and p by season; the result with 2020 left out.
+    - The 1.75 cut.
+    - The same rule at the CFBD open (mean of `spreadOpen` / `overUnderOpen`, 2021–25).
+    - v6's total and (result − v6 total) in these games, where v6 backtest rows exist.
+- **Expectation, stated now:**
+  - About 30–40 qualifying games a season (totals are higher than in the paper's years), so ≈ 250 bets and
+    SE ≈ 3.2 pp.
+  - A real effect the paper's size (+5.7 pp over 50%) would land near 1.8 SE, so it is likely "not supported" even if
+    real.
+- **Outcomes:**
+  - **Supported:** Stage 2 in 2027.
+    - The same rule at bet time (bettable median spread and total), the over at the bettable number and price.
+    - A sign check (win rate > 50%). Never bet in 2027.
+    - If both stages hold, it becomes a 2028 betting candidate.
+  - **Not supported:** C-CENS is reported only in 2027 (same measures) and never bet. No variant is re-tested on
+    2018–25.
+
+### C-WX: forecast weather and the totals move (pre-registered 2026-11-27, approved by the user; the H-WX draft of plan-2027 §7.6)
+- **Source:**
+  - Salaga & Howley (2024, abstract only): weather predicts totals results but not the size of line moves.
+  - Borghesi (2008), for the NFL.
+  - Our own: Test 7 rejected weather in the model (2021–25). Unders won in extremes only (gusts 30+: 57.8%, n = 205,
+    observed weather).
+- **Tag (frozen):**
+  - Games: 2027 FBS games with a stored forecast (open-air: `venues.dome` false).
+  - Forecast used: the latest `weather_forecasts` row with `fetched_at` before the game's bet-time snapshot (the
+    champion's bet time).
+  - Tagged if that row has `gust_mph` ≥ 25 or `precip_in` ≥ 0.1 (the stored kickoff-hour + 3 h average gust and total
+    rain).
+  - Open-air games with a row and neither condition are untagged. Games with no row before bet time are left out
+    (count reported).
+- **Judged (bar 2.54, college family):**
+  - Move = last pre-kickoff median total − bet-time median total (4+ books, our snapshots).
+  - Δ = mean move (tagged) − mean move (untagged).
+  - **Supported** if Δ < 0 and |Δ| ≥ 2.54 × SE (season-week bootstrap, 2,000).
+  - Games: regular season with conference championships; bowls and CFP reported separately.
+- **Reported:**
+  - The under record at the bettable number and price at bet time (tagged).
+  - Mean (result − v6 total) and (result − bettable total), tagged vs untagged.
+  - The reversal check (below) on tagged games.
+  - Counts by condition.
+- **Power, stated now:**
+  - About 60 tagged games a season; the count comes from the 2026 log before week 0.
+  - The college total-move SD is to be measured from our snapshots before week 0 (SE only; no outcome looked at).
+  - At an SD of 2 pts: SE ≈ 0.28, detectable |Δ| ≈ 0.7 pts.
+- **Outcomes:**
+  - **Supported:** the market prices weather late. That makes it a 2028 timing tag for totals (bet unders early), with
+    its own registration.
+  - **Not supported:** reported only; the ⚠ page flag stays display only.
+
+### C-G5ATS: next-game reaction in non-Power 5 games, reported only (registered 2026-11-27; not judged, not in any count)
+- **Source:** Bennett (2021, *Applied Economics Letters* 28(12), abstract only): 54.23% in games between two non-Power 5
+  teams, 2006–18.
+- **Tag:**
+  - Games: 2027 regular-season games between two FBS teams, neither in the ACC, Big Ten, Big 12 or SEC, nor Notre Dame.
+  - For each team, A = its last game's (result margin − closing spread), using the CFBD close for that game.
+  - Back a team with A ≥ +14 and fade a team with A ≤ −14. When both teams' signals point to the same side, it is one
+    bet; when they conflict, there is no bet.
+- **Reported after 2027:**
+  - ATS at the bettable number and price at bet time, with n and a 95% interval.
+  - The slope of (result − bet-time line) on the difference in A.
+  - Both shown beside Test L's X for the same games. Test L says the opener over-reacts to luck; Bennett says ATS form
+    carries over, so the two may cancel.
+
+### C-HOLD: last season's top 10 in their opener, reported only (registered 2026-11-27; not judged, not in any count)
+- **Source:** Bennett (2019, *Atlantic Economic Journal* 47(1), abstract only).
+- **Tag:**
+  - A team ranked 1–10 in the previous season's final AP poll (CFBD `/rankings`, 1 call each January).
+  - In its first game of the season.
+  - Against an opponent not in that final top 25.
+- **Reported:** v6's gap (does v6 lean against the top-10 team?) and ATS of fading the top-10 team at the bettable open.
+  About 10 games a season; nothing is decided by it.
+
+### Reversal check, both leagues, reported only (registered 2026-11-27; not judged, not in any count)
+- **Why:** Moskowitz (2021) finds about half of an average NFL open → close move is reversed by the result (coefficient
+  ≈ −0.50). A model that predicts moves can show CLV without any ATS edge. Line move, result at bet time and reversal
+  are three separate scorecards. A pass on line move alone never promotes anything to betting.
+- **Measures, each league, after 2027:**
+  1. The result slope at the last pre-kickoff median line, over all games. ≈ 0 means our moves are information that got
+     absorbed; < 0 means we predict moves that reverse.
+  2. On college Plays and NFL 3+ gaps: OLS of the (last median → result) return on the (bet-time median → last median)
+     return, in points, with n and SE.
+  3. The same for totals picks (H-TOT and N-TOT-B1 games).
 
 ### CLV % definitions (note added 2026-11-18)
 Two definitions have been used; each test applied one of them to both models, so no verdict depends on the choice.
@@ -1089,7 +1199,7 @@ the DB; Stage 2 needs the live tag, built only if Stage 1 passes.
   both hold:** (a) CE lower by ≥ 1 paired SE; (b) spread MAE not worse by more than 1 paired SE. Reported: cal_b by
   bucket, MAE by bucket, total MAE, slope at the close, line SD, by season. **Fails → dropped before 2027**, removed
   from `paper.NFL_VERSIONS`, the NFL family drops to 1 (N-TOT-B1 keeps its registered 1.96). No variants.
-- **Stage 2, judged over 2027–28 (registered family, bar 1.96):** paper rows from `paper_predictions`, the last row
+- **Stage 2, judged over 2027–28 (registered family, bar 1.96; 2.24 from 2026-11-27, see "2027 NFL family"):** paper rows from `paper_predictions`, the last row
   saved before the NFL bet time (first Monday 6:00 AM MT of game week), every 2027–28 game with a final score.
   **Supported** if (1) CE lower than nfl-v3's by ≥ 1.96 paired SE, and (2) spread MAE not worse by more than 1 paired SE.
   Reported: Δ line-move slope (Monday → close), total MAE, cal_b. Supported → candidate to replace nfl-v3 for accuracy
@@ -1111,7 +1221,7 @@ the DB; Stage 2 needs the live tag, built only if Stage 1 passes.
 - **Parameters:** y scaled by each metric's SD, r = 1; per metric q ∈ {0.001, 0.005, 0.02}, p₀ ∈ {0.05, 0.15, 0.4},
   ρ ∈ {0.4, 0.6, 0.8}, chosen by the smallest one-step-ahead squared error of the metric itself on **2001–2005**
   (1999–2000 burn-in). No score, spread or line of 2006 on is used to choose anything. Edge values reported, not re-run.
-- **Stage 1, judged once on 2006–2016 (bar 2.13: the NFL family becomes 3 with N-TOT-B1 and nfl-v3-wk, which keep
+- **Stage 1, judged once on 2006–2016 (amended 2026-11-27: bar 2.24, see "2027 NFL family"; registered as 2.13: the NFL family becomes 3 with N-TOT-B1 and nfl-v3-wk, which keep
   1.96, as H-STAKES did):** same scratch rebuild and replay check as nfl-v3-wk, points model trained from 2000 on
   earlier seasons only, baseline nfl-v3 on the same rows. **Passes** if all hold: (a) spread MAE lower by ≥ 2.13 paired
   SE (season-week bootstrap, 2,000); (b) CE (as nfl-v3-wk) not worse by more than 1 paired SE; (c) slope at the close
@@ -1125,6 +1235,55 @@ the DB; Stage 2 needs the live tag, built only if Stage 1 passes.
   ≈ 3 SE), late calibration closer to 1, early calibration unchanged.
 - **Effort:** scratch research build (shares nfl-v3-wk's 1999–2015 rebuild; college's `paper_features.state_space_rows`
   as the template), nothing in the app until Stage 1 passes; then an NFL row builder in `paper.py`.
+
+### N-WX: forecast weather and the NFL totals move (pre-registered 2026-11-27, approved by the user)
+- **Source:** Borghesi (2008, *Applied Financial Economics* 18(12), abstract only).
+  - Heat, wind and rain cut NFL scoring, and bettors under-estimate it.
+  - An expected-weather under strategy beat 52.38% out of sample (1984–2004). No retest since.
+  - It is the only NFL candidate that passed the one-season power check (plan-2027.md section 9.3).
+- **Forecast at bet time (built 2026-11-27):**
+  - The 5:30 AM MT NFL weather job links next week's games to stadiums from ESPN's week scoreboard and forecasts 9 days
+    ahead. So Monday's run covers the whole game week before the 6:00 AM snapshot.
+  - The forecast used is the game's `weather_forecasts` row with `fetched_at` before the NFL bet time (the first
+    4+-book save from Monday 6:00 AM MT of game week).
+  - A row fetched later (e.g. a manual re-run that overwrote it) is not used: that game is left out (count reported).
+- **Tag (frozen):**
+  - Games: 2027 NFL games (regular season and playoffs) at an open-air stadium (`venues.dome` false; ESPN marks
+    retractable roofs indoor).
+  - Tagged if that row shows `wind_mph` ≥ 15, `gust_mph` ≥ 25 or `precip_in` ≥ 0.1 (kickoff hour + 3 h averages,
+    total rain).
+  - Open-air games with a row and none of these are untagged.
+- **Judged (bar 2.24, NFL family):**
+  - Move = last pre-kickoff median total − bet-time median total (our snapshots).
+  - Δ = mean move (tagged) − mean move (untagged).
+  - **Supported** if Δ < 0 and |Δ| ≥ 2.24 × SE (week bootstrap, 2,000).
+- **Reported:**
+  - The under record at the bettable number and price at bet time (tagged).
+  - Mean (result − nfl-v3 total), tagged vs untagged.
+  - Whether the tag adds to N-TOT-B1's move regression (the tag's coefficient with nfl-v3's total gap and B1-total's
+    gap in).
+  - The reversal check on tagged games.
+  - Counts by condition.
+- **Power, stated now:**
+  - Monday → game-day total move SD: 1.46 pts (picksfootball 2023–26, n = 955).
+  - 25–35 tagged games a season → SE ≈ 0.25–0.29 on the tagged mean (the untagged side adds little) → detectable
+    |Δ| ≈ 0.6 pts.
+  - Plausible effect: 0.5–1.5 pts, so this is borderline.
+- **Outcomes:**
+  - **Supported:** an NFL totals timing tag for 2028 (NFL picks stay paper unless decided separately).
+  - **Not supported:** dropped.
+- **First check:** the 2026-11-30 5:30 AM run should save rows for all of week 13's open-air games. This is a
+  shakedown; 2026 is not judged.
+
+### 2027 NFL family (amended 2026-11-27 by the user, before any 2027 game and before either Stage 1 was run)
+- **Judged NFL items, one family of 4:**
+  - N-TOT-B1 (2027, plan-2027.md section 8.3)
+  - nfl-v3-wk Stage 2 (2027–28)
+  - nfl-v3-ss Stage 1 (2006–16, not run)
+  - N-WX (2027)
+- **Bar:** one-sided Bonferroni at 5% → **2.24** for each, replacing their registered 1.96 / 2.13.
+- **Unchanged:** nfl-v3-wk's Stage 1 gate (≥ 1 SE) and nfl-v3-ss's Stage 2 sign check.
+- If an item is dropped (e.g. a Stage 1 fails), the bar stays 2.24.
 
 ## 10. Round 2, college (from `docs/model-plan-2026-11-17.md` §2.2)
 
