@@ -12,7 +12,8 @@ import httpx
 from cfb.db import connect
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-DAYS_AHEAD = 7          # forecast games kicking off within this many days
+DAYS_AHEAD = 7          # college: forecast games kicking off within this many days
+NFL_DAYS_AHEAD = 9      # NFL: from Monday 5:30 AM this reaches next Monday night (NFL bet time: Monday 6 AM)
 RETRY_WAITS = (3, 10, 30)   # seconds to wait before each retry of a failed request (connection reset, 429, 5xx)
 PAUSE = 0.5             # seconds between stadiums: ~70 requests in a burst got some refused (Nov 17-18)
 
@@ -82,11 +83,11 @@ def kickoff_weather(hourly, kickoff):
     }
 
 
-def update_forecasts(league="cfb"):
-    """Fetch and save today's forecast for every upcoming open-air game in one league
-    (one request per stadium)."""
+def update_forecasts(league="cfb", days=DAYS_AHEAD):
+    """Fetch and save today's forecast for every open-air game in one league kicking off within
+    `days` days (one request per stadium)."""
     with connect() as conn:
-        games = conn.execute(UPCOMING_GAMES_SQL, {"league": league, "days": DAYS_AHEAD}).fetchall()
+        games = conn.execute(UPCOMING_GAMES_SQL, {"league": league, "days": days}).fetchall()
 
     # Group games by stadium so each stadium needs only one request
     by_venue = {}

@@ -25,7 +25,7 @@ from cfb.model import build_rows, predict_upcoming
 from cfb.odds import save_snapshot
 from cfb.picks import record_picks
 from cfb.status import job_run, ran_ok_today
-from cfb.weather import update_forecasts
+from cfb.weather import NFL_DAYS_AHEAD, update_forecasts
 
 FAST = 30           # fallback poll speeds (seconds), used only if the settings can't be read
 SLOW = 600
@@ -139,8 +139,8 @@ def nfl_weather_job():
     Runs on its own, so a failure here never stops the NFL predictions."""
     with job_run("nfl_weather") as run:
         try:
-            linked, missing = nfl_venues.sync_venues()
-            saved = update_forecasts("nfl")
+            linked, missing = nfl_venues.sync_venues(days=NFL_DAYS_AHEAD)
+            saved = update_forecasts("nfl", days=NFL_DAYS_AHEAD)
             run.message = f"{linked} games linked to stadiums, {saved} forecasts"
             if missing:
                 run.message += f", {missing} without stadium coordinates"

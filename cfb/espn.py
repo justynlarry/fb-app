@@ -30,9 +30,14 @@ SEASON_TYPES = {1: "preseason", 2: "regular", 3: "postseason"}  # ESPN's season 
 NFL_PLAYOFF_WEEKS = {1: 19, 2: 20, 3: 21, 5: 22}   # wild card, divisional, conference, Super Bowl
 
 
-def fetch_scoreboard(league):
-    """Download this week's scoreboard for one league ('cfb' or 'nfl') from ESPN."""
+def fetch_scoreboard(league, week=None, season_type=None):
+    """Download one league's scoreboard from ESPN: this week's, or a given week.
+    season_type uses ESPN's numbers: 2 = regular season, 3 = postseason."""
     url, params = SCOREBOARDS[league]
+    params = dict(params)          # a copy, so the shared defaults never change
+    if week is not None:
+        params["week"] = week
+        params["seasontype"] = season_type
     resp = httpx.get(url, params=params, timeout=20)
     resp.raise_for_status()
     return resp.json()

@@ -36,3 +36,6 @@ claude-resume.txt
 # --- Third-party data files (site terms forbid reuse; keep out of git) ---
 reference/*.csv
 reference/clean/
+
+# --- Third-party papers (copyrighted; personal copies only) ---
+docs/*.pdf
