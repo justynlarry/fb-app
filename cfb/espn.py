@@ -86,6 +86,20 @@ def team_info(side):
     }
 
 
+def broadcast_list(comp):
+    """TV / streaming networks for one game as [(market, network), ...], e.g. [('national', 'ABC')].
+    Anything missing or oddly shaped is skipped, so a strange broadcast entry never costs us the score."""
+    pairs = []
+    for b in comp.get("broadcasts") or []:
+        if not isinstance(b, dict):
+            continue
+        market = str(b.get("market") or "unknown")
+        for name in b.get("names") or []:
+            if isinstance(name, str) and name:
+                pairs.append((market, name))
+    return pairs
+
+
 def parse_event(event):
     """Turn one ESPN event into a flat dict of the fields we store."""
     comp = event["competitions"][0]
@@ -108,6 +122,7 @@ def parse_event(event):
         "season_type": SEASON_TYPES.get(event.get("season", {}).get("type")),
         "week": event.get("week", {}).get("number"),
         "neutral_site": comp.get("neutralSite", False),
+        "broadcasts": broadcast_list(comp),
         "home_team": team_info(home),
         "away_team": team_info(away),
         "state": status_type.get("state"),              # 'pre', 'in', 'post'
@@ -290,6 +305,35 @@ def save_live_scores(league, games):
     return saved
 
 
+def save_broadcasts(league, games):
+    """Record each game's TV / streaming networks in game_broadcasts.  A network we've seen before
+    only gets its last_seen moved forward, so first_seen keeps when we first knew it.
+    Returns how many (game, network) rows were saved."""
+    with connect() as conn:
+        game_ids = dict(
+            conn.execute(
+                "SELECT espn_id, id FROM games WHERE league = %s AND espn_id IS NOT NULL",
+                (league,),
+            ).fetchall()
+        )
+        saved = 0
+        for g in games:
+            game_id = game_ids.get(g["espn_id"])
+            if game_id is None:
+                continue        # save_live_scores already reports games we don't have
+            for market, network in g["broadcasts"]:
+                conn.execute(
+                    """
+                    INSERT INTO game_broadcasts (game_id, market, network)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (game_id, market, network) DO UPDATE SET last_seen = now()
+                    """,
+                    (game_id, market, network),
+                )
+                saved += 1
+        return saved
+
+
 def update_start_times(league, games):
     """Move kickoffs that ESPN has changed since CFBD's 5 AM refresh.  Returns how many moved."""
     moved = 0
@@ -358,6 +402,11 @@ def poll():
                 save_final_scores(league, games)
             saved = save_live_scores(league, games)
             update_start_times(league, games)
+            try:
+                save_broadcasts(league, games)
+            except Exception as err:
+                # A broadcast problem must never cost us the scores, which are already saved above
+                print(f"ESPN {league} broadcasts failed: {err!r}")
         except Exception as err:
             # One league's feed failing must not stop the other
             print(f"ESPN {league} poll failed: {err!r}")
