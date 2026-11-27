@@ -808,6 +808,8 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `pick_results_bettable` on all 2026 picks), `weather_totals` (C-WX / N-WX, week-cluster bootstrap `cluster_diff`),
   `reversal` (both leagues), `censoring` (C-CENS at bet time; `bias_totals` matches the paper). `scipy` added to
   requirements.txt (was only a scikit-learn dependency).
+  `g5ats` (C-G5ATS: user typed `last_game_ats`, Claude typed the rest at the user's request; Notre Dame and ACC / Big Ten /
+  Big 12 / SEC out, CFBD close = mean of providers) and the `nfl_tot_b1` bar label 1.96 → 2.24. H-LEAN's four measures still to build.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.

@@ -531,7 +531,7 @@ def nfl_tot_b1(season, seed=2027):
     rng = np.random.default_rng(seed)
     boots = np.array([fit(np.concatenate([where[k] for k in rng.choice(keys, len(keys))])) for _ in range(2000)])
     a, b, _ = fit(np.arange(len(d)))
-    out.update({"a (our gap, B1 in)": f"{a:+.4f} ± {boots[:, 0].std():.4f} ({a / boots[:, 0].std():+.2f} SE; bar 1.96)",
+    out.update({"a (our gap, B1 in)": f"{a:+.4f} ± {boots[:, 0].std():.4f} ({a / boots[:, 0].std():+.2f} SE; bar 2.24)",
                 "b (B1's gap)": f"{b:+.4f} ± {boots[:, 1].std():.4f}", "week clusters": len(keys)})
     return out
 
@@ -602,6 +602,110 @@ def censoring(season, version):
             "mean result − our total (pts)": round(float((d["actual"] - d["ours"]).mean()), 2)}
 
 
+# ----------------------------------------------------- C-G5ATS: next-game reaction in non-Power 5 games (reported)
+# Registered 2026-11-27 (model-tests.md, C-G5ATS), after Bennett (2021).  A team's A = its last game's margin minus
+# what the CFBD closing spread expected (its ATS margin).  Back a team with A >= +14, fade one with A <= -14.
+G5ATS_CUT = 14
+POWER_CONFERENCES = {"ACC", "Big Ten", "Big 12", "SEC"}
+
+# Every finished game of the season with the CFBD close (mean over providers; NULL if no provider had a spread)
+CLOSES_SQL = """
+SELECT g.id AS game_id, g.start_time, g.home_id, g.away_id, g.home_points, g.away_points,
+       (SELECT avg(l.spread) FROM lines l WHERE l.game_id = g.id AND l.spread IS NOT NULL)::float AS close_spread
+FROM games g
+WHERE g.league = 'cfb' AND g.season = %(season)s AND g.completed AND g.home_points IS NOT NULL
+"""
+
+
+def last_game_ats(season, bet_games):
+    """For each bet game, both teams' ATS margin in their previous game of the season (NaN if that game had no line)."""
+    done = query(CLOSES_SQL, {"season": season})
+    margin = done["home_points"] - done["away_points"]
+    close = done["close_spread"].astype(float)          # all-NULL early in a season would otherwise be text-like
+    # Spreads are home-side (the expected away - home margin), so home's ATS margin = margin + spread
+    by_team = pd.concat([
+        pd.DataFrame({"team_id": done["home_id"], "pt": done["start_time"], "ats": margin + close}),
+        pd.DataFrame({"team_id": done["away_id"], "pt": done["start_time"], "ats": -margin - close}),
+    ]).sort_values("pt")
+    games = bet_games.sort_values("start_time")
+    out = games[["game_id"]].copy()
+    for side in ("home", "away"):
+        q = games[["game_id", "start_time", f"{side}_id"]].rename(columns={f"{side}_id": "team_id"})
+        m = pd.merge_asof(q, by_team, left_on="start_time", right_on="pt", by="team_id",
+                          allow_exact_matches=False, direction="backward")
+        out[f"a_{side}"] = m["ats"].values
+    return out
+
+
+# Bet-time picks in regular-season games between two FBS teams, Notre Dame out (conferences filtered in Python)
+G5ATS_GAMES_SQL = """
+SELECT f.game_id, f.start_time, f.result, g.home_id, g.away_id, f.market_spread::float AS bet_line
+FROM pick_results f
+JOIN games g ON g.id = f.game_id
+JOIN teams th ON th.id = g.home_id
+JOIN teams ta ON ta.id = g.away_id
+WHERE f.taken = 'first' AND f.model_version = %(version)s AND g.season = %(season)s AND g.league = 'cfb'
+  AND g.season_type = 'regular' AND g.home_classification = 'fbs' AND g.away_classification = 'fbs'
+  AND th.school <> 'Notre Dame' AND ta.school <> 'Notre Dame'
+"""
+
+
+def g5ats_side(a_home, a_away, cut=G5ATS_CUT):
+    """The side C-G5ATS bets ('home' / 'away'), or None: back a team that beat its last line by cut+, fade one that
+    missed it by cut+.  Both teams' signals on the same side = one bet; signals that disagree = no bet.  A missing A
+    (NaN) gives no signal, because comparisons with NaN are False."""
+    votes = set()
+    if a_home >= cut:
+        votes.add("home")
+    if a_home <= -cut:
+        votes.add("away")
+    if a_away >= cut:
+        votes.add("away")
+    if a_away <= -cut:
+        votes.add("home")
+    return votes.pop() if len(votes) == 1 else None
+
+
+def g5ats(season, version):
+    """C-G5ATS (reported only): bets at the best bettable number and price at bet time, the slope of home's margin
+    against the bet-time line on the difference in A, and how A relates to Test L's X in the same games."""
+    g = query(G5ATS_GAMES_SQL, {"season": season, "version": version})
+    if g.empty:
+        return {"games": 0}
+    conf = query(CONFERENCES_SQL, {"season": season})
+    g = g.merge(conf, on="game_id", how="left")
+    g = g[g["home_conf"].notna() & g["away_conf"].notna()
+          & ~g["home_conf"].isin(POWER_CONFERENCES) & ~g["away_conf"].isin(POWER_CONFERENCES)]
+    if g.empty:
+        return {"games": 0}
+    g = g.merge(last_game_ats(season, g), on="game_id")
+    g["side"] = [g5ats_side(h, a) for h, a in zip(g["a_home"], g["a_away"])]
+
+    lines = bet_time_lines(season, "cfb", version)
+    by_game = dict(tuple(lines.groupby("game_id")))
+    outcomes, units = [], []
+    for row in g[g["side"].notna() & g["result"].notna()].itertuples():
+        best = best_bet(by_game[row.game_id], row.side) if row.game_id in by_game else None
+        if best is None:
+            continue
+        o, u = grade(row.side, best[0], best[1], row.result, None)
+        outcomes.append(o)
+        units.append(u)
+
+    # Home's margin against the bet-time line (home covers when result < line) on the difference in A
+    s = g.dropna(subset=["a_home", "a_away", "bet_line", "result"])
+    b, se = slope_se(s["a_home"] - s["a_away"], s["bet_line"] - s["result"])
+    # Beside Test L: Bennett says ATS form carries over, Test L that the opener over-reacts to luck
+    x = pd.Series(luck_x(season), name="luck_x")
+    both = s.merge(x, left_on="game_id", right_index=True)
+    corr = (round(float(np.corrcoef(both["a_home"] - both["a_away"], both["luck_x"])[0, 1]), 3)
+            if len(both) >= 10 else None)
+    return {"non-Power 5 games": len(g), "games with a signal": int(g["side"].notna().sum()),
+            "bets at the bettable number": record(outcomes, units),
+            "slope of home's margin vs the bet-time line on the A difference": fmt_slope(b, se),
+            "same games with Test L's X": len(both), "correlation of the A difference with Test L's X": corr}
+
+
 def report(season, version=MODEL_VERSION):
     p = bet_time_picks(season, version)
     if p.empty:
@@ -614,7 +718,8 @@ def report(season, version=MODEL_VERSION):
             "weather_nfl": weather_totals(season, "nfl", "nfl-v3"),
             "reversal_cfb": reversal(season, "cfb", version),
             "reversal_nfl": reversal(season, "nfl", "nfl-v3"),
-            "censoring": censoring(season, version)}
+            "censoring": censoring(season, version),
+            "g5ats": g5ats(season, version)}
 
 
 if __name__ == "__main__":
