@@ -23,6 +23,7 @@ import sys
 import numpy as np
 import pandas as pd
 from psycopg.rows import dict_row
+from scipy.stats import norm
 from sklearn.linear_model import LinearRegression
 
 from cfb.db import connect
@@ -62,6 +63,245 @@ def record(outcomes, units):
     rate = w / n
     return {"W-L-P": f"{w}-{l}-{p}", "win %": round(100 * rate, 1), "±95%": round(196 * np.sqrt(rate * (1 - rate) / n), 1),
             "units": round(u, 2), "ROI %": round(100 * u / (n + p), 1)}
+
+
+# ------------------------------------------------------------------------------- bettable lines at bet time, any side
+# The bettable books, fixed as in 029_bettable_grading.sql (user, 2026-11-17), so a later edit of the bet-form setting
+# can't change a past record.
+BETTABLE_BOOKS = ["mybookieag", "draftkings", "fanduel", "betmgm", "williamhill_us", "fanatics"]
+
+# Every bettable book's line in the snapshot each game's bet-time ('first') pick was made from: the latest snapshot
+# saved at or before the pick, as in pick_results_bettable.
+BET_TIME_LINES_SQL = """
+SELECT f.game_id, s.book, s.spread::float, s.home_price, s.away_price, s.total::float, s.over_price, s.under_price
+FROM pick_results f
+JOIN games g ON g.id = f.game_id
+JOIN LATERAL (SELECT max(s2.fetched_at) AS at
+              FROM odds_snapshots s2
+              WHERE s2.game_id = f.game_id AND s2.fetched_at <= f.recorded_at) snap ON true
+JOIN odds_snapshots s ON s.game_id = f.game_id AND s.fetched_at = snap.at
+WHERE f.taken = 'first' AND f.model_version = %(version)s AND g.season = %(season)s AND g.league = %(league)s
+  AND s.book = ANY(%(books)s)
+"""
+
+
+def bet_time_lines(season, league, version):
+    """Bettable books' lines at each game's bet time, one row per game and book."""
+    return query(BET_TIME_LINES_SQL, {"season": season, "league": league, "version": version, "books": BETTABLE_BOOKS})
+
+
+def best_bet(lines, side):
+    """Best bettable (number, price) for one side among one game's lines: best number first, then best price.
+    side: 'home' / 'away' (home-side spreads) or 'over' / 'under'.  None if no book has that market."""
+    if side in ("home", "away"):
+        col, price_col = "spread", "home_price" if side == "home" else "away_price"
+    else:
+        col, price_col = "total", "over_price" if side == "over" else "under_price"
+    d = lines.dropna(subset=[col, price_col])                  # a book without that price can't be bet
+    number, price = d[col], d[price_col]
+    if side == "home":
+        better = number         # home-side spreads: home wants +7 over +3
+    elif side == "away":
+        better = -number        # away wants -7 (away +7) over -3 (away +3)
+    elif side == "over":
+        better = -number        # over wants the lowest total
+    else:
+        better = number         # under wants the highest total
+    if d.empty:
+        return None
+    order = pd.DataFrame({"better": better, "price": price}).sort_values(["better", "price"], ascending=False)
+    i = order.index[0]
+    return float(number[i]), int(price[i])
+
+
+def grade(side, number, price, result, actual_total):
+    """('win' / 'loss' / 'push', units) for one bet, graded like pick_results (result = away - home points)."""
+    if side in ("home", "away"):
+        if result == number:
+            return "push", 0.0
+        won = result < number if side == "home" else result > number
+    else:
+        if actual_total == number:
+            return "push", 0.0
+        won = actual_total > number if side == "over" else actual_total < number
+    if not won:
+        return "loss", -1.0
+    return "win", price / 100 if price > 0 else 100 / -price
+
+
+# ---------------------------------------------------------------- C-WX / N-WX: forecast weather and the totals move
+# Thresholds as registered 2026-11-27 (model-tests.md, C-WX and N-WX): a game is tagged if its forecast at bet time
+# meets any one of them (None = not used in that league).
+WX_RULES = {"cfb": {"wind_mph": None, "gust_mph": 25, "precip_in": 0.1},
+            "nfl": {"wind_mph": 15, "gust_mph": 25, "precip_in": 0.1}}
+WX_BAR = {"cfb": 2.54, "nfl": 2.24}
+
+# Open-air games with their bet-time and last pre-kickoff median totals and the forecast used:
+#   college: the latest forecast fetched before the bet-time pick;
+#   NFL: the forecast saved on the bet day (Monday); if it was fetched after bet time, the game is left out.
+WX_GAMES_SQL = """
+SELECT f.game_id, g.season_type, g.week, f.recorded_at, f.our_total::float,
+       f.market_total::float AS bet_tmedian, l.market_total::float AS last_tmedian, f.actual_total,
+       w.fetched_at AS wx_fetched_at, w.wind_mph::float, w.gust_mph::float, w.precip_in::float
+FROM pick_results f
+JOIN games g ON g.id = f.game_id
+JOIN venues v ON v.id = g.venue_id
+LEFT JOIN pick_results l ON l.game_id = f.game_id AND l.model_version = f.model_version AND l.taken = 'last'
+LEFT JOIN LATERAL (
+    SELECT w2.fetched_at, w2.wind_mph, w2.gust_mph, w2.precip_in
+    FROM weather_forecasts w2
+    WHERE w2.game_id = f.game_id
+      AND CASE WHEN %(league)s = 'nfl'
+               THEN w2.forecast_date = (f.recorded_at AT TIME ZONE 'UTC')::date
+               ELSE w2.fetched_at < f.recorded_at END
+    ORDER BY w2.fetched_at DESC
+    LIMIT 1) w ON true
+WHERE f.taken = 'first' AND f.model_version = %(version)s AND g.season = %(season)s AND g.league = %(league)s
+  AND NOT v.dome
+"""
+
+
+def wx_tag(row, rules):
+    """'tagged' / 'untagged', or why the game is left out ('no forecast', 'fetched after bet time')."""
+    if pd.isna(row["wx_fetched_at"]):
+        return "no forecast"
+    if row["wx_fetched_at"] >= row["recorded_at"]:
+        return "fetched after bet time"
+    hit = any(limit is not None and pd.notna(row[col]) and row[col] >= limit for col, limit in rules.items())
+    return "tagged" if hit else "untagged"
+
+
+def cluster_diff(values, tagged, clusters, seed=2027, n_boot=2000):
+    """Mean of values in tagged games minus the mean in untagged games, and its bootstrap SE resampling whole
+    clusters (weeks), so games of the same week move together.  (None, None) if either group is empty."""
+    v, t, c = np.asarray(values, float), np.asarray(tagged, bool), np.asarray(clusters)
+    if not t.any() or t.all():
+        return None, None
+    def diff(i):
+        return float(v[i][t[i]].mean() - v[i][~t[i]].mean())
+    keys = np.unique(c)
+    where = {k: np.where(c == k)[0] for k in keys}
+    rng = np.random.default_rng(seed)
+    boots = []
+    for _ in range(n_boot):
+        i = np.concatenate([where[k] for k in rng.choice(keys, len(keys))])
+        if t[i].any() and not t[i].all():          # a draw with no tagged (or no untagged) game can't give a difference
+            boots.append(diff(i))
+    return diff(np.arange(len(v))), float(np.std(boots))
+
+
+def weather_totals(season, league, version):
+    """C-WX (college) / N-WX (NFL), registered 2026-11-27.  Judged: mean total move (bet-time median -> last
+    pre-kickoff median) in tagged minus untagged open-air games.  Reported: the under at the bettable number and price
+    in tagged games, scoring against our total and the market, counts."""
+    d = query(WX_GAMES_SQL, {"season": season, "league": league, "version": version})
+    if d.empty:
+        return {"games": 0}
+    rules = WX_RULES[league]
+    d["tag"] = d.apply(lambda row: wx_tag(row, rules), axis=1)
+    out = {"left out": d.loc[~d["tag"].isin(["tagged", "untagged"]), "tag"].value_counts().to_dict()}
+    d = d[d["tag"].isin(["tagged", "untagged"])].dropna(subset=["bet_tmedian", "last_tmedian"])
+    d["move"] = d["last_tmedian"] - d["bet_tmedian"]
+    d["week_key"] = d["season_type"] + d["week"].astype(str)
+
+    # College is judged on the regular season (conference championships included); bowls and the CFP are reported
+    if league == "cfb":
+        groups = {"judged": d[d["season_type"] == "regular"], "bowls and CFP (reported)": d[d["season_type"] != "regular"]}
+    else:
+        groups = {"judged": d}
+
+    lines = bet_time_lines(season, league, version)
+    by_game = dict(tuple(lines.groupby("game_id")))
+    for name, g in groups.items():
+        tagged = g["tag"] == "tagged"
+        res = {"tagged": int(tagged.sum()), "untagged": int((~tagged).sum()),
+               "tagged by condition": {col: int((g.loc[tagged, col] >= limit).sum())
+                                       for col, limit in rules.items() if limit is not None}}
+        delta, se = cluster_diff(g["move"], tagged, g["week_key"])
+        if delta is not None and se:
+            res["Δ move, tagged − untagged (pts)"] = (f"{delta:+.2f} ± {se:.2f} ({delta / se:+.2f} SE; "
+                                                       f"supported if ≤ −{WX_BAR[league]} SE)")
+        # The under at the best bettable number and price at bet time, tagged games
+        outcomes, units = [], []
+        for row in g[tagged].itertuples():
+            best = best_bet(by_game[row.game_id], "under") if row.game_id in by_game else None
+            if best is None or pd.isna(row.actual_total):
+                continue
+            o, u = grade("under", best[0], best[1], None, row.actual_total)
+            outcomes.append(o)
+            units.append(u)
+        res["under at the bettable number (tagged)"] = record(outcomes, units)
+        # Scoring against our total and against the bet-time market total, tagged vs untagged
+        done = g.dropna(subset=["actual_total"])
+        done_tagged = done["tag"] == "tagged"
+        for label, col in (("result − our total", "our_total"), ("result − bet-time total", "bet_tmedian")):
+            diff = done["actual_total"] - done[col]
+            res[f"mean {label} (pts)"] = {"tagged": round(float(diff[done_tagged].mean()), 2) if done_tagged.any() else None,
+                                          "untagged": round(float(diff[~done_tagged].mean()), 2) if (~done_tagged).any() else None}
+        out[name] = res
+    return out
+
+
+# ------------------------------------------------------------------- reversal check, both leagues (reported only)
+# Registered 2026-11-27 (model-tests.md): Moskowitz (2021) finds about half of an NFL open -> close move reversed by
+# the result.  Do the moves toward us hold up (information) or reverse (sentiment)?
+REVERSAL_SQL = """
+SELECT f.game_id, f.tier, f.side, f.total_side, f.result, f.actual_total,
+       f.our_spread::float AS bet_ours, f.market_spread::float AS bet_line, f.market_total::float AS bet_tline,
+       l.our_spread::float AS last_ours, l.market_spread::float AS last_line,
+       l.our_total::float AS last_tours, l.market_total::float AS last_tline
+FROM pick_results f
+JOIN games g ON g.id = f.game_id
+JOIN pick_results l ON l.game_id = f.game_id AND l.model_version = f.model_version AND l.taken = 'last'
+WHERE f.taken = 'first' AND f.model_version = %(version)s AND g.season = %(season)s AND g.league = %(league)s
+  AND f.result IS NOT NULL
+"""
+
+
+def fmt_slope(b, se):
+    return None if b is None else f"{b:+.3f} ± {se:.3f}"
+
+
+def reversal(season, league, version):
+    """Reversal check: (1) result slope at the last pre-kickoff line on all games (≈ 0: our information was absorbed;
+    < 0: we predict moves that reverse); (2) on our picks, the result after the move regressed on the move itself,
+    in points for our side (≈ −0.5 = an ordinary market move that half reverses; ≈ 0 = information); (3) the same
+    for totals picks."""
+    d = query(REVERSAL_SQL, {"season": season, "league": league, "version": version})
+    if d.empty:
+        return {"games": 0}
+    out = {}
+
+    # 1. All games, at the last line before kickoff
+    s = d.dropna(subset=["last_ours", "last_line"])
+    b, se = slope_se(s["last_ours"] - s["last_line"], s["result"] - s["last_line"])
+    out["spreads: result slope at the last line, all games"] = {"games": len(s), "slope": fmt_slope(b, se)}
+    t = d.dropna(subset=["last_tours", "last_tline", "actual_total"])
+    b, se = slope_se(t["last_tours"] - t["last_tline"], t["actual_total"] - t["last_tline"])
+    out["totals: result slope at the last line, all games"] = {"games": len(t), "slope": fmt_slope(b, se)}
+
+    # 2. Our spread picks: college Plays, NFL 3+ gaps at bet time
+    if league == "cfb":
+        picks, label = d[d["tier"] == "play"], "spreads: Plays"
+    else:
+        picks, label = d[(d["bet_ours"] - d["bet_line"]).abs() >= 3], "spreads: 3+ gaps at bet time"
+    picks = picks.dropna(subset=["side", "bet_line", "last_line"])
+    sgn = np.where(picks["side"] == "home", 1.0, -1.0)
+    move = sgn * (picks["bet_line"] - picks["last_line"])      # points the line moved our way after bet time (CLV)
+    after = sgn * (picks["last_line"] - picks["result"])       # our side's margin against the last line
+    b, se = slope_se(move, after)
+    out[label] = {"picks": len(picks), "mean move toward us (pts)": round(float(move.mean()), 2) if len(picks) else None,
+                  "slope of result-after-move on the move": fmt_slope(b, se)}
+
+    # 3. Our totals picks
+    tp = d.dropna(subset=["total_side", "bet_tline", "last_tline", "actual_total"])
+    o = np.where(tp["total_side"] == "over", 1.0, -1.0)
+    move = o * (tp["last_tline"] - tp["bet_tline"])            # a rising total helps an over we already hold
+    after = o * (tp["actual_total"] - tp["last_tline"])
+    b, se = slope_se(move, after)
+    out["totals picks"] = {"picks": len(tp), "mean move toward us (pts)": round(float(move.mean()), 2) if len(tp) else None,
+                           "slope of result-after-move on the move": fmt_slope(b, se)}
+    return out
 
 
 # ------------------------------------------------------------------------------------------------- picks at bet time
@@ -296,6 +536,72 @@ def nfl_tot_b1(season, seed=2027):
     return out
 
 
+# -------------------------------------------------------------- C-CENS: Arscott's censoring rule, college totals
+# Registered 2026-11-27 (model-tests.md, C-CENS).  The paper's numbers, frozen: Tobit SDs of each team's points around
+# the score implied by the spread and total (Arscott 2023, Table 3), and the cut for betting the over.
+SIGMA_DOG = 11.280
+SIGMA_FAV = 11.941
+CENS_CUT = 1.00            # bet the over when biasTotals > 1.00 (the stricter 1.75 is reported)
+
+CENS_GAMES_SQL = """
+SELECT f.game_id, f.actual_total, f.our_total::float
+FROM pick_results f
+JOIN games g ON g.id = f.game_id
+WHERE f.taken = 'first' AND f.model_version = %(version)s AND g.season = %(season)s AND g.league = 'cfb'
+  AND f.actual_total IS NOT NULL
+"""
+
+
+def censoring_bias(mu, sigma):
+    """How much a floor at zero raises a team's expected points: E[max(0, X)] - mu for X ~ Normal(mu, sigma)."""
+    return sigma * norm.pdf(mu / sigma) - mu * norm.cdf(-mu / sigma)
+
+
+def bias_totals(spread, total):
+    """Arscott's biasTotals (Eq. 13) from a spread (either sign) and a total."""
+    s = abs(spread)
+    dog = (total - s) / 2          # underdog's implied points (Eq. 6)
+    fav = dog + s                  # favourite's implied points (Eq. 7)
+    return censoring_bias(fav, SIGMA_FAV) + censoring_bias(dog, SIGMA_DOG)
+
+
+def censoring(season, version):
+    """C-CENS at bet time: the median of the bettable books' spread and total gives biasTotals; the over is graded at
+    the best bettable number and price.  Stage 2 is a sign check (win % > 50) if Stage 1 passed; otherwise the same
+    numbers are reported only."""
+    games = query(CENS_GAMES_SQL, {"season": season, "version": version})
+    if games.empty:
+        return {"games": 0}
+    lines = bet_time_lines(season, "cfb", version)
+    by_game = dict(tuple(lines.groupby("game_id")))
+    rows = []
+    for g in games.itertuples():
+        if g.game_id not in by_game:
+            continue
+        book_lines = by_game[g.game_id]
+        spread, total = book_lines["spread"].median(), book_lines["total"].median()
+        if pd.isna(spread) or pd.isna(total) or spread == 0:      # no line, or no underdog
+            continue
+        bias = bias_totals(spread, total)
+        if bias <= CENS_CUT:
+            continue
+        best = best_bet(book_lines, "over")
+        if best is None:
+            continue
+        outcome, units = grade("over", best[0], best[1], None, g.actual_total)
+        rows.append({"bias": bias, "outcome": outcome, "units": units, "total": total,
+                     "ours": g.our_total, "actual": g.actual_total})
+    d = pd.DataFrame(rows)
+    if d.empty:
+        return {"games": len(games), "qualifying": 0}
+    strict = d[d["bias"] > 1.75]
+    return {"games": len(games), "qualifying (biasTotals > 1.00)": len(d),
+            "over at the bettable number": record(d["outcome"], d["units"]),
+            "over, biasTotals > 1.75": record(strict["outcome"], strict["units"]),
+            "mean our total − market total (pts)": round(float((d["ours"] - d["total"]).mean()), 2),
+            "mean result − our total (pts)": round(float((d["actual"] - d["ours"]).mean()), 2)}
+
+
 def report(season, version=MODEL_VERSION):
     p = bet_time_picks(season, version)
     if p.empty:
@@ -303,7 +609,12 @@ def report(season, version=MODEL_VERSION):
     return {"season": season, "version": version, "bet-time picks": len(p),
             "line_moves": line_moves(p), "totals_agree": totals_agree(p, season, version),
             "weeknight": weeknight(p, season), "luck": luck(p, season), "dk_lookahead": dk_lookahead(season, version),
-            "nfl_tot_b1": nfl_tot_b1(season)}
+            "nfl_tot_b1": nfl_tot_b1(season),
+            "weather_cfb": weather_totals(season, "cfb", version),
+            "weather_nfl": weather_totals(season, "nfl", "nfl-v3"),
+            "reversal_cfb": reversal(season, "cfb", version),
+            "reversal_nfl": reversal(season, "nfl", "nfl-v3"),
+            "censoring": censoring(season, version)}
 
 
 if __name__ == "__main__":

@@ -803,6 +803,11 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   **nflverse schedule columns (2026-11-27, user typed it):** `036_nfl_schedule_info.sql` (game, as_of = Mountain load day,
   div_game, rest days, roof (NULL = retractable, not decided), surface, observed temp/wind (hindsight), stadium_id);
   `nflverse.save_schedule_info` runs inside `load_seasons` right after `load_games`. Backfills are stamped with the load day.
+  **`report_2027.py` measures for the 2026-11-27 registrations (user typed 1–3; Claude typed the C-CENS block at the user's
+  request, rule unchanged):** `bet_time_lines` / `best_bet` / `grade` (any side at the bettable number and price; match
+  `pick_results_bettable` on all 2026 picks), `weather_totals` (C-WX / N-WX, week-cluster bootstrap `cluster_diff`),
+  `reversal` (both leagues), `censoring` (C-CENS at bet time; `bias_totals` matches the paper). `scipy` added to
+  requirements.txt (was only a scikit-learn dependency).
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.
