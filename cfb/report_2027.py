@@ -706,6 +706,68 @@ def g5ats(season, version):
             "same games with Test L's X": len(both), "correlation of the A difference with Test L's X": corr}
 
 
+# ------------------------------------------------------------------- H-LEAN: Pass-tier leans (reported only)
+# Registered 2026-11-25 (model-tests.md, H-LEAN).  A lean = a spread pick of tier Pass, graded on the side of the
+# market our line is on (games where our line equals the number have no side and are left out).  Never bet in 2027.
+BACKTEST_PASS_RATE = 51.0      # backtest Pass at the Bovada open, 2021-25 (n = 1,999), as stated in the registration
+
+LEAN_SQL = """
+SELECT r.game_id, r.taken, r.side, r.start_time, g.season_type,
+       r.spread_outcome, r.spread_units::float,
+       b.b_price, b.b_spread_outcome, b.b_spread_units::float,
+       (SELECT f.side FROM pick_results f
+        WHERE f.game_id = r.game_id AND f.model_version = r.model_version AND f.taken = 'first') AS first_side,
+       (SELECT f.tier FROM pick_results f
+        WHERE f.game_id = r.game_id AND f.model_version = r.model_version AND f.taken = 'first') AS first_tier
+FROM pick_results r
+JOIN games g ON g.id = r.game_id
+LEFT JOIN pick_results_bettable b ON b.game_id = r.game_id AND b.model_version = r.model_version AND b.taken = r.taken
+WHERE r.model_version = %(version)s AND g.season = %(season)s AND g.league = 'cfb'
+  AND r.tier = 'pass' AND r.side IS NOT NULL AND r.spread_outcome IS NOT NULL
+"""
+
+
+def break_even(price):
+    """Win rate needed to break even at an American price (-110 -> 52.4%)."""
+    return -price / (-price + 100) if price < 0 else 100 / (price + 100)
+
+
+def leans(season, version):
+    """H-LEAN's four measures: (1) Early leans (bet time), (2) Late leans (last save before kickoff), each at the
+    bettable number and price with best-anywhere beside it; (3) Late split by whether the Early lean was on the
+    other side (the line moved past our number), the same side, or there was no Early lean; (4) break-even at the
+    median bettable price and the backtest Pass rate, for comparison.  Regular season and bowls / CFP separately."""
+    d = query(LEAN_SQL, {"season": season, "version": version})
+    if d.empty:
+        return {"leans": 0}
+    out = {}
+    for part, rows in (("regular season", d[d["season_type"] == "regular"]),
+                       ("bowls and CFP", d[d["season_type"] != "regular"])):
+        res = {}
+        for taken, label in (("first", "1. Early (bet time)"), ("last", "2. Late (last save before kickoff)")):
+            g = rows[rows["taken"] == taken]
+            res[label] = {"at the bettable number": record(g["b_spread_outcome"], g["b_spread_units"]),
+                          "best anywhere": record(g["spread_outcome"], g["spread_units"])}
+        late = rows[rows["taken"] == "last"]
+        no_early = late["first_side"].isna()
+        flipped = ~no_early & (late["first_side"] != late["side"])
+        same = ~no_early & (late["first_side"] == late["side"])
+        early_pass = late["first_tier"] == "pass"
+        # Same side is split by the Early pick's tier: the registration's 2026 figure (32-27) is the Early-Pass part
+        parts = {"flipped: Early lean on the other side": flipped,
+                 "same side, Early also a Pass": same & early_pass,
+                 "same side, Early was a Play or Caution": same & ~early_pass,
+                 "no Early lean": no_early}
+        res["3. Late, split (at the bettable number)"] = {
+            name: record(late.loc[m, "b_spread_outcome"], late.loc[m, "b_spread_units"]) for name, m in parts.items()}
+        prices = rows["b_price"].dropna()
+        res["4. compare with"] = {
+            "break-even at the median bettable price %": round(100 * break_even(float(prices.median())), 1) if len(prices) else None,
+            "backtest Pass rate at the open %": BACKTEST_PASS_RATE}
+        out[part] = res
+    return out
+
+
 def report(season, version=MODEL_VERSION):
     p = bet_time_picks(season, version)
     if p.empty:
@@ -719,7 +781,8 @@ def report(season, version=MODEL_VERSION):
             "reversal_cfb": reversal(season, "cfb", version),
             "reversal_nfl": reversal(season, "nfl", "nfl-v3"),
             "censoring": censoring(season, version),
-            "g5ats": g5ats(season, version)}
+            "g5ats": g5ats(season, version),
+            "leans": leans(season, version)}
 
 
 if __name__ == "__main__":

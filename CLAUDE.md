@@ -809,7 +809,10 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   `reversal` (both leagues), `censoring` (C-CENS at bet time; `bias_totals` matches the paper). `scipy` added to
   requirements.txt (was only a scikit-learn dependency).
   `g5ats` (C-G5ATS: user typed `last_game_ats`, Claude typed the rest at the user's request; Notre Dame and ACC / Big Ten /
-  Big 12 / SEC out, CFBD close = mean of providers) and the `nfl_tot_b1` bar label 1.96 → 2.24. H-LEAN's four measures still to build.
+  Big 12 / SEC out, CFBD close = mean of providers) and the `nfl_tot_b1` bar label 1.96 → 2.24. **`leans` (H-LEAN, Claude typed it
+  at the user's request):** Early / Late at the bettable number with best-anywhere beside, Late split into flipped / same side
+  (Early also Pass) / same side (Early Play or Caution) / no Early lean; reproduces the registration's 2026 figures exactly
+  (Nov 12–24: Early 44–47 −6.44, Late 50–38 +8.20, flipped 14–6, same side with Early Pass 32–27). Left: C-HOLD (January).
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.
