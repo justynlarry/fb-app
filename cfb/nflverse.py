@@ -15,6 +15,7 @@ in place (every insert is an upsert), which is also how to refresh the current s
 
 import csv
 import io
+import os
 import sys
 import tempfile
 from datetime import datetime
@@ -190,6 +191,50 @@ def load_games(conn, season, schedule, team_ids):
 
     print(f"games {season}: {len(game_ids)} loaded, {lines} lines, {skipped} skipped (no ESPN id)")
     return game_ids
+
+
+def whole(value):
+    """'62', '62.0' -> 62;  '' or anything odd -> None."""
+    number = to_float(value)
+    return None if number is None else round(number)
+
+
+def save_schedule_info(conn, season, schedule, game_ids):
+    """Save today's copy of the nflverse schedule columns we don't keep in games (nfl_schedule_info),
+    one row per game per load day.  Returns how many rows were saved."""
+    as_of = datetime.now(ZoneInfo(os.environ.get("TZ", "America/Denver"))).date()
+    saved = 0
+    for row in schedule:
+        if row["season"] != str(season):
+            continue
+        game_id = game_ids.get(row["game_id"])
+        if game_id is None:
+            continue        # load_games skipped it (no ESPN id)
+        div = to_int(row["div_game"])
+        conn.execute(
+            """
+            INSERT INTO nfl_schedule_info (game_id, as_of, div_game, away_rest, home_rest,
+                                           roof, surface, temp, wind, stadium_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (game_id, as_of) DO UPDATE SET
+                div_game   = EXCLUDED.div_game,
+                away_rest  = EXCLUDED.away_rest,
+                home_rest  = EXCLUDED.home_rest,
+                roof       = EXCLUDED.roof,
+                surface    = EXCLUDED.surface,
+                temp       = EXCLUDED.temp,
+                wind       = EXCLUDED.wind,
+                stadium_id = EXCLUDED.stadium_id,
+                fetched_at = now()
+            """,
+            (game_id, as_of, None if div is None else div == 1,
+             to_int(row["away_rest"]), to_int(row["home_rest"]),
+             row["roof"] or None, row["surface"] or None,
+             whole(row["temp"]), whole(row["wind"]), row["stadium_id"] or None),
+        )
+        saved += 1
+    print(f"{season}: {saved} schedule-info rows saved as of {as_of}")
+    return saved
 
 
 # ---------- 4. Team-game stats from play-by-play ----------
@@ -386,6 +431,7 @@ def load_seasons(seasons):
         # One transaction per season:  a failure part-way leaves earlier seasons saved
         with connect() as conn:
             game_ids = load_games(conn, season, schedule, team_ids)
+            save_schedule_info(conn, season, schedule, game_ids)
             plays = scrimmage_plays(season)
             load_stats(conn, season, game_ids, team_ids, plays)
             save_starters(conn, season, schedule, game_ids, team_ids)

@@ -796,10 +796,13 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   scorecards). **Bars: college family 2.54 (9 slots incl. v6-cc), NFL family 2.24 (4), every judged item re-registered.**
   NFL forecasts before the Monday 6 AM bet time built the same day (user typed it): `espn.fetch_scoreboard(week,
   season_type)`, `nfl_venues.sync_venues(days)` links next week's games, `weather.NFL_DAYS_AHEAD = 9`. First check:
-  Nov 30 5:30 AM run. Collect next: the final AP poll in January (1 CFBD call), nflverse `div_game` / rest / roof columns.
+  Nov 30 5:30 AM run. Collect next: the final AP poll in January (1 CFBD call).
   **TV networks: collecting since 2026-11-27** (user typed it): `035_game_broadcasts.sql` (game, market, network,
   first_seen, last_seen; `first_seen` = known since), `espn.broadcast_list` / `save_broadcasts`, called last in `poll()` in
   its own try (a broadcast error never costs the scores). Current week only, both leagues.
+  **nflverse schedule columns (2026-11-27, user typed it):** `036_nfl_schedule_info.sql` (game, as_of = Mountain load day,
+  div_game, rest days, roof (NULL = retractable, not decided), surface, observed temp/wind (hindsight), stadium_id);
+  `nflverse.save_schedule_info` runs inside `load_seasons` right after `load_games`. Backfills are stamped with the load day.
 - **Hypotheses noted 2026-11-13 (untested):** (1) 2026 3+ at close 44.4% ± 5.3 may reflect more injury news at the
   close (Big Ten availability reports 4/week from 2026; SEC 2024+, ACC/B12 2025+); test 0-call by conference games
   with reports vs without, difference-in-differences across each conference's first report season.
