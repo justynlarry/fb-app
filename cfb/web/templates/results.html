@@ -27,6 +27,13 @@
   {%- endif -%}
 {%- endmacro -%}
 
+{#- Week picker: key = (season, week, season_type).  NFL playoffs are regular weeks 19-22 in games, so only college has 'postseason'. -#}
+{%- macro week_label(key) -%}{{ 'Bowls' if key[2] == 'postseason' else 'Week ' ~ key[1] }}, {{ key[0] }}{%- endmacro -%}
+{%- macro results_href(league, key=none) -%}
+  /results{% if league == 'nfl' or key %}?{% endif %}{% if league == 'nfl' %}league=nfl{% if key %}&{% endif %}{% endif %}
+  {%- if key %}season={{ key[0] }}&week={{ key[1] }}{% if key[2] != 'regular' %}&season_type={{ key[2] }}{% endif %}{% endif %}
+{%- endmacro -%}
+
 {%- macro outcome_badge(outcome, units) -%}
   {%- if outcome == 'win' -%}<span class="outcome win">W</span> <span class="units pos">{{ '%+.2f'|format(units|float) }}</span>
   {%- elif outcome == 'loss' -%}<span class="outcome loss">L</span> <span class="units neg">−1.00</span>
@@ -45,14 +52,34 @@
 {%- set play = by.get(('last', 'play')) %}
 {%- set graded_any = summary | selectattr('graded') | list | length > 0 %}
 
+{#- weeks = every week with saved picks, newest first; chosen = the week on screen, or none for all weeks -#}
+{%- set weeks = weeks if weeks is defined else [] %}
+{%- set chosen = chosen if chosen is defined else none %}
 <div class="page-head page-head-row">
   <div>
-    <h1>{{ 'NFL ' if is_nfl }}Our Results</h1>
+    <h1>{{ 'NFL ' if is_nfl }}Our Results{% if chosen %} <span class="week-title">· {{ week_label(chosen) }}</span>{% endif %}</h1>
     <p class="muted">Model {{ version }} · {{ 'paper picks (not bets), ' if is_nfl else 'real picks, ' }}saved before kickoff and
       graded at the best number and price we found across books · 1 unit risked per pick</p>
   </div>
-  {{ league_tabs('/results', league) }}
+  <div class="head-actions">
+    {{ league_tabs('/results', league) }}
+    {%- if weeks %}
+    <nav class="week-nav" aria-label="Choose a week">
+      <select id="results-week" aria-label="Show results for">
+        <option value="{{ results_href(league) }}" {{ 'selected' if not chosen }}>All weeks</option>
+        {%- for w in weeks %}
+        {%- set key = (w.season, w.week, w.season_type) %}
+        <option value="{{ results_href(league, key) }}" {{ 'selected' if key == chosen }}>{{ week_label(key) }} · {{ w.first_kickoff.strftime('%b %-d') }}</option>
+        {%- endfor %}
+      </select>
+    </nav>
+    {%- endif %}
+  </div>
 </div>
+{%- if chosen %}
+<p class="muted small past-note">Showing {{ week_label(chosen) }} only. <a href="{{ results_href(league) }}">All weeks</a> ·
+  Pick rules (below) always cover every week.</p>
+{%- endif %}
 
 {#- Pass = games our line was too close to the market to bet; graded on the side we leaned to (not bets) -#}
 <section class="cards" aria-label="Summary">
@@ -76,7 +103,9 @@
   {%- endfor %}
 </section>
 
-{%- if not graded_any %}
+{%- if not graded_any and chosen %}
+<p class="note">No graded picks for {{ week_label(chosen) }} yet. Games are graded the morning after they're played.</p>
+{%- elif not graded_any %}
 <p class="note">{% if is_nfl -%}
   NFL picks are saved after every NFL odds snapshot, starting November 18, 2026. They're a paper record for the
   2027 test (T-OPEN), not bets. Games are graded the morning after they're played.
@@ -198,7 +227,7 @@
 {#- Bets people actually placed: the viewer's own and those of users who share their record (bets log) -#}
 {%- set bettors = bettors if bettors is defined else [] %}
 {%- set bets = bets if bets is defined else [] %}
-<h2 class="section-title">Bets placed{{ ' (NFL)' if is_nfl }}</h2>
+<h2 class="section-title">Bets placed{{ ' (NFL)' if is_nfl }}{% if chosen %} · {{ week_label(chosen) }}{% endif %}</h2>
 <p class="muted small">Real bets from the Bet button, at the price each person actually got. Shown: yours, and those of
   users who share their record (My bets → Settings). Notes stay private.</p>
 {%- if bettors %}
@@ -333,7 +362,7 @@
   better line than the median; "Shopping gain" = what shopping added in units. A gain here is real money even when the
   model's own record is flat.</p>
 
-<h2 class="section-title">Picks, last 3 weeks</h2>
+<h2 class="section-title">Picks, {{ week_label(chosen) if chosen else 'last 3 weeks' }}</h2>
 <div class="table-wrap">
   <table class="scores results-picks">
     <thead>
@@ -399,4 +428,12 @@
     </tbody>
   </table>
 </div>
+<script>
+  (function () {
+    var weekSelect = document.getElementById("results-week");
+    if (weekSelect) {
+      weekSelect.addEventListener("change", function () { window.location = weekSelect.value; });
+    }
+  })();
+</script>
 {% endblock %}

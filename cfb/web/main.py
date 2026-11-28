@@ -109,7 +109,10 @@ async def require_login(request: Request, call_next):
             return Response(status_code=401, headers={"HX-Redirect": "/login"})
         if request.method != "GET":
             return PlainTextResponse("Please log in.", status_code=401)
-        return RedirectResponse("/login?next_url=" + quote(path), status_code=303)
+        # Keep the query string (e.g. /results?season=2026&week=13) so the login lands on the same view.
+        # quote() encodes ? & = too, so it stays one next_url value; safe_next checks it after login.
+        wanted = path + ("?" + request.url.query if request.url.query else "")
+        return RedirectResponse("/login?next_url=" + quote(wanted), status_code=303)
 
     if user["must_change_password"] and path not in ("/account/password", "/logout"):
         return RedirectResponse("/account/password", status_code=303)
@@ -663,6 +666,29 @@ LIMIT 1
 """
 
 
+# Weeks with saved picks for one model version, newest first, for the Results page's week picker.
+# Reads pick_log, not the pick_results view: same weeks, much faster.
+RESULTS_WEEKS_SQL = """
+SELECT g.season, g.week, g.season_type, min(g.start_time) AS first_kickoff
+FROM pick_log p
+JOIN games g ON g.id = p.game_id
+WHERE p.model_version = %(version)s
+GROUP BY g.season, g.week, g.season_type
+ORDER BY g.season DESC, g.season_type, g.week DESC
+"""
+
+# Every game in one league's week; the Results page limits its queries to these ids
+# (%(game_ids)s in the Results queries: NULL = every week).
+WEEK_GAME_IDS_SQL = """
+SELECT id
+FROM games
+WHERE league = %(league)s
+  AND season = %(season)s
+  AND week = %(week)s
+  AND season_type = %(season_type)s
+"""
+
+
 RESULTS_SUMMARY_SQL = """
 SELECT taken,
        tier,
@@ -675,6 +701,7 @@ SELECT taken,
        count(*) FILTER (WHERE spread_outcome IS NULL AND side IS NOT NULL AND start_time > now()) AS upcoming
 FROM pick_results
 WHERE model_version = %(version)s
+  AND (%(game_ids)s::int[] IS NULL OR game_id = ANY(%(game_ids)s::int[]))
 GROUP BY taken, tier
 
 UNION ALL
@@ -690,6 +717,7 @@ SELECT taken,
        count(*) FILTER (WHERE total_outcome IS NULL AND start_time > now())
 FROM pick_results
 WHERE model_version = %(version)s
+  AND (%(game_ids)s::int[] IS NULL OR game_id = ANY(%(game_ids)s::int[]))
   AND total_side IS NOT NULL
 GROUP BY taken
 """
@@ -709,6 +737,7 @@ SELECT taken,
        count(*) FILTER (WHERE side IS NOT NULL AND b_spread IS NULL) AS no_line
 FROM pick_results_bettable
 WHERE model_version = %(version)s
+  AND (%(game_ids)s::int[] IS NULL OR game_id = ANY(%(game_ids)s::int[]))
 GROUP BY taken, tier
 
 UNION ALL
@@ -724,6 +753,7 @@ SELECT taken,
        count(*) FILTER (WHERE total_side IS NOT NULL AND b_total IS NULL)
 FROM pick_results_bettable
 WHERE model_version = %(version)s
+  AND (%(game_ids)s::int[] IS NULL OR game_id = ANY(%(game_ids)s::int[]))
   AND total_side IS NOT NULL
 GROUP BY taken
 """
@@ -750,6 +780,7 @@ picks AS (
     JOIN games g ON g.id = p.game_id
     WHERE p.model_version = %(version)s
       AND p.taken = 'first'
+      AND (%(game_ids)s::int[] IS NULL OR p.game_id = ANY(%(game_ids)s::int[]))
       AND o.open_spread IS NOT NULL
 ),
 graded AS (
@@ -811,7 +842,8 @@ JOIN teams h ON h.id = g.home_id
 WHERE r.model_version = %(version)s
   AND r.taken = 'last'
   AND (r.side IS NOT NULL OR r.total_side IS NOT NULL)   -- Pass picks too (graded on our lean)
-  AND r.start_time > now() - interval '21 days'
+  AND CASE WHEN %(game_ids)s::int[] IS NULL THEN r.start_time > now() - interval '21 days'
+           ELSE r.game_id = ANY(%(game_ids)s::int[]) END
 ORDER BY r.start_time DESC, a.school
 """
 
@@ -831,6 +863,7 @@ WITH graded AS (
         END AS median_units
     FROM pick_results
     WHERE model_version = %(version)s
+      AND (%(game_ids)s::int[] IS NULL OR game_id = ANY(%(game_ids)s::int[]))
       AND taken = 'last'
       AND tier IN ('play', 'caution')
       AND spread_outcome IS NOT NULL
@@ -849,6 +882,7 @@ WITH graded AS (
         END
     FROM pick_results
     WHERE model_version = %(version)s
+      AND (%(game_ids)s::int[] IS NULL OR game_id = ANY(%(game_ids)s::int[]))
       AND taken = 'last'
       AND total_outcome IS NOT NULL
       AND market_total IS NOT NULL
@@ -908,6 +942,7 @@ FROM bet_results r
 JOIN users u ON u.id = r.user_id
 WHERE r.league = %(league)s
   AND (u.id = %(me)s OR (u.share_bets AND u.active))
+  AND (%(game_ids)s::int[] IS NULL OR r.game_id = ANY(%(game_ids)s::int[]))
 GROUP BY u.id, u.username
 ORDER BY u.id <> %(me)s, lower(u.username)
 """
@@ -924,7 +959,8 @@ JOIN teams h ON h.id = g.home_id
 JOIN teams a ON a.id = g.away_id
 WHERE r.league = %(league)s
   AND (u.id = %(me)s OR (u.share_bets AND u.active))
-  AND r.start_time > now() - interval '21 days'
+  AND CASE WHEN %(game_ids)s::int[] IS NULL THEN r.start_time > now() - interval '21 days'
+           ELSE r.game_id = ANY(%(game_ids)s::int[]) END
 ORDER BY r.start_time DESC, lower(u.username)
 """
 
@@ -1727,21 +1763,34 @@ def backtest_page(request: Request, league: str = "cfb"):
 
 
 @app.get("/results")
-def results_page(request: Request, league: str = "cfb"):
-    """Our picks, saved before kickoff and graded at the best price we could get (?league=nfl for the NFL)."""
+def results_page(request: Request, league: str = "cfb", season: int | None = None,
+                 week: int | None = None, season_type: str = "regular"):
+    """Our picks, saved before kickoff and graded at the best price we could get (?league=nfl for the NFL).
+    ?season=2026&week=13 shows one week; without them, every week."""
     league = pick_league(league)
     version = NFL_MODEL_VERSION if league == "nfl" else MODEL_VERSION
+    if season_type not in ("regular", "postseason"):
+        season_type = "regular"
     with connect() as conn:
         conn.row_factory = dict_row
-        summary = conn.execute(RESULTS_SUMMARY_SQL, {"version": version}).fetchall()
-        bettable = conn.execute(BETTABLE_SUMMARY_SQL, {"version": version}).fetchall()
+        weeks = conn.execute(RESULTS_WEEKS_SQL, {"version": version}).fetchall()
+        chosen = None
+        game_ids = None                     # None = every week
+        if season is not None and week is not None:
+            chosen = (season, week, season_type)
+            week_params = {"league": league, "season": season, "week": week,
+                           "season_type": season_type}
+            game_ids = [r["id"] for r in conn.execute(WEEK_GAME_IDS_SQL, week_params).fetchall()]
+        picks = {"version": version, "game_ids": game_ids}
+        summary = conn.execute(RESULTS_SUMMARY_SQL, picks).fetchall()
+        bettable = conn.execute(BETTABLE_SUMMARY_SQL, picks).fetchall()
         if league == "cfb":
             # Bovada's opening line exists only for college
-            summary += conn.execute(OPEN_RESULTS_SQL, {"version": version}).fetchall()
-        recent = conn.execute(RECENT_PICKS_SQL, {"version": version}).fetchall()
-        shopping = conn.execute(SHOPPING_SQL, {"version": version}).fetchall()
+            summary += conn.execute(OPEN_RESULTS_SQL, picks).fetchall()
+        recent = conn.execute(RECENT_PICKS_SQL, picks).fetchall()
+        shopping = conn.execute(SHOPPING_SQL, picks).fetchall()
         rule_changes = conn.execute(RULE_CHANGES_SQL, {"keys": sorted(app_settings.RULE_KEYS)}).fetchall()
-        params = {"league": league, "me": request.state.user["id"]}
+        params = {"league": league, "me": request.state.user["id"], "game_ids": game_ids}
         bettors = conn.execute(RESULTS_BETTORS_SQL, params).fetchall()
         bets = conn.execute(RESULTS_BETS_SQL, params).fetchall()
     for r in recent:
@@ -1754,7 +1803,8 @@ def results_page(request: Request, league: str = "cfb"):
         {"summary": summary, "recent": recent, "shopping": shopping, "version": version,
          "active": "results", "league": league,
          "rules": app_settings.get_all(), "rule_changes": rule_changes,
-         "bettors": bettors, "bets": bets, "bettable": bettable},
+         "bettors": bettors, "bets": bets, "bettable": bettable,
+         "weeks": weeks, "chosen": chosen},
     )
 
 

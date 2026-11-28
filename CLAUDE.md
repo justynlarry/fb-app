@@ -124,6 +124,11 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
    name links there (`team_href`). Our line = live prediction if any, else the current version's backtest replay (tagged
    "backtest"); raw model, no overrides. Close = market_now else average of `lines`; open = Bovada (college) / Monday save
    (NFL). Alabama 2021 grades match `backtest_games` (5–10, O/U 6–9).
+8. **Results week picker (2026-11-28, Claude typed the Python/SQL at the user's request, rule unchanged):**
+   `/results?[league=nfl&]season=&week=[&season_type=postseason]`, default All weeks. `RESULTS_WEEKS_SQL` (weeks in
+   `pick_log`), `WEEK_GAME_IDS_SQL`; every Results query takes `%(game_ids)s` (NULL = all weeks; the recent-picks and
+   bets lists use the 21-day window only then). Pick rules stay all-time. Weeks sum exactly to All weeks (checked). Login redirect now keeps the query string
+   (`require_login` → `next_url`; `safe_next` unchanged).
 
 ## Model
 
