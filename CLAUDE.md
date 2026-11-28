@@ -486,7 +486,7 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
     itself 403s a client-sent `CF-Connecting-IP`).
   - **HTTP → HTTPS is done in the app** (first lines of `require_login`: `X-Forwarded-Proto: http` + `CF-Connecting-IP`
     → 301 to the same URL on https). Cloudflare's "Always Use HTTPS" was switched on twice on 2026-11-14 but never took
-    effect (cause unknown); the app redirect works regardless. LAN `http://192.168.0.81:8000` is unaffected.
+    effect (cause unknown); the app redirect works regardless. LAN `http://192.168.0.223:8000` (devGray; was .81 on the VM) is unaffected.
     HSTS not enabled yet (hard to undo; consider after a few weeks on HTTPS).
   - Typing rule exceptions (one-off, user's request 2026-11-14): Claude typed step 4f and the rest of step 4 in
     `main.py`. The rule itself is unchanged.
@@ -834,8 +834,16 @@ Store times in UTC; display in the user's local time zone (`TZ` in `.env`).
   and timeouts). It can change without notice, so parse it defensively and keep the
   parsing in one module. Map ESPN team IDs to CFBD team IDs in a lookup table.
 - Scope: FBS games only (including FBS vs. FCS matchups).
-- Web port: bind to the VM's LAN IP `192.168.0.81` (`"192.168.0.81:8000:8000"`), never
-  `0.0.0.0`. The IP should be reserved in the router's DHCP or set as a static address.
+- Web port: bind to the server's LAN IP (`WEB_BIND` in `.env`), never `0.0.0.0`. The IP should be reserved in the
+  router's DHCP or set as a static address.
+- **Server (moved 2026-11-28):** the stack runs on **devGray** (bare-metal Toshiba laptop, Debian 13, `dev-user`,
+  static LAN `192.168.0.223` in `/etc/network/interfaces`, Tailscale `devgray`; lid switch ignored, sleep targets
+  masked; Docker DNS 1.1.1.1/8.8.8.8, logs 10m × 3). Until then it ran on the VM **fb-line** (`fb-user`, 192.168.0.81).
+  fb-line stays up as the backup host: cron 03:30 `scripts/pull-backups.sh` pulls devGray's nightly dumps to
+  `~/devgray-backups` (Proxmox-backed). The VM's stack is stopped (not removed); its `cfb_pgdata` holds the data as of
+  2026-11-28 07:52 MT, a fallback only. Move: `pg_dump -Fc` → fresh devGray db → DROP/CREATE `football` →
+  `pg_restore --no-owner`; all 31 tables' row counts matched. Claude Code runs on devGray from 2026-11-28 (memory
+  copied from fb-line). The nightly pull needs fb-line running: while it's off, devGray's dumps exist only on devGray.
 - Display time zone: Mountain (`TZ=America/Denver`).
 
 - NFL may be added later. Design every table, query and page to be league-aware:
